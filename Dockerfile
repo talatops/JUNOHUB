@@ -6,14 +6,17 @@ WORKDIR /app
 COPY package*.json prisma.config.ts ./
 COPY prisma ./prisma
 
-# Install dependencies and generate Prisma client
-RUN npm install --only=production && npx prisma generate
+# Install ALL dependencies (including devDependencies needed for build)
+RUN npm ci && npx prisma generate
 
 # Copy application code
 COPY . .
 
 # Build the Next.js application
 RUN npm run build
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --production
 
 EXPOSE 3000
 
