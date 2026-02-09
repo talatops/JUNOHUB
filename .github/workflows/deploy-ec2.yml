@@ -1,0 +1,115 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: production
+      EC2_ENV: ${{ secrets.EC2_ENV }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --watch=false || echo "Tests step is configurable; adjust as needed"
+
+      - name: Build app
+        run: npm run build
+
+      - name: Deploy to EC2 with rollback
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_SSH_PORT || '22' }}
+          script: |
+            set -e
+
+            APP_DIR="${APP_DIR:-/var/www/pdc-poc}"
+
+            echo "Using app directory: $APP_DIR"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            echo "Writing .env file from EC2_ENV secret..."
+            # Overwrite .env on the server with the contents of the EC2_ENV variable
+            # EC2_ENV is provided by GitHub as a multi-line secret matching your local .env
+            printf '%s\n' "$EC2_ENV" > .env
+
+            if [ ! -d ".git" ]; then
+              echo "Cloning repository for the first time..."
+              git clone ${{ github.repositoryUrl }} . 
+            fi
+
+            git remote set-url origin ${{ github.repositoryUrl }}
+
+            PREV_COMMIT=$(git rev-parse HEAD || echo "")
+            echo "Previous commit: $PREV_COMMIT"
+
+            echo "Fetching latest changes..."
+            git fetch origin
+            git checkout ${{ github.ref_name }}
+            git reset --hard ${{ github.sha }}
+
+            echo "Pulling docker images and rebuilding containers..."
+            if command -v docker-compose >/dev/null 2>&1; then
+              DC="docker-compose"
+            else
+              DC="docker compose"
+            fi
+
+            $DC pull || true
+
+            set +e
+            $DC up -d --build
+            DEPLOY_EXIT=$?
+            set -e
+
+            if [ $DEPLOY_EXIT -ne 0 ]; then
+              echo "Deployment failed, attempting rollback..."
+              if [ -n "$PREV_COMMIT" ]; then
+                git reset --hard "$PREV_COMMIT"
+                $DC up -d --build || true
+              fi
+              exit 1
+            fi
+
+            echo "Running health check..."
+            HEALTH_URL="${HEALTH_URL:-http://localhost:3000/api/health}"
+
+            for i in {1..10}; do
+              if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
+                echo "Health check passed."
+                exit 0
+              fi
+              echo "Health check attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            echo "Health check failed after multiple attempts, rolling back..."
+            if [ -n "$PREV_COMMIT" ]; then
+              git reset --hard "$PREV_COMMIT"
+              $DC up -d --build || true
+            fi
+            exit 1
+

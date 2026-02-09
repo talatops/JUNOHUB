@@ -1,0 +1,83 @@
+"use client"
+
+import { useRouter, usePathname } from "next/navigation"
+import { 
+    Ticket, 
+    Flag, 
+    Mail, 
+    FileText,
+    HelpCircle
+} from "lucide-react"
+
+export default function JunoEngineLayout({
+    children,
+}: {
+    children: React.ReactNode
+}) {
+    const router = useRouter()
+    const pathname = usePathname()
+
+    const tabs = [
+        { 
+            label: "Knowledge Base", 
+            href: "/dashboard/juno-engine/knowledge-base", 
+            icon: HelpCircle 
+        },
+        { 
+            label: "Templates", 
+            href: "/dashboard/juno-engine/email-templates", 
+            icon: FileText 
+        },
+        { 
+            label: "Tickets", 
+            href: "/dashboard/juno-engine/tickets", 
+            icon: Ticket 
+        },
+        { 
+            label: "Flagged Emails", 
+            href: "/dashboard/juno-engine/flagged-email", 
+            icon: Flag 
+        },
+        { 
+            label: "Gmail", 
+            href: "/dashboard/juno-engine/gmail-connect", 
+            icon: Mail 
+        },
+    ]
+
+    return (
+        <div className="h-full flex flex-col space-y-4 md:space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-shrink-0">
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">JUNO Engine</h1>
+                    <p className="text-sm md:text-base text-slate-400 mt-1">Manage your communication and support infrastructure.</p>
+                </div>
+            </div>
+
+            <div className="flex gap-2 md:gap-3 border-b border-white/10 overflow-x-auto flex-shrink-0">
+                {tabs.map((tab) => {
+                    const isActive = pathname === tab.href
+                    const Icon = tab.icon
+                    return (
+                        <button
+                            key={tab.href}
+                            onClick={() => router.push(tab.href)}
+                            className={`pb-3 md:pb-4 px-3 md:px-4 font-bold transition-all duration-200 ease-out whitespace-nowrap text-sm md:text-base flex items-center gap-2 relative ${
+                                isActive 
+                                    ? "text-indigo-400 border-b-2 border-indigo-500" 
+                                    : "text-slate-400 hover:text-white"
+                            }`}
+                        >
+                            <Icon className="w-4 h-4 transition-transform duration-200" />
+                            {tab.label}
+                        </button>
+                    )
+                })}
+            </div>
+
+            <div className="flex-1 overflow-hidden">
+                {children}
+            </div>
+        </div>
+    )
+}
