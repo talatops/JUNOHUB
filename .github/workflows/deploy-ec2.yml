@@ -38,10 +38,12 @@ jobs:
           script: |
             set -e
 
-            APP_DIR="${APP_DIR:-/var/www/pdc-poc}"
+            APP_DIR="${APP_DIR:-/home/ubuntu/JUNOHUB}"
 
             echo "Using app directory: $APP_DIR"
-            mkdir -p "$APP_DIR"
+            # Create directory with sudo if needed, then ensure ownership
+            sudo mkdir -p "$APP_DIR" || mkdir -p "$APP_DIR"
+            sudo chown -R $USER:$USER "$APP_DIR" || true
             cd "$APP_DIR"
 
             # Initialize git repo if needed
@@ -72,9 +74,9 @@ jobs:
             fi
 
             if command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            elif docker compose version >/dev/null 2>&1; then
-              DC="docker compose"
+              DC="sudo docker-compose"
+            elif sudo docker compose version >/dev/null 2>&1; then
+              DC="sudo docker compose"
             else
               echo "Error: Docker Compose is not installed"
               exit 1
