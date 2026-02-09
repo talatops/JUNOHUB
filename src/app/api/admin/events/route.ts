@@ -43,7 +43,7 @@ export async function GET(req: Request) {
         ])
 
         const events = [
-            ...connectionEvents.map((c) => ({
+            ...connectionEvents.map((c: typeof connectionEvents[0]) => ({
                 id: c.id,
                 type: "CONNECTION" as AdminEventType,
                 status: c.status,
@@ -64,7 +64,7 @@ export async function GET(req: Request) {
                     shopifyProductId: p.shopifyProductId,
                 },
             })),
-            ...syncHealthEvents.map((s) => ({
+            ...syncHealthEvents.map((s: typeof syncHealthEvents[0]) => ({
                 id: s.id,
                 type: "SYNC_HEALTH" as AdminEventType,
                 status: s.syncStatus,
