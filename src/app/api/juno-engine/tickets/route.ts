@@ -47,17 +47,43 @@ export async function GET() {
             return NextResponse.json({ tickets: [] })
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const logs = await (prisma as any).emailLog.findMany({
-            where: {
-                storeId: activeStore.id,
-                isAutomated: true,
-            },
-            orderBy: {
-                sentAt: "desc",
-            },
-            take: 200,
-        })
+        // Use a raw query instead of relying on the generated Prisma model,
+        // to avoid issues if the EmailLog model is not present on the client.
+        const logs = await prisma.$queryRaw<
+            Array<{
+                id: string
+                "userId": string
+                "storeId": string | null
+                to: string
+                subject: string | null
+                "bodyPreview": string | null
+                "isAutomated": boolean
+                trigger: string | null
+                status: string
+                "providerMessageId": string | null
+                "errorMessage": string | null
+                "sentAt": Date
+            }>
+        >`
+            SELECT
+                "id",
+                "userId",
+                "storeId",
+                "to",
+                "subject",
+                "bodyPreview",
+                "isAutomated",
+                "trigger",
+                "status",
+                "providerMessageId",
+                "errorMessage",
+                "sentAt"
+            FROM "EmailLog"
+            WHERE "storeId" = ${activeStore.id}
+              AND "isAutomated" = TRUE
+            ORDER BY "sentAt" DESC
+            LIMIT 200
+        `
 
         type TicketMessage = {
             id: string
@@ -82,15 +108,7 @@ export async function GET() {
 
         const ticketsMap = new Map<string, Ticket>()
 
-        for (const log of logs as Array<{
-            id: string
-            to: string
-            subject: string | null
-            bodyPreview: string | null
-            status: string
-            trigger: string | null
-            sentAt: Date
-        }>) {
+        for (const log of logs) {
             const customerEmail = (log.to || "").toLowerCase()
             const rootSubject = normalizeSubject(log.subject)
             const key = `${customerEmail}::${rootSubject}`

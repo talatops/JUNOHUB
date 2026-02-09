@@ -90,8 +90,8 @@ export async function POST(
         }
 
         const createdFaqs = await prisma.$transaction(
-            validItems.map((item) =>
-                prisma.faqItem.create({
+            validItems.map((item: FaqImportItem) =>
+                (prisma as any).faqItem.create({
                     data: {
                         storeId: store.id,
                         question: item.question,

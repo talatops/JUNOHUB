@@ -57,7 +57,7 @@ export async function GET() {
             },
         })
 
-        const relevantOrders = cachedOrders.filter((order) => {
+        const relevantOrders = cachedOrders.filter((order: typeof cachedOrders[0]) => {
             const syncedProductIds = syncsByStore.get(order.storeId)
             if (!syncedProductIds || syncedProductIds.size === 0) return false
 
@@ -78,7 +78,7 @@ export async function GET() {
             }
         })
 
-        const transformedOrders = relevantOrders.map((order) => {
+        const transformedOrders = relevantOrders.map((order: typeof relevantOrders[0]) => {
             const syncedProductIds = syncsByStore.get(order.storeId) || new Set()
             let lineItems: any[] = []
 

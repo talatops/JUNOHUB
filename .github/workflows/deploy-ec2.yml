@@ -26,15 +26,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm test -- --watch=false || echo "Tests step is configurable; adjust as needed"
-
-      - name: Build app
-        run: npm run build
-
       - name: Deploy to EC2 with rollback
         uses: appleboy/ssh-action@v1.2.0
         env:

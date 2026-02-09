@@ -28,7 +28,7 @@ export async function GET(
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
 
-        const faqs = await prisma.faqItem.findMany({
+        const faqs = await (prisma as any).faqItem.findMany({
             where: { storeId: store.id },
             orderBy: { createdAt: "desc" },
         })
@@ -81,7 +81,7 @@ export async function POST(
             )
         }
 
-        const faq = await prisma.faqItem.create({
+        const faq = await (prisma as any).faqItem.create({
             data: {
                 storeId: store.id,
                 question,

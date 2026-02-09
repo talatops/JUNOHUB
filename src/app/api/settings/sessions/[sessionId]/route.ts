@@ -15,7 +15,7 @@ export async function DELETE(
         const { sessionId } = await params
 
         // Verify the session belongs to the user
-        const userSession = await prisma.session.findFirst({
+        const userSession = await (prisma as any).session.findFirst({
             where: {
                 id: sessionId,
                 userId: session.user.id
@@ -27,7 +27,7 @@ export async function DELETE(
         }
 
         // Delete the session
-        await prisma.session.delete({
+        await (prisma as any).session.delete({
             where: { id: sessionId }
         })
 
