@@ -37,6 +37,8 @@ jobs:
 
       - name: Deploy to EC2 with rollback
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          EC2_ENV: ${{ secrets.EC2_ENV }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
@@ -51,11 +53,7 @@ jobs:
             mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            echo "Writing .env file from EC2_ENV secret..."
-            # Overwrite .env on the server with the contents of the EC2_ENV variable
-            # EC2_ENV is provided by GitHub as a multi-line secret matching your local .env
-            printf '%s\n' "$EC2_ENV" > .env
-
+            # Initialize git repo if needed
             if [ ! -d ".git" ]; then
               echo "Cloning repository for the first time..."
               git clone ${{ github.repositoryUrl }} . 
@@ -71,15 +69,33 @@ jobs:
             git checkout ${{ github.ref_name }}
             git reset --hard ${{ github.sha }}
 
-            echo "Pulling docker images and rebuilding containers..."
-            if command -v docker-compose >/dev/null 2>&1; then
-              DC="docker-compose"
-            else
-              DC="docker compose"
+            echo "Writing .env file from EC2_ENV secret..."
+            # Write .env file AFTER pulling latest code so it's in the right location
+            # EC2_ENV is provided by GitHub as a multi-line secret matching your local .env
+            printf '%s\n' "$EC2_ENV" > .env
+
+            echo "Checking Docker and Docker Compose..."
+            if ! command -v docker >/dev/null 2>&1; then
+              echo "Error: Docker is not installed"
+              exit 1
             fi
 
-            $DC pull || true
+            if command -v docker-compose >/dev/null 2>&1; then
+              DC="docker-compose"
+            elif docker compose version >/dev/null 2>&1; then
+              DC="docker compose"
+            else
+              echo "Error: Docker Compose is not installed"
+              exit 1
+            fi
 
+            echo "Using: $DC"
+            $DC version
+
+            echo "Stopping existing containers..."
+            $DC down || true
+
+            echo "Building and starting containers with docker-compose..."
             set +e
             $DC up -d --build
             DEPLOY_EXIT=$?
@@ -89,26 +105,32 @@ jobs:
               echo "Deployment failed, attempting rollback..."
               if [ -n "$PREV_COMMIT" ]; then
                 git reset --hard "$PREV_COMMIT"
+                printf '%s\n' "$EC2_ENV" > .env
                 $DC up -d --build || true
               fi
               exit 1
             fi
 
+            echo "Waiting for containers to be healthy..."
+            sleep 10
+
             echo "Running health check..."
             HEALTH_URL="${HEALTH_URL:-http://localhost:3000/api/health}"
 
-            for i in {1..10}; do
+            for i in {1..15}; do
               if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
-                echo "Health check passed."
+                echo "Health check passed on attempt $i."
+                echo "Deployment successful!"
                 exit 0
               fi
-              echo "Health check attempt $i failed, retrying..."
+              echo "Health check attempt $i failed, retrying in 5 seconds..."
               sleep 5
             done
 
             echo "Health check failed after multiple attempts, rolling back..."
             if [ -n "$PREV_COMMIT" ]; then
               git reset --hard "$PREV_COMMIT"
+              printf '%s\n' "$EC2_ENV" > .env
               $DC up -d --build || true
             fi
             exit 1
