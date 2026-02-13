@@ -94,9 +94,9 @@ jobs:
           # Basic disk space check (do not touch volumes)
           echo "=== DISK SPACE CHECK ==="
           df -h
-          AVAILABLE_SPACE=\$(df -BG / | tail -1 | awk '{print \$4}' | sed 's/G//')
-          if [ "\$AVAILABLE_SPACE" -lt 5 ]; then
-            echo "⚠️  Low disk space: \${AVAILABLE_SPACE}GB available. Cleaning up dangling images..."
+          AVAILABLE_SPACE=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
+          if [ "$AVAILABLE_SPACE" -lt 5 ]; then
+            echo "⚠️  Low disk space: ${AVAILABLE_SPACE}GB available. Cleaning up dangling images..."
             docker system prune -af --volumes=false || true
             docker image prune -af || true
             df -h
