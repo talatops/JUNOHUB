@@ -109,6 +109,7 @@ model Store {
   faqItems        FaqItem[]
   knowledgeChunks KnowledgeChunk[]
   emailLogs       EmailLog[]
+  templates       Template[]
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -460,4 +461,24 @@ model KnowledgeChunk {
   @@index([storeId])
   @@index([documentId])
   @@index([faqItemId])
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  storeId     String
+  store       Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  name        String
+  intent      String
+  mood        String
+  description String?
+
+  body        String   // Template body (HTML or plain text with {{variables}})
+  variables   Json?    // Optional metadata describing expected variables
+  isHtml      Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([storeId])
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/geminiEmbeddings"
+import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
 
 type FaqImportItem = {
     question: string

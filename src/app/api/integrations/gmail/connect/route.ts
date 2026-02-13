@@ -38,7 +38,11 @@ export async function POST() {
         // For production: https://yourdomain.com/api/integrations/gmail/callback
         // For development: http://localhost:3000/api/integrations/gmail/callback
         // For ngrok: https://your-ngrok-url.ngrok-free.dev/api/integrations/gmail/callback
-        const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        const baseUrl =
+            process.env.AUTH_URL ||
+            process.env.NEXTAUTH_URL ||
+            process.env.NEXT_PUBLIC_APP_URL ||
+            "http://localhost:3000"
         const redirectUri = `${baseUrl}/api/integrations/gmail/callback`
         
         console.log("Gmail OAuth - Redirect URI:", redirectUri) // Log for debugging

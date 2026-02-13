@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/geminiEmbeddings"
+import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
 import type { TextChunk } from "@/lib/kb/documentProcessing"
 
 export async function indexDocumentChunks(chunks: TextChunk[]) {

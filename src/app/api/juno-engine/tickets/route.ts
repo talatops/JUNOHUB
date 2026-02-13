@@ -80,7 +80,10 @@ export async function GET() {
                 "sentAt"
             FROM "EmailLog"
             WHERE "storeId" = ${activeStore.id}
-              AND "isAutomated" = TRUE
+              AND (
+                "isAutomated" = TRUE
+                OR "trigger" = 'GMAIL_INCOMING'
+              )
             ORDER BY "sentAt" DESC
             LIMIT 200
         `

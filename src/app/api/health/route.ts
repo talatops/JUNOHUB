@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { startGmailPoller } from "@/lib/gmail/poller"
 
 export async function GET() {
     try {
+        // Start the background Gmail poller (idempotent - safe to call repeatedly)
+        startGmailPoller()
+
         // Simple database connectivity check
         await prisma.$queryRaw`SELECT 1`
         

@@ -4,6 +4,7 @@ import StoreSwitcher from "@/components/StoreSwitcher"
 import UserAccountMenu from "@/components/UserAccountMenu"
 import NotificationBell from "@/components/NotificationBell"
 import PageTransition from "@/components/PageTransition"
+import ThemeToggle from "@/components/ThemeToggle"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 
@@ -54,10 +55,15 @@ export default async function DashboardLayout({
                         </div>
                     </div>
                     <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                        <ThemeToggle />
                         <NotificationBell />
                         <div className="hidden sm:flex flex-col text-right">
-                            <span className="text-xs font-bold text-white truncate max-w-[120px]">{session.user?.name || "Vendor User"}</span>
-                            <span className="text-[10px] text-slate-400 truncate max-w-[120px]">{session.user?.email}</span>
+                            <span className="text-xs font-bold text-white truncate max-w-[120px]">
+                                {session.user?.name || "Vendor User"}
+                            </span>
+                            <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                                {session.user?.email}
+                            </span>
                         </div>
                         <UserAccountMenu />
                     </div>

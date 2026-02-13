@@ -10,6 +10,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
 export const { handlers, auth, signIn, signOut } = NextAuth({
     adapter: PrismaAdapter(prisma),
     session: { strategy: "jwt" },
+    trustHost: true, // Trust all hosts (needed for ngrok/proxies)
     ...authConfig,
     callbacks: {
         async jwt({ token, user }) {
@@ -22,7 +23,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         async session({ session, token }) {
             if (token && session.user) {
                 session.user.id = token.id as string
-                session.user.role = token.role as import("@prisma/client").UserRole
+                if (token.role) {
+                    session.user.role = token.role as "VENDOR" | "SUPPLIER" | "ADMIN"
+                }
             }
             return session
         },

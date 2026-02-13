@@ -21,7 +21,7 @@ The frontend and backend are implemented in a single Next.js App Router project.
 - **Background / Integrations**:
   - Gmail APIs (via OAuth)
   - Shopify APIs
-  - Gemini for embeddings and chat
+  - AWS Bedrock for embeddings and chat (Titan Text Embeddings V2 + Claude 3 Haiku)
 - **Deployment**: Docker + GitHub Actions → AWS EC2
 
 ---
@@ -48,9 +48,9 @@ Copy `.env.example` (or the variables listed below) into a local `.env` file and
 - `SMTP_SECURE`
 - `SMTP_USER`
 - `SMTP_PASSWORD`
-- `GEMINI_API_KEY`
-- `GEMINI_EMBEDDING_MODEL`
-- `GEMINI_CHAT_MODEL`
+- `AWS_ACCESS_KEY_ID` (for AWS Bedrock)
+- `AWS_SECRET_ACCESS_KEY` (for AWS Bedrock)
+- `AWS_REGION` (default: `us-east-1`)
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 
@@ -116,6 +116,119 @@ Set the following secrets in **GitHub → Settings → Secrets and variables →
   - Re-runs `docker compose up -d --build`.
 
 This gives you a sharp deployment with an automatic rollback path.
+
+---
+
+## AWS Bedrock Setup
+
+The knowledge base feature uses AWS Bedrock for AI-powered embeddings and chat completion.
+
+### Prerequisites
+
+1. **AWS Account**: Create an account at https://aws.amazon.com/
+2. **Enable Bedrock Access**: 
+   - Go to https://console.aws.amazon.com/bedrock/
+   - Navigate to "Model access" in the left sidebar
+   - Request access to:
+     - **Amazon Titan Text Embeddings V2** (for embeddings)
+     - **Anthropic Claude 3 Haiku** (for chat completion)
+   - Wait for approval (usually instant for Titan, may take a few hours for Claude)
+
+### IAM Setup
+
+Create an IAM user or role with Bedrock permissions:
+
+1. Go to IAM Console → Users (or Roles)
+2. Create a new user/role or select existing
+3. Attach the following policy (or create a custom policy):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["bedrock:InvokeModel"],
+      "Resource": [
+        "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
+      ]
+    }
+  ]
+}
+```
+
+4. **Create Access Keys** (for IAM user):
+   - Go to Security credentials tab
+   - Click "Create access key"
+   - Choose "Application running outside AWS" or "EC2" depending on your deployment
+   - Copy the Access Key ID and Secret Access Key
+   - Add these to your `.env` file
+
+### Environment Variables
+
+Add to your `.env` file:
+
+```bash
+AWS_ACCESS_KEY_ID="your-access-key-id"
+AWS_SECRET_ACCESS_KEY="your-secret-access-key"
+AWS_REGION="us-east-1"  # or your preferred region
+```
+
+### Database Migration
+
+After setting up AWS Bedrock, you need to migrate existing embeddings:
+
+1. **Run the database migration** to change embedding dimensions from 1536 to 1024:
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+2. **Re-embed existing knowledge base data**:
+   ```bash
+   npm run re-embed-knowledge-base
+   ```
+   
+   This script will:
+   - Read all existing `KnowledgeChunk` records
+   - Generate new 1024-dimension embeddings using Bedrock Titan V2
+   - Update the database with new embeddings
+   - Process in batches to avoid rate limiting
+
+### Models Used
+
+- **Embeddings**: Amazon Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`)
+  - Output dimension: 1024 (configurable: 256, 512, or 1024)
+  - Used for: FAQ embeddings, document chunk embeddings, query embeddings
+
+- **Chat**: Anthropic Claude 3 Haiku (`anthropic.claude-3-haiku-20240307-v1:0`)
+  - Used for: RAG (Retrieval-Augmented Generation) query responses
+  - Fast and cost-effective for knowledge base Q&A
+
+### Optional: Override Models
+
+You can override the default models via environment variables:
+
+```bash
+BEDROCK_EMBEDDING_MODEL="amazon.titan-embed-text-v2:0"
+BEDROCK_CHAT_MODEL="anthropic.claude-3-haiku-20240307-v1:0"
+```
+
+### Prisma:
+
+If you want to visualize the database:
+```
+export DATABASE_URL='<YOUR_DB_URL>'
+npx prisma studio
+```
+
+
+### Troubleshooting
+
+- **"Access Denied" errors**: Ensure Bedrock model access is enabled in AWS Console
+- **"Invalid credentials"**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are correct
+- **"Model not found"**: Check that you've requested access to the models in Bedrock Console
+- **Re-embedding fails**: Ensure AWS credentials are set and Bedrock access is enabled
 
 ---
 

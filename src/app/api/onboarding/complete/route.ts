@@ -79,12 +79,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Register Webhooks with Shopify
-        const appUrl = process.env.NEXTAUTH_URL || "https://your-tunnel-url.ngrok-free.app"
+        const appUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "https://your-tunnel-url.ngrok-free.app"
         const webhookTopics = ["orders/create", "orders/updated", "products/create", "products/update", "products/delete"]
 
         for (const topic of webhookTopics) {
             try {
-                await fetch(`https://${cleanDomain}/admin/api/2024-01/webhooks.json`, {
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+                
+                const response = await fetch(`https://${cleanDomain}/admin/api/2024-01/webhooks.json`, {
                     method: "POST",
                     headers: {
                         "X-Shopify-Access-Token": accessToken,
@@ -96,11 +99,24 @@ export async function POST(req: NextRequest) {
                             address: `${appUrl}/api/webhooks/shopify`,
                             format: "json"
                         }
-                    })
+                    }),
+                    signal: controller.signal
                 })
-                logger.info(`Registered Shopify webhook: ${topic}`)
+                
+                clearTimeout(timeoutId)
+                
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => "")
+                    logger.warn(`Webhook ${topic} registration returned ${response.status}: ${errorText}`)
+                } else {
+                    logger.info(`Registered Shopify webhook: ${topic}`)
+                }
             } catch (err) {
-                logger.error(`Failed to register webhook ${topic}`, err)
+                if (err instanceof Error && err.name === 'AbortError') {
+                    logger.error(`Webhook ${topic} registration timed out`)
+                } else {
+                    logger.error(`Failed to register webhook ${topic}`, err)
+                }
             }
         }
 

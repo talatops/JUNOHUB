@@ -79,7 +79,19 @@ export async function sendGmailReply(
             body: JSON.stringify(requestBody)
         })
 
-        const bodyPreview = body.replace(/<[^>]+>/g, "").slice(0, 280)
+        // Store a longer, cleaner plain-text version of the outgoing email for ticket view
+        let bodyPreview = body
+            .replace(/<style[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, "")
+            .replace(/\s+\n/g, "\n")
+            .replace(/\n{3,}/g, "\n\n")
+            .trim()
+
+        // Normalize indentation so lines align nicely in the chat UI
+        bodyPreview = bodyPreview
+            .split(/\r?\n/)
+            .map((line) => line.trimStart())
+            .join("\n")
         const baseLogData = {
             userId,
             storeId: options.storeId || null,

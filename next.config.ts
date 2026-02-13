@@ -16,6 +16,18 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.myshopify.com",
       },
+      {
+        protocol: "https",
+        hostname: "*.ngrok.com",
+      },
+      {
+        protocol: "https",
+        hostname: "*.ngrok.io",
+      },
+      {
+        protocol: "https",
+        hostname: "*.ngrok-free.dev",
+      },
     ],
   },
   // Allow ngrok origin for development (fixes cross-origin warnings)

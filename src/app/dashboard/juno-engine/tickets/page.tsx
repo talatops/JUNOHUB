@@ -6,7 +6,6 @@ import {
     Ticket,
     Search,
     Filter,
-    Plus,
     Loader2,
     MoreHorizontal
 } from "lucide-react"
@@ -98,9 +97,6 @@ export default function TicketsPage() {
                 <div className="flex gap-2">
                     <button className="h-10 md:h-11 px-4 bg-white/10 border border-white/10 rounded-xl font-bold text-slate-300 hover:bg-white/15 transition-all flex items-center justify-center gap-2 text-sm shrink-0">
                         <Filter className="w-4 h-4" /> Filters
-                    </button>
-                    <button className="h-10 md:h-11 px-4 bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-600 border border-indigo-400/20 transition-all text-sm shrink-0">
-                        <Plus className="w-4 h-4" /> New Ticket
                     </button>
                 </div>
             </div>

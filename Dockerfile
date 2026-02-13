@@ -15,10 +15,12 @@ COPY . .
 # Build the Next.js application
 RUN npm run build
 
-# Remove dev dependencies to reduce image size
-RUN npm prune --production
+# Copy and set up entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 
-# Use production start command
+# Use entrypoint to run migrations before starting the app
+ENTRYPOINT ["docker-entrypoint.sh"]
 CMD ["npm", "start"]

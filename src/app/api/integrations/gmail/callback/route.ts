@@ -10,8 +10,13 @@ export async function GET(req: Request) {
     try {
         const session = await auth()
         if (!session?.user?.id) {
+            const baseUrl =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/login?error=unauthorized", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/login?error=unauthorized", baseUrl)
             )
         }
 
@@ -23,20 +28,34 @@ export async function GET(req: Request) {
         // Handle OAuth errors
         if (error) {
             console.error("Gmail OAuth error:", error)
+            const baseUrl =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=oauth_failed", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/dashboard/juno-engine/gmail-connect?error=oauth_failed", baseUrl)
             )
         }
 
         if (!code) {
+            const baseUrl =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=no_code", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/dashboard/juno-engine/gmail-connect?error=no_code", baseUrl)
             )
         }
 
         // Exchange authorization code for tokens
         // IMPORTANT: This redirect URI must exactly match what was sent in the authorization request
-        const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+        const baseUrl =
+            process.env.AUTH_URL ||
+            process.env.NEXTAUTH_URL ||
+            process.env.NEXT_PUBLIC_APP_URL ||
+            "http://localhost:3000"
         const redirectUri = `${baseUrl}/api/integrations/gmail/callback`
         
         console.log("Gmail OAuth Callback - Redirect URI:", redirectUri) // Log for debugging
@@ -62,16 +81,26 @@ export async function GET(req: Request) {
             
             // Provide more specific error message if it's a redirect_uri_mismatch
             if (errorData.error === "redirect_uri_mismatch") {
+                const baseUrlForError =
+                    process.env.AUTH_URL ||
+                    process.env.NEXTAUTH_URL ||
+                    process.env.NEXT_PUBLIC_APP_URL ||
+                    "http://localhost:3000"
                 return NextResponse.redirect(
                     new URL(
                         `/dashboard/juno-engine/gmail-connect?error=redirect_uri_mismatch&redirect_uri=${encodeURIComponent(redirectUri)}`,
-                        process.env.NEXTAUTH_URL || "http://localhost:3000"
+                        baseUrlForError
                     )
                 )
             }
             
+            const baseUrlForError =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=token_exchange_failed", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/dashboard/juno-engine/gmail-connect?error=token_exchange_failed", baseUrlForError)
             )
         }
 
@@ -113,15 +142,25 @@ export async function GET(req: Request) {
             }
         } catch (error) {
             console.error("Error fetching user info:", error)
+            const baseUrlForError =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", baseUrlForError)
             )
         }
 
         if (!userInfo?.email) {
             console.error("No email found in user info")
+            const baseUrlForError =
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                process.env.NEXT_PUBLIC_APP_URL ||
+                "http://localhost:3000"
             return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", baseUrlForError)
             )
         }
 
@@ -151,13 +190,23 @@ export async function GET(req: Request) {
             }
         })
 
+        const baseUrlDone =
+            process.env.AUTH_URL ||
+            process.env.NEXTAUTH_URL ||
+            process.env.NEXT_PUBLIC_APP_URL ||
+            "http://localhost:3000"
         return NextResponse.redirect(
-            new URL("/dashboard/juno-engine/gmail-connect?connected=true", process.env.NEXTAUTH_URL || "http://localhost:3000")
+            new URL("/dashboard/juno-engine/gmail-connect?connected=true", baseUrlDone)
         )
     } catch (error) {
         console.error("Gmail callback error:", error)
+        const baseUrlError =
+            process.env.AUTH_URL ||
+            process.env.NEXTAUTH_URL ||
+            process.env.NEXT_PUBLIC_APP_URL ||
+            "http://localhost:3000"
         return NextResponse.redirect(
-            new URL("/dashboard/juno-engine/gmail-connect?error=callback_failed", process.env.NEXTAUTH_URL || "http://localhost:3000")
+            new URL("/dashboard/juno-engine/gmail-connect?error=callback_failed", baseUrlError)
         )
     }
 }

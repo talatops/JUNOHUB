@@ -7,8 +7,8 @@ export default function JunoEnginePage() {
     const router = useRouter()
 
     useEffect(() => {
-        // Redirect to tickets page by default
-        router.replace("/dashboard/juno-engine/tickets")
+        // Redirect to knowledge base page by default
+        router.replace("/dashboard/juno-engine/knowledge-base")
     }, [router])
 
     return null

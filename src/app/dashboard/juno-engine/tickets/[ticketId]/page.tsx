@@ -33,6 +33,7 @@ export default function TicketDetailPage() {
   const [ticket, setTicket] = useState<TicketData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     const loadTicket = async () => {
@@ -92,10 +93,10 @@ export default function TicketDetailPage() {
         </button>
         <div>
           <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-            Ticket Conversation
+            {ticket?.subject || "Ticket"}
           </h1>
           <p className="text-sm md:text-base text-slate-400 mt-1">
-            Full automated email history for this customer.
+            {ticket?.customerEmail || "Full automated email history for this customer."}
           </p>
         </div>
       </div>
@@ -111,90 +112,116 @@ export default function TicketDetailPage() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="max-w-3xl mx-auto">
-            <div className="bg-white/5 rounded-2xl border border-white/10 p-6 md:p-7 space-y-5">
-              {/* Ticket header */}
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-3 flex-1 min-w-0">
-                  <div className="w-11 h-11 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center text-indigo-400 shrink-0">
-                    <Ticket className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-lg md:text-xl font-extrabold text-white truncate">
-                      {ticket.subject}
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-1 truncate">
-                      {ticket.customerEmail}
-                    </p>
-                  </div>
-                </div>
-                <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all shrink-0">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
+          <div className="max-w-4xl mx-auto px-2 md:px-0 space-y-4">
+            {/* Meta badges */}
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${getStatusStyles(
+                    ticket.status as TicketStatus
+                  )}`}
+                >
+                  {ticket.status}
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/5 text-slate-300 border border-white/10">
+                  {ticket.messagesCount} messages
+                </span>
               </div>
-
-              {/* Summary */}
-              <div className="text-sm text-slate-200">
-                <p className="line-clamp-3">{ticket.lastMessageSnippet}</p>
+              <div className="text-[11px] text-slate-500">
+                Updated{" "}
+                {new Date(ticket.updatedAt).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
               </div>
+            </div>
 
-              {/* Meta badges */}
-              <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${getStatusStyles(
-                      ticket.status as TicketStatus
-                    )}`}
-                  >
-                    {ticket.status}
-                  </span>
-                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-white/5 text-slate-300 border border-white/10">
-                    {ticket.messagesCount} messages
-                  </span>
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Updated{" "}
-                  {new Date(ticket.updatedAt).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </div>
-              </div>
+            {/* Conversation timeline - chat style */}
+            <div className="pt-2 space-y-4">
+                {ticket.messages.map((message) => {
+                  const isIncoming =
+                    message.trigger === "GMAIL_INCOMING" || message.status === "RECEIVED"
 
-              {/* Conversation timeline */}
-              <div className="pt-4 border-t border-white/10 space-y-3">
-                {ticket.messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[11px] text-slate-200"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-100 uppercase tracking-wide">
-                          {message.trigger || "AUTOMATED"}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-full bg-slate-900/40 border border-white/10 text-[10px] text-slate-300">
-                          {message.status}
-                        </span>
+                  const fullText = message.bodyPreview || ""
+                  const lines = fullText.split(/\r?\n/)
+                  const isExpanded = !!expandedMessages[message.id]
+                  const hasMore = lines.length > 2
+                  const displayText =
+                    isExpanded || !hasMore ? fullText : lines.slice(0, 2).join("\n")
+
+                  return (
+                    <div
+                      key={message.id}
+                      className={`flex w-full ${isIncoming ? "justify-start" : "justify-end"}`}
+                    >
+                      <div
+                        className={`w-full sm:max-w-[88%] rounded-2xl px-4 py-3 text-xs shadow-sm flex flex-col gap-1
+                          ${
+                            isIncoming
+                              ? "bg-slate-900/70 border border-white/10 rounded-bl-sm"
+                              : "bg-indigo-500/90 border border-indigo-300/60 text-white rounded-br-sm"
+                          }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+                              {isIncoming ? "Customer" : "JUNOHUB"}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[9px] font-semibold tracking-wide
+                                ${
+                                  isIncoming
+                                    ? "bg-slate-800/80 text-slate-200 border border-white/10"
+                                    : "bg-indigo-600/90 text-indigo-50 border border-indigo-300/70"
+                                }`}
+                            >
+                              {message.status}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                            {new Date(message.sentAt).toLocaleTimeString(undefined, {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+
+                        {fullText && (
+                          <p
+                            className={`mt-0.5 leading-snug whitespace-pre-wrap break-words ${
+                              isIncoming ? "text-slate-200" : "text-indigo-50"
+                            }`}
+                          >
+                            {displayText}
+                          </p>
+                        )}
+
+                        {hasMore && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedMessages((prev) => ({
+                                ...prev,
+                                [message.id]: !isExpanded,
+                              }))
+                            }
+                            className={`self-end mt-1 text-[10px] font-medium underline underline-offset-2 ${
+                              isIncoming ? "text-slate-300" : "text-indigo-100"
+                            }`}
+                          >
+                            {isExpanded ? "Show less" : "Show more"}
+                          </button>
+                        )}
                       </div>
-                      <span className="text-slate-500">
-                        {new Date(message.sentAt).toLocaleString()}
-                      </span>
                     </div>
-                    {message.bodyPreview && (
-                      <p className="text-slate-300 leading-snug">
-                        {message.bodyPreview}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
 
                 {ticket.messages.length === 0 && (
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 text-center">
                     No messages logged yet for this ticket.
                   </p>
                 )}
-              </div>
             </div>
           </div>
         </div>
