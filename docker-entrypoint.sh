@@ -16,7 +16,7 @@ client.connect()
 done
 
 echo "Syncing database schema with Prisma (db push)..."
-npx prisma db push
+npx prisma db push --accept-data-loss
 
 if [ "$RUN_TEMPLATE_SEED_ON_START" = "true" ]; then
   echo "Seeding predefined email templates..."
