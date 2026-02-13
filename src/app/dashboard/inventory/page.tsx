@@ -372,7 +372,7 @@ export default function InventoryPage() {
                             <Filter className="w-4 h-4" /> Filters
                         </button>
                         {showFilters && (
-                            <div className="absolute right-0 top-full mt-2 bg-slate-900 border border-white/10 rounded-xl shadow-xl p-4 z-50 min-w-[200px]">
+                            <div className="absolute right-0 top-full mt-2 bg-slate-900 border border-white/10 rounded-xl shadow-xl p-4 z-50 min-w-[200px] max-w-[calc(100vw-2rem)]">
                                 <div className="space-y-3">
                                     <div>
                                         <label className="block text-xs font-bold text-slate-400 mb-2">Status</label>

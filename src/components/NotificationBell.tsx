@@ -143,7 +143,7 @@ export default function NotificationBell() {
 
             {isOpen && (
                 <div
-                    className={`absolute right-0 top-full z-50 mt-2 flex max-h-[600px] w-80 flex-col rounded-xl border shadow-xl sm:w-96 ${
+                    className={`absolute right-0 top-full z-50 mt-2 flex max-h-[600px] w-80 sm:w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl border shadow-xl ${
                         isLight
                             ? "bg-white border-slate-200"
                             : "bg-slate-800 border-white/10"

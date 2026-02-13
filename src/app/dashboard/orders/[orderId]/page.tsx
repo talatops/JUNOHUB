@@ -139,12 +139,12 @@ export default function OrderDetailsPage() {
                 >
                     <ArrowLeft className="w-5 h-5" />
                 </button>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-wrap">
                     <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
                         <ShoppingBag className="w-5 h-5 text-indigo-400" />
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white">Order Details</h1>
+                    <div className="min-w-0">
+                        <h1 className="text-xl md:text-2xl font-bold text-white">Order Details</h1>
                         <p className="text-sm text-slate-400">{order.name}</p>
                     </div>
                 </div>

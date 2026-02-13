@@ -112,7 +112,7 @@ export default function LoginPage() {
                             </div>
                             <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
                         </div>
-                        <h2 className="text-3xl font-extrabold tracking-tight text-white mb-2">
+                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
                             Welcome <span className="text-indigo-400">Back</span>
                         </h2>
                         <p className="text-slate-400 text-sm">

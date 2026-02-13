@@ -63,7 +63,7 @@ export default function SignupPage() {
                             </div>
                             <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
                         </div>
-                        <h2 className="text-3xl font-extrabold tracking-tight text-white mb-2">
+                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
                             Create your <span className="text-indigo-400">Account</span>
                         </h2>
                         <p className="text-slate-400 text-sm">
@@ -207,7 +207,7 @@ export default function SignupPage() {
                     </p>
                 </div>
             </motion.div>
-            <div className="absolute inset-x-0 bottom-4 flex flex-col items-center gap-1 text-[9px] text-slate-500 font-semibold uppercase tracking-widest">
+            <div className="mt-6 flex flex-col items-center gap-1 text-[9px] text-slate-500 font-semibold uppercase tracking-widest">
                 <div className="flex items-center gap-4">
                     <Link
                         href="/privacy-policy"

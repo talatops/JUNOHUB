@@ -46,7 +46,7 @@ export default async function AdminLayout({
                             <h2 className="text-xs md:text-sm font-semibold text-slate-300 uppercase tracking-wider">
                                 Admin Portal
                             </h2>
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[10px] text-slate-500 hidden sm:block">
                                 Read-only observability for Shopify, vendors & suppliers
                             </span>
                         </div>

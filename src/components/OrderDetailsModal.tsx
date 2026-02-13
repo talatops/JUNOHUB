@@ -134,7 +134,7 @@ export default function OrderDetailsModal({ isOpen, onClose, orderId, orderName 
                     }}
                 >
                     {/* Header */}
-                    <div className="flex items-center justify-between p-6 border-b border-white/10 flex-shrink-0 bg-slate-900/95 backdrop-blur-sm">
+                    <div className="flex items-center justify-between p-4 md:p-6 border-b border-white/10 flex-shrink-0 bg-slate-900/95 backdrop-blur-sm">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
                                 <ShoppingBag className="w-5 h-5 text-indigo-400" />
@@ -153,7 +153,7 @@ export default function OrderDetailsModal({ isOpen, onClose, orderId, orderName 
                     </div>
 
                     {/* Content */}
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 min-h-0 bg-slate-900 max-w-full" style={{ maxHeight: 'calc(90vh - 140px)' }}>
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 min-h-0 bg-slate-900 max-w-full" style={{ maxHeight: 'calc(90vh - 140px)' }}>
                     {loading ? (
                         <div className="flex items-center justify-center h-64">
                             <div className="text-slate-400">Loading order details...</div>
@@ -352,7 +352,7 @@ export default function OrderDetailsModal({ isOpen, onClose, orderId, orderName 
                     </div>
 
                     {/* Footer */}
-                    <div className="p-6 border-t border-white/10 flex justify-end flex-shrink-0 bg-slate-900/95 backdrop-blur-sm">
+                    <div className="p-4 md:p-6 border-t border-white/10 flex justify-end flex-shrink-0 bg-slate-900/95 backdrop-blur-sm">
                         <button
                             onClick={onClose}
                             className="px-6 py-2.5 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 transition-colors"

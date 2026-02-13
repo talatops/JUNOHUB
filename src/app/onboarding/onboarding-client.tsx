@@ -251,7 +251,7 @@ export default function OnboardingClient() {
                         className="space-y-8"
                     >
                         <div className="space-y-6">
-                            <div className="flex items-center justify-between p-6 bg-white/5 rounded-2xl border border-white/10 group hover:border-indigo-500/30 transition-all">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 sm:p-6 bg-white/5 rounded-2xl border border-white/10 group hover:border-indigo-500/30 transition-all">
                                 <div className="flex gap-4 items-center">
                                     <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-400/20 transition-all">
                                         <Clock3 className="w-6 h-6" />
@@ -272,7 +272,7 @@ export default function OnboardingClient() {
                                 </select>
                             </div>
 
-                            <div className="flex items-center justify-between p-6 bg-white/5 rounded-2xl border border-white/10 group hover:border-emerald-500/30 transition-all">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between p-4 sm:p-6 bg-white/5 rounded-2xl border border-white/10 group hover:border-emerald-500/30 transition-all">
                                 <div className="flex gap-4 items-center">
                                     <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-400/20 transition-all">
                                         <Zap className="w-6 h-6" />

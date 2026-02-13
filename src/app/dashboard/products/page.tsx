@@ -42,12 +42,12 @@ export default function InventoryPage() {
                     <table className="w-full text-left">
                         <thead>
                             <tr className="border-b border-white/5 bg-white/[0.02]">
-                                <th className="px-6 py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Product Details</th>
-                                <th className="px-6 py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Supplier</th>
-                                <th className="px-6 py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Price</th>
-                                <th className="px-6 py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Stock</th>
-                                <th className="px-6 py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Status</th>
-                                <th className="px-6 py-4 text-right"></th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest min-w-[180px]">Product Details</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest hidden sm:table-cell">Supplier</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest whitespace-nowrap">Price</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest hidden md:table-cell">Stock</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest hidden lg:table-cell">Status</th>
+                                <th className="px-3 py-3 md:px-6 md:py-4 text-right text-[10px] font-mono font-bold text-zinc-500 uppercase tracking-widest">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -59,7 +59,7 @@ export default function InventoryPage() {
                                     transition={{ delay: index * 0.05 }}
                                     className="hover:bg-white/[0.02] transition-colors group"
                                 >
-                                    <td className="px-6 py-5">
+                                    <td className="px-3 py-4 md:px-6 md:py-5">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-lg bg-zinc-900 border border-white/5 flex items-center justify-center text-zinc-600 group-hover:text-emerald-accent transition-colors">
                                                 <Package className="w-5 h-5" />
@@ -67,21 +67,21 @@ export default function InventoryPage() {
                                             <span className="text-sm font-bold text-zinc-200">{item.title}</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5">
+                                    <td className="px-3 py-4 md:px-6 md:py-5 hidden sm:table-cell">
                                         <span className="text-xs text-zinc-500 font-medium">{item.supplier}</span>
                                     </td>
-                                    <td className="px-6 py-5">
+                                    <td className="px-3 py-4 md:px-6 md:py-5">
                                         <div className="flex items-center gap-1 text-emerald-accent/90 font-mono text-sm font-bold">
                                             {item.price}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5">
+                                    <td className="px-3 py-4 md:px-6 md:py-5 hidden md:table-cell">
                                         <div className="flex items-center gap-1.5 font-mono text-xs text-zinc-400">
                                             <Layers className="w-3.5 h-3.5" />
                                             {item.stock}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-5">
+                                    <td className="px-3 py-4 md:px-6 md:py-5 hidden lg:table-cell">
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${item.status === 'LOW STOCK'
                                                 ? 'bg-amber-500/10 text-amber-500'
                                                 : 'bg-emerald-500/10 text-emerald-500'
@@ -89,7 +89,7 @@ export default function InventoryPage() {
                                             {item.status}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-5 text-right">
+                                    <td className="px-3 py-4 md:px-6 md:py-5 text-right">
                                         <button className="p-2 text-zinc-600 hover:text-white transition-colors">
                                             <MoreVertical className="w-4 h-4" />
                                         </button>

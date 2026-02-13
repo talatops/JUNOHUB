@@ -40,7 +40,7 @@ export default async function SupplierLayout({
     }
 
     return (
-        <div className="h-screen relative font-sans dashboard-glass-dark overflow-hidden">
+        <div className="h-screen relative font-sans dashboard-glass-dark overflow-x-hidden">
             {/* Desktop Sidebar */}
             <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-slate-900/70 border-r border-white/10 backdrop-blur-xl">
                 <SupplierSidebar />
