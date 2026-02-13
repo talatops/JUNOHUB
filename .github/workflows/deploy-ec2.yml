@@ -52,11 +52,13 @@ jobs:
           echo "NODE_ENV=production" >> .env
 
           # Append project-specific environment from EC2_ENV secret
-          # EC2_ENV should contain additional KEY=VALUE lines
-          echo "${{ secrets.EC2_ENV }}" >> .env
+          # EC2_ENV should contain additional KEY=VALUE lines. We use a here-doc
+          # so the secret content is treated as literal text and not executed.
+          cat <<'EOF' >> .env
+          ${{ secrets.EC2_ENV }}
+          EOF
 
-          echo "Environment file created (sensitive values masked):"
-          cat .env | sed 's/\(PASS\|SECRET\|KEY\|TOKEN\|DATABASE_URL\)=.*/\1=***MASKED***/g' || true
+          echo "Environment file created with EC2_ENV contents appended."
 
       - name: Setup SSH
         run: |

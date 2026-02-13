@@ -1,15 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import {
-    FileText,
-    Search,
-    Plus,
-    Loader2,
-    Edit,
-    Trash2,
-} from "lucide-react"
+import { FileText, Search, Plus, Loader2, Edit, Trash2 } from "lucide-react"
 import { renderTemplate } from "@/lib/templates/simpleRenderer"
+import { useTheme } from "@/components/ThemeProvider"
 
 type TemplateIntent = "general" | "shipping_delay" | "refund_request" | "question"
 type TemplateMood = "neutral" | "angry" | "confused" | "happy"
@@ -58,6 +52,8 @@ export default function EmailTemplatesPage() {
 
     const [editing, setEditing] = useState<Template | null>(null)
     const [saving, setSaving] = useState(false)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     const loadTemplates = async () => {
         try {
@@ -288,21 +284,43 @@ export default function EmailTemplatesPage() {
             </div>
 
             {editing && (
-                <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 dark:bg-black/50 px-4 pt-20 md:pt-24">
-                    <div className="w-full max-w-3xl max-h-[90vh] bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col">
-                        <div className="px-5 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                <div
+                    className={`fixed inset-0 z-40 flex items-start justify-center px-4 pt-20 md:pt-24 ${
+                        isLight ? "bg-slate-900/10" : "bg-slate-950/60"
+                    }`}
+                >
+                    <div
+                        className={`flex w-full max-h-[90vh] max-w-3xl flex-col rounded-2xl border shadow-2xl ${
+                            isLight
+                                ? "bg-white text-slate-900 border-slate-200"
+                                : "bg-slate-950 text-slate-50 border-white/10"
+                        }`}
+                    >
+                        <div
+                            className={`flex items-center justify-between px-5 py-4 border-b ${
+                                isLight ? "border-slate-200" : "border-white/10"
+                            }`}
+                        >
                             <div>
                                 <h2 className="text-lg font-bold">
                                     {editing.id ? "Edit template" : "New template"}
                                 </h2>
-                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                                <p
+                                    className={`mt-0.5 text-xs ${
+                                        isLight ? "text-slate-500" : "text-slate-400"
+                                    }`}
+                                >
                                     Use {"{{variable}}"} placeholders to personalize replies.
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setEditing(null)}
-                                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm"
+                                className={`text-sm ${
+                                    isLight
+                                        ? "text-slate-500 hover:text-slate-900"
+                                        : "text-slate-400 hover:text-white"
+                                }`}
                             >
                                 Close
                             </button>
