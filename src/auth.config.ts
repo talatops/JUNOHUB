@@ -7,8 +7,9 @@ export default {
         Google({
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            // Do NOT allow dangerous automatic account linking; require explicit flows instead
-            allowDangerousEmailAccountLinking: false,
+            // Allow account linking: users can sign up/sign in with Google OAuth
+            // This enables Google sign-in to create new accounts or link to existing accounts with matching email
+            allowDangerousEmailAccountLinking: true,
         }),
         Credentials({
             name: "Credentials",
