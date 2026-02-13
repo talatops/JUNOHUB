@@ -189,7 +189,7 @@ export default function EmailTemplatesPage() {
         : ""
 
     return (
-        <div className="h-full flex flex-col space-y-4 md:space-y-6">
+        <div className="h-full flex flex-col space-y-4 md:space-y-6 mt-4 md:mt-6">
             <div className="bg-white/5 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 overflow-hidden flex flex-col flex-1 min-h-0">
                 <div className="p-4 md:p-6 border-b border-white/10 flex flex-col sm:flex-row gap-3 md:gap-4 justify-between bg-white/5 flex-shrink-0">
                     <div className="relative flex-1 min-w-0">
@@ -288,21 +288,21 @@ export default function EmailTemplatesPage() {
             </div>
 
             {editing && (
-                <div className="fixed inset-0 z-40 flex items-center justify-end bg-black/40 backdrop-blur-sm">
-                    <div className="w-full max-w-2xl h-full md:h-auto md:max-h-[90vh] bg-slate-950/95 border-l border-white/10 md:rounded-l-2xl md:mr-4 md:mb-4 shadow-2xl flex flex-col">
-                        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
+                <div className="fixed inset-0 z-40 flex items-start justify-center bg-slate-900/40 dark:bg-black/50 px-4 pt-20 md:pt-24">
+                    <div className="w-full max-w-3xl max-h-[90vh] bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl flex flex-col">
+                        <div className="px-5 py-4 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
                             <div>
-                                <h2 className="text-lg font-bold text-white">
+                                <h2 className="text-lg font-bold">
                                     {editing.id ? "Edit template" : "New template"}
                                 </h2>
-                                <p className="text-xs text-slate-400 mt-0.5">
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                                     Use {"{{variable}}"} placeholders to personalize replies.
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setEditing(null)}
-                                className="text-slate-400 hover:text-white text-sm"
+                                className="text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white text-sm"
                             >
                                 Close
                             </button>
@@ -312,7 +312,7 @@ export default function EmailTemplatesPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                             Name
                                         </label>
                                         <input
@@ -325,13 +325,13 @@ export default function EmailTemplatesPage() {
                                                         : prev,
                                                 )
                                             }
-                                            className="w-full h-9 px-3 rounded-lg bg-slate-900/60 border border-white/10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                            className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                         />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                                 Intent
                                             </label>
                                             <select
@@ -346,7 +346,7 @@ export default function EmailTemplatesPage() {
                                                             : prev,
                                                     )
                                                 }
-                                                className="w-full h-9 px-3 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                                className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                             >
                                                 {INTENT_OPTIONS.map((opt) => (
                                                     <option key={opt.value} value={opt.value}>
@@ -356,7 +356,7 @@ export default function EmailTemplatesPage() {
                                             </select>
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                                 Mood
                                             </label>
                                             <select
@@ -371,7 +371,7 @@ export default function EmailTemplatesPage() {
                                                             : prev,
                                                     )
                                                 }
-                                                className="w-full h-9 px-3 rounded-lg bg-slate-900/60 border border-white/10 text-xs text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                                className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                             >
                                                 {MOOD_OPTIONS.map((opt) => (
                                                     <option key={opt.value} value={opt.value}>
@@ -383,7 +383,7 @@ export default function EmailTemplatesPage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                        <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                             Description (optional)
                                         </label>
                                         <input
@@ -399,37 +399,37 @@ export default function EmailTemplatesPage() {
                                                         : prev,
                                                 )
                                             }
-                                            className="w-full h-9 px-3 rounded-lg bg-slate-900/60 border border-white/10 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                            className="w-full h-9 px-3 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                             placeholder="Short summary for your team"
                                         />
                                     </div>
                                 </div>
 
-                                <div className="space-y-2 text-xs text-slate-400">
-                                    <p className="font-semibold text-slate-200">
+                                <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
+                                    <p className="font-semibold text-slate-800 dark:text-slate-200">
                                         Available variables
                                     </p>
                                     <ul className="space-y-1">
                                         <li>
-                                            <code className="px-1.5 py-0.5 bg-slate-900/80 rounded border border-white/10 text-[11px]">
+                                            <code className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-900/80 rounded border border-slate-200 dark:border-white/10 text-[11px]">
                                                 {"{{customer_name}}"}
                                             </code>{" "}
                                             – Customer’s name
                                         </li>
                                         <li>
-                                            <code className="px-1.5 py-0.5 bg-slate-900/80 rounded border border-white/10 text-[11px]">
+                                            <code className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-900/80 rounded border border-slate-200 dark:border-white/10 text-[11px]">
                                                 {"{{customer_email}}"}
                                             </code>{" "}
                                             – Customer’s email
                                         </li>
                                         <li>
-                                            <code className="px-1.5 py-0.5 bg-slate-900/80 rounded border border-white/10 text-[11px]">
+                                            <code className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-900/80 rounded border border-slate-200 dark:border-white/10 text-[11px]">
                                                 {"{{store_name}}"}
                                             </code>{" "}
                                             – Store name
                                         </li>
                                         <li>
-                                            <code className="px-1.5 py-0.5 bg-slate-900/80 rounded border border-white/10 text-[11px]">
+                                            <code className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-900/80 rounded border border-slate-200 dark:border-white/10 text-[11px]">
                                                 {"{{ticket_summary}}"}
                                             </code>{" "}
                                             – Short summary of the customer’s email
@@ -439,7 +439,7 @@ export default function EmailTemplatesPage() {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                     Template body
                                 </label>
                                 <textarea
@@ -450,29 +450,29 @@ export default function EmailTemplatesPage() {
                                         )
                                     }
                                     rows={8}
-                                    className="w-full rounded-lg bg-slate-900/60 border border-white/10 text-xs text-slate-100 font-mono p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+                                    className="w-full rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 font-mono p-3 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
                                 />
                             </div>
 
                             <div>
-                                <p className="text-xs font-semibold text-slate-300 mb-1">
+                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                                     Preview with example data
                                 </p>
-                                <div className="rounded-lg border border-white/10 bg-slate-900/80 p-4 text-xs text-slate-100 whitespace-pre-wrap">
+                                <div className="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900/80 p-4 text-xs text-slate-900 dark:text-slate-100 whitespace-pre-wrap">
                                     {currentPreview || "Preview will appear here."}
                                 </div>
                             </div>
                         </div>
 
-                        <div className="px-5 py-3 border-t border-white/10 flex items-center justify-between">
-                            <p className="text-[11px] text-slate-500">
+                        <div className="px-5 py-3 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-500">
                                 Templates use simple {"{{variable}}"} placeholders only.
                             </p>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
                                     onClick={() => setEditing(null)}
-                                    className="h-8 px-3 rounded-lg border border-white/10 text-xs text-slate-300 hover:bg-white/10"
+                                    className="h-8 px-3 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
                                 >
                                     Cancel
                                 </button>

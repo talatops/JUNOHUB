@@ -18,7 +18,7 @@ on:
       - 'README.md'
 
 jobs:
-  build-app:
+  build-and-deploy:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
@@ -40,36 +40,9 @@ jobs:
 
       - name: Save application image
         run: |
-          docker save -o junohub-app_latest.tar ${{ env.IMAGE_NAME }}:latest
+          mkdir -p docker
+          docker save -o docker/junohub-app_latest.tar ${{ env.IMAGE_NAME }}:latest
           echo "✅ Saved application image"
-
-      - name: Upload application image
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-image
-          path: junohub-app_latest.tar
-
-  deploy:
-    runs-on: ubuntu-22.04
-    needs: [build-app]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download application image
-        uses: actions/download-artifact@v4
-        with:
-          name: app-image
-          path: docker
-
-      - name: Verify image tar
-        run: |
-          if [ ! -f docker/junohub-app_latest.tar ]; then
-            echo "ERROR: Application image tar missing after download"
-            ls -la docker/ || true
-            exit 1
-          fi
-          echo "✅ Application image tar ready for deploy"
 
       - name: Set up environment file
         run: |
