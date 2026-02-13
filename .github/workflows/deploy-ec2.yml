@@ -77,12 +77,12 @@ jobs:
       - name: Copy deployment files to server
         run: |
           # Copy docker-compose (app + Postgres), and .env
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.yml
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/.env
 
           # Copy application image tar
           echo "Copying Docker image to server..."
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_latest.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_latest.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/junohub-app_latest.tar
           echo "✅ Successfully copied Docker image to server"
 
       - name: Deploy with rolling update
