@@ -4,14 +4,16 @@ import { useState } from "react"
 import { motion } from "framer-motion"
 import { Mail, Lock, Loader2, User, ShoppingBag, Truck, Zap } from "lucide-react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
 
 export default function SignupPage() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
-    const [role, setRole] = useState<"VENDOR" | "SUPPLIER">("VENDOR")
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const initialRole = searchParams.get("role")?.toUpperCase() === "SUPPLIER" ? "SUPPLIER" : "VENDOR"
+    const [role, setRole] = useState<"VENDOR" | "SUPPLIER">(initialRole)
 
     const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
