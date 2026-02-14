@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, Suspense } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import {
     Users,
     CheckCircle2,
@@ -54,6 +54,7 @@ interface ProductSync {
 
 function SupplierVendorsContent() {
     const searchParams = useSearchParams()
+    const router = useRouter()
     const [connections, setConnections] = useState<Connection[]>([])
     const [productSyncs, setProductSyncs] = useState<ProductSync[]>([])
     const [loading, setLoading] = useState(true)
@@ -201,6 +202,8 @@ function SupplierVendorsContent() {
             setInvitationToken("")
             setShowTokenInput(false)
             fetchConnections()
+            // Send supplier to JUNO CHAT so encryption keys auto-setup on first open
+            setTimeout(() => router.push("/supplier/chat"), 1500)
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to accept invitation")
         } finally {

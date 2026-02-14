@@ -40,13 +40,13 @@ export default async function SupplierLayout({
     }
 
     return (
-        <div className="h-screen relative font-sans dashboard-glass-dark overflow-x-hidden">
+        <div className="flex h-screen w-full relative font-sans dashboard-glass-dark overflow-hidden">
             {/* Desktop Sidebar */}
             <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-slate-900/70 border-r border-white/10 backdrop-blur-xl">
                 <SupplierSidebar />
             </div>
-            
-            <main className="md:pl-72 h-full flex flex-col">
+
+            <main className="md:pl-72 flex flex-col flex-1 h-full min-w-0">
                 <header className="h-16 px-4 md:px-8 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between flex-shrink-0 z-50">
                     <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                         <MobileSupplierSidebar />
@@ -61,9 +61,11 @@ export default async function SupplierLayout({
                         <UserAccountMenu />
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 scroll-smooth" data-scroll-container>
-                    <PageTransition>
-                        {children}
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <PageTransition className="p-4 md:p-8 overflow-y-auto custom-scrollbar">
+                        <div className="flex-1 flex flex-col min-h-0">
+                            {children}
+                        </div>
                     </PageTransition>
                 </div>
             </main>

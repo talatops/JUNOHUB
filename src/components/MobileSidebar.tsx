@@ -18,12 +18,14 @@ export function MobileSidebar() {
     const pathname = usePathname()
 
     useEffect(() => {
-        setMounted(true)
+        const timer = setTimeout(() => setMounted(true), 0)
+        return () => clearTimeout(timer)
     }, [])
 
     // Close sidebar when route changes
     useEffect(() => {
-        setIsOpen(false)
+        const timer = setTimeout(() => setIsOpen(false), 0)
+        return () => clearTimeout(timer)
     }, [pathname])
 
     // Prevent body scroll when sidebar is open

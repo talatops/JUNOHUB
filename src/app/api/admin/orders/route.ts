@@ -11,7 +11,7 @@ export async function GET() {
         }
 
         // Get all accepted product syncs
-        const acceptedSyncs = await (prisma as any).productSync.findMany({
+        const acceptedSyncs = await prisma.productSync.findMany({
             where: {
                 status: "ACCEPTED",
             },
@@ -31,7 +31,7 @@ export async function GET() {
         }
 
         const syncsByStore = new Map<string, Set<string>>()
-        acceptedSyncs.forEach((sync: any) => {
+        acceptedSyncs.forEach((sync: (typeof acceptedSyncs)[number]) => {
             if (!syncsByStore.has(sync.storeId)) {
                 syncsByStore.set(sync.storeId, new Set())
             }
@@ -69,7 +69,7 @@ export async function GET() {
 
                 if (!Array.isArray(lineItems)) return false
 
-                return lineItems.some((item: any) => {
+                return lineItems.some((item: { product_id?: number }) => {
                     const productId = item.product_id?.toString()
                     return productId && syncedProductIds.has(productId)
                 })
@@ -80,7 +80,7 @@ export async function GET() {
 
         const transformedOrders = relevantOrders.map((order: typeof relevantOrders[0]) => {
             const syncedProductIds = syncsByStore.get(order.storeId) || new Set()
-            let lineItems: any[] = []
+            let lineItems: { product_id?: number }[] = []
 
             try {
                 lineItems =
@@ -91,7 +91,7 @@ export async function GET() {
                 lineItems = []
             }
 
-            const syncedLineItems = lineItems.filter((item: any) => {
+            const syncedLineItems = lineItems.filter((item: { product_id?: number }) => {
                 const productId = item.product_id?.toString()
                 return productId && syncedProductIds.has(productId)
             })

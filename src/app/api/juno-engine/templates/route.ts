@@ -150,8 +150,7 @@ export async function POST(req: Request) {
             INSERT INTO "Template"
                 ("id", "storeId", "name", "intent", "mood", "description", "body", "variables", "isHtml", "createdAt", "updatedAt")
             VALUES
-                (${id}, ${activeStore.id}, ${name}, ${intent}, ${mood}, ${description ?? null}, ${templateBody}, ${variables as
-                    any}, ${isHtml ?? true}, NOW(), NOW())
+                (${id}, ${activeStore.id}, ${name}, ${intent}, ${mood}, ${description ?? null}, ${templateBody}, ${variables as Record<string, unknown> | null}, ${isHtml ?? true}, NOW(), NOW())
             RETURNING
                 "id",
                 "storeId",

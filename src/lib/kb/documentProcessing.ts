@@ -1,5 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
+import { PDFParse } from "pdf-parse"
+import mammoth from "mammoth"
 import { logger } from "@/lib/logger"
 
 export type RawDocument = {
@@ -20,15 +22,31 @@ export type TextChunk = {
 const DEFAULT_CHUNK_SIZE = 1000
 const DEFAULT_CHUNK_OVERLAP = 200
 
-// Placeholder PDF/DOCX extraction – swap in real libraries (e.g. pdf-parse, docx) later.
-async function extractTextFromFile(storagePath: string, mimeType: string): Promise<string> {
-    try {
-        const buffer = await fs.readFile(storagePath)
-        const text = buffer.toString("utf8")
+const PDF_MIME = "application/pdf"
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+const DOC_MIME = "application/msword"
 
-        // In a real implementation, branch on mimeType and use appropriate parsers.
-        // For now, treat as UTF-8 text for a first iteration.
-        return text
+async function extractTextFromFile(storagePath: string, mimeType: string): Promise<string> {
+    const absolutePath = path.resolve(storagePath)
+    try {
+        if (mimeType === PDF_MIME) {
+            const buffer = await fs.readFile(absolutePath)
+            const parser = new PDFParse({ data: buffer })
+            try {
+                const result = await parser.getText()
+                await parser.destroy()
+                return (result.text ?? "").trim()
+            } finally {
+                await parser.destroy().catch(() => {})
+            }
+        }
+        if (mimeType === DOCX_MIME || mimeType === DOC_MIME) {
+            const result = await mammoth.extractRawText({ path: absolutePath })
+            return (result.value ?? "").trim()
+        }
+        // Fallback for plain text or unknown types
+        const buffer = await fs.readFile(absolutePath)
+        return buffer.toString("utf8").trim()
     } catch (error) {
         logger.error("Failed to extract text from file", { storagePath, mimeType, error })
         throw error

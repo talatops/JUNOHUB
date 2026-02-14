@@ -26,6 +26,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 if (token.role) {
                     session.user.role = token.role as "VENDOR" | "SUPPLIER" | "ADMIN"
                 }
+                // Load chatPublicKey from DB so it stays current after chat-setup
+                const user = await prisma.user.findUnique({
+                    where: { id: token.id as string },
+                    select: { chatPublicKey: true },
+                })
+                if (user) session.user.chatPublicKey = user.chatPublicKey ?? undefined
             }
             return session
         },

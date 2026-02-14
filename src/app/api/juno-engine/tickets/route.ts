@@ -10,7 +10,7 @@ function normalizeSubject(subject: string | null): string {
     // Remove repeated "Re:" / "Fwd:" prefixes
     // e.g. "Re: Re: Hello" -> "Hello"
     // Case-insensitive, allow localized variants in future by trimming until no prefix matches
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
         const match = s.match(/^(re|fw|fwd):\s*/i)
         if (!match) break

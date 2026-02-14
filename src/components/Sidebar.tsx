@@ -73,6 +73,12 @@ const routes = [
             { label: "Flagged Emails", href: "/dashboard/juno-engine/flagged-email", icon: Flag },
             { label: "Gmail", href: "/dashboard/juno-engine/gmail-connect", icon: Mail },
         ]
+    },
+    {
+        label: "JUNO CHAT",
+        icon: Mail,
+        href: "/dashboard/chat",
+        color: "text-pink-500",
     }
 ]
 

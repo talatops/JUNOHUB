@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { ConnectionStatus } from "@prisma/client"
 
 export async function GET(req: Request) {
     try {
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
 
         const connections = await prisma.connection.findMany({
             where: {
-                ...(status && { status: status as any }),
+                ...(status && { status: status as ConnectionStatus }),
             },
             include: {
                 store: true,

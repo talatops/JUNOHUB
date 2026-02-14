@@ -9,7 +9,7 @@ import { getUnreadEmails, sendGmailReply, markEmailAsRead } from "@/lib/gmail/em
  * Manually trigger email polling and automated replies
  * This can be called periodically via cron job or manually
  */
-export async function POST(req: Request) {
+export async function POST(_req: Request) {
     try {
         const session = await auth()
         if (!session?.user?.id) {

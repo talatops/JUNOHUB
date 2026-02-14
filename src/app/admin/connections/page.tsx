@@ -1,12 +1,13 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Link2 } from "lucide-react"
 
 interface AdminConnection {
     id: string
     status: string
-    createdAt: string
-    updatedAt: string
+    createdAt: Date
+    updatedAt: Date
     store: {
         businessName: string
         shopifyStoreName: string
@@ -17,12 +18,14 @@ interface AdminConnection {
 }
 
 async function getConnections(): Promise<AdminConnection[]> {
-    const res = await fetch(`${process.env.NEXTAUTH_URL}/api/admin/connections`, {
-        cache: "no-store",
+    const connections = await prisma.connection.findMany({
+        include: {
+            store: { select: { businessName: true, shopifyStoreName: true } },
+            supplier: { select: { companyName: true } },
+        },
+        orderBy: { createdAt: "desc" },
     })
-    if (!res.ok) return []
-    const data = (await res.json()) as { connections: AdminConnection[] }
-    return data.connections
+    return connections as unknown as AdminConnection[]
 }
 
 export default async function AdminConnectionsPage() {

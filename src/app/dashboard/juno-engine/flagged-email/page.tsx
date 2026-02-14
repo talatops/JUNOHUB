@@ -1,13 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { 
-    Flag, 
-    Search, 
-    Filter, 
-    Mail,
+import { useState, useEffect, useCallback } from "react"
+import {
+    Flag,
+    Search,
+    Filter,
     Loader2,
-    AlertCircle,
     Trash2,
     Archive,
     CheckCircle2
@@ -25,7 +23,46 @@ interface FlaggedEmail {
 export default function FlaggedEmailPage() {
     const [searchTerm, setSearchTerm] = useState("")
     const [flaggedEmails, setFlaggedEmails] = useState<FlaggedEmail[]>([])
-    const [loading, setLoading] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+
+    const fetchFlaggedEmails = useCallback(async () => {
+        setLoading(true)
+        try {
+            const res = await fetch("/api/juno-engine/flagged-emails")
+            if (res.ok) {
+                const data = await res.json()
+                setFlaggedEmails(data.flaggedEmails ?? [])
+            }
+        } catch {
+            setFlaggedEmails([])
+        } finally {
+            setLoading(false)
+        }
+    }, [])
+
+    useEffect(() => {
+        fetchFlaggedEmails()
+    }, [fetchFlaggedEmails])
+
+    const handleDelete = async (id: string) => {
+        setDeletingId(id)
+        try {
+            const res = await fetch(`/api/juno-engine/flagged-emails/${id}`, { method: "DELETE" })
+            if (res.ok) {
+                setFlaggedEmails((prev) => prev.filter((e) => e.id !== id))
+            }
+        } finally {
+            setDeletingId(null)
+        }
+    }
+
+    const filtered = flaggedEmails.filter(
+        (e) =>
+            e.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            e.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            e.reason.toLowerCase().includes(searchTerm.toLowerCase())
+    )
 
     return (
         <div className="h-full flex flex-col space-y-4 md:space-y-6">
@@ -55,7 +92,7 @@ export default function FlaggedEmailPage() {
                                 <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
                                 <p className="font-medium animate-pulse">Loading flagged emails...</p>
                             </div>
-                        ) : flaggedEmails.length === 0 ? (
+                        ) : filtered.length === 0 ? (
                             <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-3">
                                 <Flag className="w-10 h-10 opacity-20" />
                                 <p className="font-medium">No flagged emails found.</p>
@@ -73,7 +110,7 @@ export default function FlaggedEmailPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-white/5">
-                                    {flaggedEmails.map((email) => (
+                                    {filtered.map((email) => (
                                         <tr key={email.id} className="hover:bg-white/5 transition-colors group">
                                             <td className="px-4 md:px-8 py-3 md:py-4">
                                                 <div className="flex items-center gap-2">
@@ -98,7 +135,12 @@ export default function FlaggedEmailPage() {
                                                     <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all" title="Archive">
                                                         <Archive className="w-4 h-4" />
                                                     </button>
-                                                    <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-red-400 transition-all" title="Delete">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDelete(email.id)}
+                                                        className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-red-400 transition-all"
+                                                        title="Delete"
+                                                    >
                                                         <Trash2 className="w-4 h-4" />
                                                     </button>
                                                 </div>

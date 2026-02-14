@@ -40,8 +40,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
                 | ThemeMode
                 | null
             if (stored === "light" || stored === "default") {
-                setThemeState(stored)
-                applyTheme(stored)
+                const timer = setTimeout(() => {
+                    setThemeState(stored)
+                    applyTheme(stored)
+                }, 0)
+                return () => clearTimeout(timer)
             } else {
                 applyTheme("default")
             }

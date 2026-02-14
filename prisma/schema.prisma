@@ -27,7 +27,11 @@ model User {
   mfaEnabled    Boolean   @default(false)
   mfaSecret     String?   // Encrypted TOTP secret
   
+  chatPublicKey String?
+  
   // Relations
+  sentMessages     ChatMessage[] @relation("SentMessages")
+  receivedMessages ChatMessage[] @relation("ReceivedMessages")
   accounts      Account[]
   sessions      Session[]
   stores        Store[]   // Changed from singular to support multiple stores
@@ -109,6 +113,7 @@ model Store {
   faqItems        FaqItem[]
   knowledgeChunks KnowledgeChunk[]
   emailLogs       EmailLog[]
+  flaggedEmails   FlaggedEmail[]
   templates       Template[]
   
   createdAt        DateTime @default(now())
@@ -383,6 +388,28 @@ model EmailLog {
   @@index([userId, sentAt])
 }
 
+enum FlaggedEmailPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model FlaggedEmail {
+  id         String              @id @default(cuid())
+  storeId    String
+  store      Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  subject    String              @db.Text
+  from       String              // Sender email
+  reason     String              @db.Text
+  priority   FlaggedEmailPriority @default(MEDIUM)
+  messageId  String?             // Gmail message id for future sync
+  flaggedAt  DateTime            @default(now())
+  createdAt  DateTime            @default(now())
+
+  @@index([storeId])
+  @@index([storeId, flaggedAt])
+}
+
 enum KnowledgeDocumentStatus {
   UPLOADED
   PROCESSING
@@ -481,4 +508,22 @@ model Template {
   updatedAt   DateTime @updatedAt
 
   @@index([storeId])
+}
+
+model ChatMessage {
+  id                      String   @id @default(cuid())
+  senderId                String
+  receiverId              String
+  encryptedContent        String   @db.Text
+  encryptedKeyForSender   String   @db.Text
+  encryptedKeyForReceiver String   @db.Text
+  iv                      String
+
+  sender   User @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([senderId, receiverId])
+  @@index([receiverId, senderId])
 }

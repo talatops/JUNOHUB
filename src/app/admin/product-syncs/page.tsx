@@ -1,13 +1,14 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Shuffle } from "lucide-react"
 
 interface AdminProductSync {
     id: string
     status: string
-    createdAt: string
-    acceptedAt: string | null
-    rejectedAt: string | null
+    createdAt: Date
+    acceptedAt: Date | null
+    rejectedAt: Date | null
     shopifyProductId: string
     shopifyProductTitle: string
     store: {
@@ -20,12 +21,14 @@ interface AdminProductSync {
 }
 
 async function getProductSyncs(): Promise<AdminProductSync[]> {
-    const res = await fetch(`${process.env.NEXTAUTH_URL}/api/admin/product-syncs`, {
-        cache: "no-store",
+    const syncs = await prisma.productSync.findMany({
+        include: {
+            store: { select: { businessName: true, shopifyStoreName: true } },
+            supplier: { select: { companyName: true } },
+        },
+        orderBy: { createdAt: "desc" },
     })
-    if (!res.ok) return []
-    const data = (await res.json()) as { syncs: AdminProductSync[] }
-    return data.syncs
+    return syncs as unknown as AdminProductSync[]
 }
 
 export default async function AdminProductSyncsPage() {
@@ -113,9 +116,7 @@ export default async function AdminProductSyncsPage() {
                                 </td>
                                 <td className="py-3 pr-4 align-top text-xs text-slate-400">
                                     {sync.acceptedAt || sync.rejectedAt
-                                        ? new Date(
-                                              (sync.acceptedAt || sync.rejectedAt) as string,
-                                          ).toLocaleString("en-US", {
+                                        ? new Date(sync.acceptedAt || sync.rejectedAt!).toLocaleString("en-US", {
                                               dateStyle: "short",
                                               timeStyle: "short",
                                           })

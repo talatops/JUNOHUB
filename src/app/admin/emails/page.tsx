@@ -1,4 +1,5 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Mail } from "lucide-react"
 
@@ -12,7 +13,7 @@ interface AdminEmailLog {
     status: string
     providerMessageId: string | null
     errorMessage: string | null
-    sentAt: string
+    sentAt: Date
     store: {
         businessName: string
         shopifyStoreName: string
@@ -20,15 +21,17 @@ interface AdminEmailLog {
 }
 
 async function getEmails(): Promise<{ emails: AdminEmailLog[]; total: number }> {
-    // Use a relative URL so the admin's session cookies are forwarded
-    const res = await fetch("/api/admin/emails?limit=100", {
-        cache: "no-store",
-    })
-    if (!res.ok) {
-        return { emails: [], total: 0 }
-    }
-    const data = (await res.json()) as { emails: AdminEmailLog[]; total: number }
-    return data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const prismaAny = prisma as any
+    const [emails, total] = await Promise.all([
+        prismaAny.emailLog.findMany({
+            include: { store: { select: { businessName: true, shopifyStoreName: true } } },
+            orderBy: { sentAt: "desc" },
+            take: 100,
+        }),
+        prismaAny.emailLog.count(),
+    ])
+    return { emails: emails as AdminEmailLog[], total }
 }
 
 export default async function AdminEmailsPage() {

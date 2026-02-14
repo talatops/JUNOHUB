@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { ProductSyncStatus } from "@prisma/client"
+
+const VALID_STATUSES: ProductSyncStatus[] = [
+    ProductSyncStatus.PENDING,
+    ProductSyncStatus.ACCEPTED,
+    ProductSyncStatus.REJECTED,
+]
 
 export async function GET(req: Request) {
     try {
@@ -11,9 +18,13 @@ export async function GET(req: Request) {
         }
 
         const { searchParams } = new URL(req.url)
-        const status = searchParams.get("status")
+        const statusParam = searchParams.get("status")
+        const status =
+            statusParam && VALID_STATUSES.includes(statusParam as ProductSyncStatus)
+                ? (statusParam as ProductSyncStatus)
+                : undefined
 
-        const syncs = await (prisma as any).productSync.findMany({
+        const syncs = await prisma.productSync.findMany({
             where: {
                 ...(status && { status }),
             },

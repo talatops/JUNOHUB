@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
+import type { FaqItem } from "@prisma/client"
 
 type FaqImportItem = {
     question: string
@@ -91,7 +92,7 @@ export async function POST(
 
         const createdFaqs = await prisma.$transaction(
             validItems.map((item: FaqImportItem) =>
-                (prisma as any).faqItem.create({
+                prisma.faqItem.create({
                     data: {
                         storeId: store.id,
                         question: item.question,
@@ -103,12 +104,12 @@ export async function POST(
         )
 
         const texts = createdFaqs.map(
-            (faq) => `${faq.question}\n${faq.answer}`,
+            (faq: { question: string; answer: string }) => `${faq.question}\n${faq.answer}`,
         )
         const embeddings = await embedBatch(texts)
 
         await Promise.all(
-            createdFaqs.map((faq, index) => {
+            createdFaqs.map((faq: FaqItem, index: number) => {
                 const embedding = embeddings[index]
                 if (!embedding || !embedding.length) return Promise.resolve()
 
@@ -129,7 +130,7 @@ export async function POST(
                     )
                 `,
                     faq.storeId,
-                    faq.id,
+                    faq.id as string,
                     `${faq.question}\n${faq.answer}`,
                     {
                         question: faq.question,

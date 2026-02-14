@@ -1,4 +1,5 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Activity, Radar } from "lucide-react"
 
@@ -16,12 +17,15 @@ interface AdminSyncMetadata {
 }
 
 async function getSyncHealth(): Promise<AdminSyncMetadata[]> {
-    const res = await fetch(`${process.env.NEXTAUTH_URL}/api/admin/sync-health`, {
-        cache: "no-store",
+    const rows = await prisma.syncMetadata.findMany({
+        include: {
+            store: {
+                select: { businessName: true, shopifyStoreName: true },
+            },
+        },
+        orderBy: { lastSyncAt: "desc" },
     })
-    if (!res.ok) return []
-    const data = (await res.json()) as { syncs: AdminSyncMetadata[] }
-    return data.syncs
+    return rows as unknown as AdminSyncMetadata[]
 }
 
 export default async function AdminSyncHealthPage() {

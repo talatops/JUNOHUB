@@ -25,7 +25,7 @@ export async function GET(req: Request) {
                     supplier: true,
                 },
             }),
-            (prisma as any).productSync.findMany({
+            prisma.productSync.findMany({
                 orderBy: { createdAt: "desc" },
                 take: limit,
                 include: {
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
                 supplierName: c.supplier.companyName,
                 metadata: {},
             })),
-            ...productSyncEvents.map((p: any) => ({
+            ...productSyncEvents.map((p: (typeof productSyncEvents)[number]) => ({
                 id: p.id,
                 type: "PRODUCT_SYNC" as AdminEventType,
                 status: p.status,

@@ -16,13 +16,13 @@ export async function GET() {
                             cookieStore.get("__Secure-authjs.session-token")?.value
 
         // Fetch all sessions for the user
-        const userSessions = await (prisma as any).session.findMany({
+        const userSessions = await prisma.session.findMany({
             where: { userId: session.user.id },
             orderBy: { expires: "desc" }
         })
 
         // Transform sessions to include additional info
-        const sessions = userSessions.map((s: { id: string; sessionToken: string; expires: Date }) => ({
+        const sessions = userSessions.map((s: (typeof userSessions)[number]) => ({
             id: s.id,
             sessionToken: s.sessionToken,
             expires: s.expires.toISOString(),

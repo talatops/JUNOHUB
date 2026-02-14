@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { motion } from "framer-motion"
 import {
     Package,
@@ -12,6 +13,7 @@ import {
     Layers
 } from "lucide-react"
 
+// Sample data for this legacy view. For live inventory data, use the Inventory page.
 const mockInventory = [
     { id: "1", title: "Neo Wireless Controller", supplier: "Tokyo Tech Hub", price: "$45.00", stock: 120, status: "SYNCED" },
     { id: "2", title: "Smart Home Hub v2", supplier: "Shenzhen Direct", price: "$89.50", stock: 15, status: "LOW STOCK" },
@@ -101,7 +103,7 @@ export default function InventoryPage() {
                 </div>
             </div>
 
-            {/* Analytics Footer Placeholder */}
+            {/* Sample analytics – real data is on the Inventory page */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="glass p-6 rounded-2xl border-white/5 flex items-center gap-4">
                     <div className="p-3 rounded-xl bg-emerald-accent/10 text-emerald-accent">
@@ -131,6 +133,12 @@ export default function InventoryPage() {
                     </div>
                 </div>
             </div>
+            <p className="text-center text-xs text-zinc-500 mt-4">
+                Sample data. View live inventory and sync status on the{" "}
+                <Link href="/dashboard/inventory" className="text-indigo-400 hover:underline font-medium">
+                    Inventory page
+                </Link>.
+            </p>
         </div>
     )
 }

@@ -8,20 +8,20 @@ function log(level: LogLevel, message: string, meta?: unknown) {
     switch (level) {
         case "debug":
             if (!isProd) {
-                // eslint-disable-next-line no-console
+                 
                 console.debug(...payload)
             }
             break
         case "info":
-            // eslint-disable-next-line no-console
+             
             console.info(...payload)
             break
         case "warn":
-            // eslint-disable-next-line no-console
+             
             console.warn(...payload)
             break
         case "error":
-            // eslint-disable-next-line no-console
+             
             console.error(...payload)
             break
     }

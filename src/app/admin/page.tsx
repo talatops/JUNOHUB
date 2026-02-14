@@ -69,11 +69,10 @@ async function getAdminOverview(): Promise<AdminOverviewResult> {
             by: ["status"],
             _count: { _all: true },
         }) as unknown as Promise<ConnectionGroup[]>,
-        // Use `as any` to be compatible with the current Prisma client setup
-        (prisma as any).productSync.groupBy({
+        prisma.productSync.groupBy({
             by: ["status"],
             _count: { _all: true },
-        }) as Promise<ProductSyncGroup[]>,
+        } as Parameters<typeof prisma.productSync.groupBy>[0]) as unknown as Promise<ProductSyncGroup[]>,
         prisma.cachedOrder.count(),
         prisma.syncMetadata.findMany({
             where: { syncStatus: { in: ["failed"] } },
@@ -81,7 +80,7 @@ async function getAdminOverview(): Promise<AdminOverviewResult> {
             take: 5,
             include: { store: true },
         }) as Promise<RecentSyncError[]>,
-        (prisma as any).productSync.findMany({
+        prisma.productSync.findMany({
             orderBy: { createdAt: "desc" },
             take: 8,
             include: {

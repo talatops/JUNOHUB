@@ -31,7 +31,8 @@ export default function UserAccountMenu() {
 
     const handleSettings = () => {
         setIsOpen(false)
-        router.push("/dashboard/settings")
+        const settingsPath = session?.user?.role === "SUPPLIER" ? "/supplier/settings" : "/dashboard/settings"
+        router.push(settingsPath)
     }
 
     const handleLogout = async () => {

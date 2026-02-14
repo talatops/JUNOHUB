@@ -7,10 +7,8 @@ import {
     Package,
     ShoppingCart,
     Users,
-    Settings,
+    Mail,
     Zap,
-    FileText,
-    TrendingUp
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -40,11 +38,11 @@ const supplierRoutes = [
         color: "text-purple-500",
     },
     {
-        label: "Settings",
-        icon: Settings,
-        href: "/supplier/settings",
-        color: "text-slate-400",
-    }
+        label: "JUNO CHAT",
+        icon: Mail,
+        href: "/supplier/chat",
+        color: "text-pink-500",
+    },
 ]
 
 export function SupplierSidebar() {

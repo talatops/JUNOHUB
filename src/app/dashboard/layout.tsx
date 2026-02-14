@@ -36,8 +36,7 @@ export default async function DashboardLayout({
     }
 
     return (
-        // Root container fills viewport and only hides horizontal overflow
-        <div className="flex h-screen w-full relative font-sans dashboard-glass-dark overflow-x-hidden">
+        <div className="flex h-screen w-full relative font-sans dashboard-glass-dark overflow-hidden">
             {/* Desktop Sidebar */}
             <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-slate-900/70 border-r border-white/10 backdrop-blur-xl">
                 <Sidebar />
@@ -71,9 +70,8 @@ export default async function DashboardLayout({
                     </div>
                 </header>
 
-                {/* Fixed-height content area; inner pages manage their own scrolling */}
-                <div className="flex-1 flex flex-col min-h-0 overflow-x-hidden p-4 md:p-8">
-                    <PageTransition>
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    <PageTransition className="p-4 md:p-8 overflow-y-auto custom-scrollbar">
                         <div className="flex-1 flex flex-col min-h-0">
                             {children}
                         </div>

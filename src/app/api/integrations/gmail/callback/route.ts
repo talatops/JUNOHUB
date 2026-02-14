@@ -23,7 +23,7 @@ export async function GET(req: Request) {
         const { searchParams } = new URL(req.url)
         const code = searchParams.get("code")
         const error = searchParams.get("error")
-        const state = searchParams.get("state")
+        const _state = searchParams.get("state")
 
         // Handle OAuth errors
         if (error) {

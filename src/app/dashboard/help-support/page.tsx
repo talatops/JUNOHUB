@@ -64,7 +64,7 @@ const faqs: FAQItem[] = [
     {
         id: "6",
         question: "How do I export my data?",
-        answer: "You can export reports from various pages using the Export button. Currently, you can export order data as CSV. More export options are coming soon.",
+        answer: "You can export order data as CSV from the Orders page. Additional export options are planned.",
         category: "general"
     }
 ]

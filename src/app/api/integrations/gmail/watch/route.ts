@@ -13,7 +13,7 @@ import { getGmailAccessToken } from "@/lib/gmail"
  * 
  * Note: Gmail watch requests expire after 7 days and need to be renewed.
  */
-export async function POST(req: Request) {
+export async function POST(_req: Request) {
     try {
         const session = await auth()
         if (!session?.user?.id) {

@@ -14,6 +14,15 @@ import {
     AlertCircle
 } from "lucide-react"
 import Link from "next/link"
+import {
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    Tooltip,
+    ResponsiveContainer,
+    Cell
+} from "recharts"
 
 export default function SupplierDashboardPage() {
     const [stats, setStats] = useState({
@@ -230,12 +239,35 @@ export default function SupplierDashboardPage() {
                     <div className="bg-white/5 rounded-xl p-6 border border-white/10 backdrop-blur-sm">
                         <h3 className="text-lg font-bold text-white mb-4">Performance Overview</h3>
                         <p className="text-sm text-slate-400 mb-4">
-                            Track your supplier performance metrics and growth over time.
+                            Key metrics at a glance.
                         </p>
-                        <div className="text-center py-8 text-slate-500">
-                            <TrendingUp className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">Detailed charts coming soon</p>
+                        <div className="h-64 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart
+                                    data={[
+                                        { label: "Products", value: stats.totalProducts, color: "rgb(52 211 153)" },
+                                        { label: "Vendors", value: stats.connectedVendors, color: "rgb(147 51 234)" },
+                                        { label: "Pending", value: stats.pendingConnections, color: "rgb(251 191 36)" },
+                                        { label: "New (7d)", value: stats.recentProducts + stats.recentConnections, color: "rgb(59 130 246)" }
+                                    ]}
+                                    margin={{ top: 12, right: 12, left: 0, bottom: 0 }}
+                                >
+                                    <XAxis dataKey="label" tick={{ fill: "rgb(148 163 184)", fontSize: 12 }} />
+                                    <YAxis tick={{ fill: "rgb(148 163 184)", fontSize: 12 }} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: "rgb(30 41 59)", border: "1px solid rgb(51 65 85)", borderRadius: "8px" }}
+                                        labelStyle={{ color: "rgb(248 250 252)" }}
+                                        formatter={(value: number | undefined) => [value ?? 0, "Count"]}
+                                    />
+                                    <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                                        {[0, 1, 2, 3].map((i) => (
+                                            <Cell key={i} fill={["rgb(52 211 153)", "rgb(147 51 234)", "rgb(251 191 36)", "rgb(59 130 246)"][i]} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
                         </div>
+                        <p className="text-xs text-slate-500 mt-2">Products, connected vendors, pending connections, and new activity (last 7 days)</p>
                     </div>
                 </>
             )}

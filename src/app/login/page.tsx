@@ -160,6 +160,11 @@ export default function LoginPage() {
                                         className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all duration-200 disabled:opacity-50"
                                     />
                                 </div>
+                                <div className="mt-1.5 text-right">
+                                    <Link href="/forgot-password" className="text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+                                        Forgot password?
+                                    </Link>
+                                </div>
                             </div>
 
                             {requiresMFA && (

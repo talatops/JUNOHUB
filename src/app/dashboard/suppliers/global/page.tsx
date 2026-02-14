@@ -59,7 +59,7 @@ export default function GlobalSuppliersPage() {
         }, 5000) // Poll every 5 seconds
         
         return () => clearInterval(interval)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+         
     }, [suppliers]) // Re-run when suppliers change
 
     useEffect(() => {

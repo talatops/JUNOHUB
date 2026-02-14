@@ -1,4 +1,5 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { ShoppingCart } from "lucide-react"
 
@@ -10,7 +11,7 @@ interface AdminOrder {
     currency: string | null
     financialStatus: string | null
     fulfillmentStatus: string | null
-    createdAt: string
+    createdAt: Date
     store: {
         businessName: string
         shopifyStoreName: string
@@ -18,12 +19,57 @@ interface AdminOrder {
 }
 
 async function getOrders(): Promise<AdminOrder[]> {
-    const res = await fetch(`${process.env.NEXTAUTH_URL}/api/admin/orders`, {
-        cache: "no-store",
+    const acceptedSyncs = await prisma.productSync.findMany({
+        where: { status: "ACCEPTED" },
+        select: { shopifyProductId: true, storeId: true },
     })
-    if (!res.ok) return []
-    const data = (await res.json()) as { orders: AdminOrder[] }
-    return data.orders
+    if (acceptedSyncs.length === 0) return []
+
+    const syncsByStore = new Map<string, Set<string>>()
+    acceptedSyncs.forEach((sync) => {
+        if (!syncsByStore.has(sync.storeId)) syncsByStore.set(sync.storeId, new Set())
+        syncsByStore.get(sync.storeId)!.add(sync.shopifyProductId)
+    })
+    const storeIds = Array.from(syncsByStore.keys())
+
+    const cachedOrders = await prisma.cachedOrder.findMany({
+        where: { storeId: { in: storeIds } },
+        include: {
+            store: { select: { id: true, businessName: true, shopifyStoreName: true } },
+        },
+        orderBy: { shopifyCreatedAt: "desc" },
+    })
+
+    const relevantOrders = cachedOrders.filter((order) => {
+        const syncedProductIds = syncsByStore.get(order.storeId)
+        if (!syncedProductIds?.size) return false
+        try {
+            const lineItems =
+                typeof order.lineItems === "string" ? JSON.parse(order.lineItems) : order.lineItems
+            if (!Array.isArray(lineItems)) return false
+            return lineItems.some(
+                (item: { product_id?: number }) =>
+                    item.product_id != null && syncedProductIds.has(String(item.product_id))
+            )
+        } catch {
+            return false
+        }
+    })
+
+    return relevantOrders.map((order) => {
+        const store = order.store as { id: string; businessName: string; shopifyStoreName: string }
+        return {
+            id: order.shopifyOrderId,
+            orderNumber: order.orderNumber,
+            email: order.email,
+            totalPrice: order.totalPrice,
+            currency: order.currency,
+            financialStatus: order.financialStatus,
+            fulfillmentStatus: order.fulfillmentStatus,
+            createdAt: order.shopifyCreatedAt || order.createdAt,
+            store: { businessName: store.businessName, shopifyStoreName: store.shopifyStoreName },
+        }
+    }) as AdminOrder[]
 }
 
 export default async function AdminOrdersPage() {
@@ -109,7 +155,7 @@ export default async function AdminOrdersPage() {
                                     {order.fulfillmentStatus || "—"}
                                 </td>
                                 <td className="py-3 pr-4 align-top text-xs text-slate-400">
-                                    {new Date(order.createdAt).toLocaleString("en-US", {
+                                    {new Date(order.createdAt as Date).toLocaleString("en-US", {
                                         dateStyle: "short",
                                         timeStyle: "short",
                                     })}

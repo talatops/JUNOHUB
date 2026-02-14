@@ -160,7 +160,7 @@ export async function PUT(
                 "mood" = COALESCE(${mood}, "mood"),
                 "description" = COALESCE(${description ?? null}, "description"),
                 "body" = COALESCE(${templateBody}, "body"),
-                "variables" = COALESCE(${variables as any}, "variables"),
+                "variables" = COALESCE(${variables as Record<string, unknown> | null}, "variables"),
                 "isHtml" = COALESCE(${isHtml}, "isHtml"),
                 "updatedAt" = NOW()
             WHERE "id" = ${existing.id}

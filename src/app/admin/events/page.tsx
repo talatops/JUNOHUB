@@ -1,4 +1,5 @@
 import { auth } from "@/auth"
+import { prisma } from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import { Activity, Link2, Radar, Shuffle } from "lucide-react"
 
@@ -14,26 +15,59 @@ interface AdminEvent {
     metadata?: Record<string, unknown>
 }
 
+const LIMIT = 50
+
 async function getEvents(type?: AdminEventType): Promise<AdminEvent[]> {
-    const searchParams = new URLSearchParams()
-    searchParams.set("limit", "50")
-    if (type) {
-        searchParams.set("type", type)
-    }
+    const [connectionEvents, productSyncEvents, syncHealthEvents] = await Promise.all([
+        prisma.connection.findMany({
+            orderBy: { createdAt: "desc" },
+            take: LIMIT,
+            include: { store: true, supplier: true },
+        }),
+        prisma.productSync.findMany({
+            orderBy: { createdAt: "desc" },
+            take: LIMIT,
+            include: { store: true, supplier: true },
+        }),
+        prisma.syncMetadata.findMany({
+            orderBy: { lastSyncAt: "desc" },
+            take: LIMIT,
+            include: { store: true },
+        }),
+    ])
 
-    const res = await fetch(
-        `${process.env.NEXTAUTH_URL}/api/admin/events?${searchParams.toString()}`,
-        {
-            cache: "no-store",
-        },
-    )
+    const events: AdminEvent[] = [
+        ...connectionEvents.map((c) => ({
+            id: c.id,
+            type: "CONNECTION" as AdminEventType,
+            status: c.status,
+            timestamp: c.createdAt.toISOString(),
+            storeName: c.store.shopifyStoreName,
+            supplierName: c.supplier.companyName,
+            metadata: {},
+        })),
+        ...productSyncEvents.map((p) => ({
+            id: p.id,
+            type: "PRODUCT_SYNC" as AdminEventType,
+            status: p.status,
+            timestamp: p.createdAt.toISOString(),
+            storeName: p.store.shopifyStoreName,
+            supplierName: p.supplier.companyName,
+            metadata: { productTitle: p.shopifyProductTitle, shopifyProductId: p.shopifyProductId },
+        })),
+        ...syncHealthEvents.map((s) => ({
+            id: s.id,
+            type: "SYNC_HEALTH" as AdminEventType,
+            status: s.syncStatus,
+            timestamp: s.lastSyncAt.toISOString(),
+            storeName: s.store.shopifyStoreName,
+            supplierName: null as string | null,
+            metadata: { resourceType: s.resourceType, recordCount: s.recordCount },
+        })),
+    ].filter((e) => !type || e.type === type)
 
-    if (!res.ok) {
-        return []
-    }
-
-    const data = (await res.json()) as { events: AdminEvent[] }
-    return data.events
+    events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    return events.slice(0, LIMIT)
 }
 
 function typeBadge(eventType: AdminEventType) {
