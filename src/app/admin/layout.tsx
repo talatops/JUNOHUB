@@ -1,5 +1,5 @@
 import { AdminSidebar } from "@/components/AdminSidebar"
-import { MobileSidebar } from "@/components/MobileSidebar"
+import { MobileAdminSidebar } from "@/components/MobileAdminSidebar"
 import UserAccountMenu from "@/components/UserAccountMenu"
 import NotificationBell from "@/components/NotificationBell"
 import PageTransition from "@/components/PageTransition"
@@ -41,7 +41,7 @@ export default async function AdminLayout({
                 <header className="h-16 px-4 md:px-8 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between flex-shrink-0 z-50">
                     <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                         {/* Reuse vendor mobile sidebar trigger for consistency */}
-                        <MobileSidebar />
+                        <MobileAdminSidebar />
                         <div className="flex flex-col">
                             <h2 className="text-xs md:text-sm font-semibold text-slate-300 uppercase tracking-wider">
                                 Admin Portal

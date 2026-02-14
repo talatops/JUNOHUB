@@ -15,10 +15,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JUNOHUB",
   description: "JUNOHUB - Your dropshipping and e-commerce management platform",
-  icons: {
-    icon: "/icon.svg",
-    apple: "/icon.svg",
-  },
 };
 
 export const viewport = {

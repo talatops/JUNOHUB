@@ -42,21 +42,23 @@ export default async function DashboardLayout({
             <div className="hidden h-full md:flex md:w-72 md:flex-col md:fixed md:inset-y-0 z-[80] bg-slate-900/70 border-r border-white/10 backdrop-blur-xl">
                 <Sidebar />
             </div>
-            
+
             {/* Main Content Area */}
             <main className="md:pl-72 flex flex-col flex-1 h-full min-w-0">
                 {/* Fixed Header */}
                 <header className="h-16 px-4 md:px-8 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between flex-shrink-0 z-50">
-                    <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 md:gap-4 flex-1 min-w-0">
                         <MobileSidebar />
-                        <h2 className="hidden sm:block text-xs md:text-sm font-semibold text-slate-400 uppercase tracking-wider">Vendor Portal</h2>
-                        <div className="flex-1 min-w-0">
+                        <h2 className="hidden lg:block text-xs md:text-sm font-semibold text-slate-400 uppercase tracking-wider shrink-0">Vendor Portal</h2>
+                        <div className="flex-1 min-w-0 max-w-[200px] md:max-w-none">
                             <StoreSwitcher />
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                    <div className="flex items-center gap-1.5 md:gap-4 shrink-0">
                         <ThemeToggle />
-                        <NotificationBell />
+                        <div className="hidden xs:block">
+                            <NotificationBell />
+                        </div>
                         <div className="hidden sm:flex flex-col text-right">
                             <span className="text-xs font-bold text-white truncate max-w-[120px]">
                                 {session.user?.name || "Vendor User"}

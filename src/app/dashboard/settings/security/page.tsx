@@ -218,7 +218,7 @@ export default function SecuritySettingsPage() {
 
             {/* MFA Section */}
             <div className="bg-white/5 rounded-xl p-6 border border-white/10">
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-4">
                     <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                             <Shield className="w-5 h-5 text-indigo-400" />
@@ -232,7 +232,7 @@ export default function SecuritySettingsPage() {
                         <button
                             onClick={handleDisableMFA}
                             disabled={mfaLoading}
-                            className="px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full sm:w-auto px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {mfaLoading ? (
                                 <>
@@ -247,7 +247,7 @@ export default function SecuritySettingsPage() {
                         <button
                             onClick={handleSetupMFA}
                             disabled={setupLoading || showSetup}
-                            className="px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center gap-2 bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full sm:w-auto px-4 py-2 rounded-lg font-bold text-sm transition-colors flex items-center justify-center gap-2 bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {setupLoading ? (
                                 <>

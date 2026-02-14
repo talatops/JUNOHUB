@@ -20,6 +20,12 @@ export default function StoresPage() {
     const [error, setError] = useState("")
     const [switching, setSwitching] = useState<string | null>(null)
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+    /*
+     * Alignment Fix Details:
+     * - Use React `createPortal` to render the modal backdrop and content at the end of `document.body`.
+     * - This ensures `fixed inset-0` is always relative to the viewport, bypassing any parent `transform` styles (like in `PageTransition`) that create new containing blocks.
+     * - Verify that the `fixed inset-0` flex container correctly centers its child vertically and horizontally.
+     */
     const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; storeId: string | null; storeName: string; isActive: boolean }>({
         isOpen: false,
         storeId: null,
@@ -103,10 +109,10 @@ export default function StoresPage() {
 
             // Refresh stores list
             await fetchStores()
-            
+
             // Notify StoreSwitcher to refresh
             window.dispatchEvent(new CustomEvent("storeUpdated"))
-            
+
             // If deleted store was active, reload page to refresh dashboard data
             if (deleteModal.isActive) {
                 window.location.reload()

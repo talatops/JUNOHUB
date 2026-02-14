@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
 import {
     X,
@@ -11,6 +12,7 @@ import {
     Cloud,
     CheckCircle2
 } from "lucide-react"
+import { useTheme } from "@/components/ThemeProvider"
 
 interface AddStoreModalProps {
     isOpen: boolean
@@ -23,6 +25,13 @@ export default function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreMo
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [success, setSuccess] = useState(false)
+    const [mounted, setMounted] = useState(false)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
 
     const [formData, setFormData] = useState({
         businessName: "",
@@ -133,271 +142,315 @@ export default function AddStoreModal({ isOpen, onClose, onSuccess }: AddStoreMo
         }
     }
 
-    return (
+    if (!mounted) return null
+
+    return createPortal(
         <AnimatePresence>
             {isOpen && (
-                <>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none">
                     {/* Backdrop */}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={handleClose}
-                        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm pointer-events-auto"
                     />
 
                     {/* Modal */}
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.95, opacity: 0 }}
-                            className="bg-slate-900/95 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden pointer-events-auto flex flex-col"
-                        >
-                            {/* Header */}
-                            <div className="flex items-center justify-between p-6 border-b border-white/10">
-                                <div>
-                                    <h2 className="text-2xl font-bold text-white">Add New Store</h2>
-                                    <p className="text-sm text-slate-400 mt-1">Connect a Shopify store to your account</p>
-                                </div>
-                                <button
-                                    onClick={handleClose}
-                                    disabled={loading || success}
-                                    className="w-10 h-10 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center transition-colors disabled:opacity-50 text-slate-300"
-                                >
-                                    <X className="w-5 h-5" />
-                                </button>
+                    <motion.div
+                        initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                        exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                        className={`relative rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden pointer-events-auto flex flex-col mx-4 ${isLight
+                                ? "bg-white border border-slate-200"
+                                : "bg-slate-900 border border-white/10"
+                            }`}
+                    >
+                        {/* Header */}
+                        <div className={`flex items-center justify-between p-6 border-b ${isLight ? "border-slate-100" : "border-white/10"
+                            }`}>
+                            <div>
+                                <h2 className={`text-2xl font-bold ${isLight ? "text-slate-900" : "text-white"}`}>Add New Store</h2>
+                                <p className={`text-sm mt-1 ${isLight ? "text-slate-500" : "text-slate-400"}`}>Connect a Shopify store to your account</p>
                             </div>
+                            <button
+                                onClick={handleClose}
+                                disabled={loading || success}
+                                className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 ${isLight
+                                        ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                        : "bg-white/10 hover:bg-white/15 text-slate-300"
+                                    }`}
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
 
-                            {/* Progress Bar */}
-                            <div className="px-6 pt-6">
-                                <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
-                                    <span className={step >= 1 ? "text-indigo-400" : ""}>Store Details</span>
-                                    <span className={step >= 2 ? "text-indigo-400" : ""}>API Credentials</span>
-                                    <span className={step >= 3 ? "text-indigo-400" : ""}>Complete</span>
-                                </div>
-                                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-                                    <motion.div
-                                        initial={{ width: "0%" }}
-                                        animate={{ width: `${(step / 3) * 100}%` }}
-                                        className="h-full bg-indigo-500 transition-all duration-500"
-                                    />
-                                </div>
+                        {/* Progress Bar */}
+                        <div className="px-6 pt-6">
+                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider">
+                                <span className={step >= 1 ? "text-indigo-500" : ""}>Store Details</span>
+                                <span className={step >= 2 ? "text-indigo-500" : ""}>API Credentials</span>
+                                <span className={step >= 3 ? "text-indigo-500" : ""}>Complete</span>
                             </div>
+                            <div className={`h-1.5 rounded-full overflow-hidden ${isLight ? "bg-slate-100" : "bg-white/10"
+                                }`}>
+                                <motion.div
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: `${(step / 3) * 100}%` }}
+                                    className="h-full bg-indigo-500 transition-all duration-500"
+                                />
+                            </div>
+                        </div>
 
-                            {/* Content */}
-                            <div className="flex-1 overflow-y-auto p-6">
-                                <AnimatePresence mode="wait">
-                                    {success ? (
-                                        <motion.div
-                                            key="success"
-                                            initial={{ scale: 0.9, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            className="flex flex-col items-center justify-center py-12 text-center"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center mb-4">
-                                                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                                            </div>
-                                            <h3 className="text-xl font-bold text-white mb-2">Store Added Successfully!</h3>
-                                            <p className="text-slate-400">Your store has been connected and is ready to use.</p>
-                                        </motion.div>
-                                    ) : step === 1 ? (
-                                        <motion.div
-                                            key="step1"
-                                            initial={{ x: 20, opacity: 0 }}
-                                            animate={{ x: 0, opacity: 1 }}
-                                            exit={{ x: -20, opacity: 0 }}
-                                            className="space-y-6"
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
-                                                    <Globe className="w-6 h-6 text-indigo-400" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-white">Store Information</h3>
-                                                    <p className="text-sm text-slate-400">Enter your store details</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                        Business Name <span className="text-red-400">*</span>
-                                                    </label>
-                                                    <input
-                                                        name="businessName"
-                                                        value={formData.businessName}
-                                                        onChange={handleInputChange}
-                                                        placeholder="e.g. My Store"
-                                                        className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                    />
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                            Shopify Store Name <span className="text-red-400">*</span>
-                                                        </label>
-                                                        <input
-                                                            name="storeName"
-                                                            value={formData.storeName}
-                                                            onChange={handleInputChange}
-                                                            placeholder="my-store"
-                                                            className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                            Domain <span className="text-red-400">*</span>
-                                                        </label>
-                                                        <input
-                                                            name="domain"
-                                                            value={formData.domain}
-                                                            onChange={handleInputChange}
-                                                            placeholder="my-store.myshopify.com"
-                                                            className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ) : step === 2 ? (
-                                        <motion.div
-                                            key="step2"
-                                            initial={{ x: 20, opacity: 0 }}
-                                            animate={{ x: 0, opacity: 1 }}
-                                            exit={{ x: -20, opacity: 0 }}
-                                            className="space-y-6"
-                                        >
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center">
-                                                    <Key className="w-6 h-6 text-indigo-400" />
-                                                </div>
-                                                <div>
-                                                    <h3 className="text-lg font-bold text-white">API Credentials</h3>
-                                                    <p className="text-sm text-slate-400">Provide your Shopify Admin API credentials</p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                        Admin API Key <span className="text-red-400">*</span>
-                                                    </label>
-                                                    <input
-                                                        name="apiKey"
-                                                        type="password"
-                                                        value={formData.apiKey}
-                                                        onChange={handleInputChange}
-                                                        placeholder="Enter API Key"
-                                                        className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                        Admin API Secret <span className="text-red-400">*</span>
-                                                    </label>
-                                                    <input
-                                                        name="apiSecret"
-                                                        type="password"
-                                                        value={formData.apiSecret}
-                                                        onChange={handleInputChange}
-                                                        placeholder="Enter API Secret"
-                                                        className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-bold text-slate-300 mb-2">
-                                                        Access Token <span className="text-red-400">*</span>
-                                                    </label>
-                                                    <input
-                                                        name="accessToken"
-                                                        type="password"
-                                                        value={formData.accessToken}
-                                                        onChange={handleInputChange}
-                                                        placeholder="shpat_..."
-                                                        className="w-full h-12 px-4 bg-white/5 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </motion.div>
-                                    ) : (
-                                        <motion.div
-                                            key="step3"
-                                            initial={{ x: 20, opacity: 0 }}
-                                            animate={{ x: 0, opacity: 1 }}
-                                            exit={{ x: -20, opacity: 0 }}
-                                            className="flex flex-col items-center justify-center py-8 text-center"
-                                        >
-                                            <div className="w-16 h-16 rounded-full bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center mb-4 relative">
-                                                <Cloud className={`w-8 h-8 ${loading ? "text-indigo-400 animate-pulse" : "text-indigo-400"}`} />
-                                                {loading && (
-                                                    <motion.div
-                                                        animate={{ rotate: 360 }}
-                                                        transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                                                        className="absolute inset-0 border-2 border-indigo-500 border-t-transparent rounded-full"
-                                                    />
-                                                )}
-                                            </div>
-                                            <h3 className="text-lg font-bold text-white mb-2">Connecting Store</h3>
-                                            <p className="text-sm text-slate-400 max-w-sm">
-                                                We&apos;re connecting your store and setting up the integration...
-                                            </p>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-
-                                {error && (
+                        {/* Content */}
+                        <div className="flex-1 overflow-y-auto p-6">
+                            <AnimatePresence mode="wait">
+                                {success ? (
                                     <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className="mt-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3"
+                                        key="success"
+                                        initial={{ scale: 0.9, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        className="flex flex-col items-center justify-center py-12 text-center"
                                     >
-                                        <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
-                                        <p className="text-sm text-red-400">{error}</p>
+                                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${isLight
+                                                ? "bg-emerald-100 border border-emerald-200"
+                                                : "bg-emerald-500/20 border border-emerald-400/30"
+                                            }`}>
+                                            <CheckCircle2 className={`w-8 h-8 ${isLight ? "text-emerald-600" : "text-emerald-400"}`} />
+                                        </div>
+                                        <h3 className={`text-xl font-bold mb-2 ${isLight ? "text-slate-900" : "text-white"}`}>Store Added Successfully!</h3>
+                                        <p className={`${isLight ? "text-slate-600" : "text-slate-400"}`}>Your store has been connected and is ready to use.</p>
+                                    </motion.div>
+                                ) : step === 1 ? (
+                                    <motion.div
+                                        key="step1"
+                                        initial={{ x: 20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: -20, opacity: 0 }}
+                                        className="space-y-6"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isLight
+                                                    ? "bg-indigo-50 border border-indigo-100"
+                                                    : "bg-indigo-500/20 border border-indigo-400/20"
+                                                }`}>
+                                                <Globe className="w-6 h-6 text-indigo-500" />
+                                            </div>
+                                            <div>
+                                                <h3 className={`text-lg font-bold ${isLight ? "text-slate-900" : "text-white"}`}>Store Information</h3>
+                                                <p className={`text-sm ${isLight ? "text-slate-500" : "text-slate-400"}`}>Enter your store details</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                    Business Name <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    name="businessName"
+                                                    value={formData.businessName}
+                                                    onChange={handleInputChange}
+                                                    placeholder="e.g. My Store"
+                                                    className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                        Shopify Store Name <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        name="storeName"
+                                                        value={formData.storeName}
+                                                        onChange={handleInputChange}
+                                                        placeholder="my-store"
+                                                        className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                                ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                                : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                            }`}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                        Domain <span className="text-red-500">*</span>
+                                                    </label>
+                                                    <input
+                                                        name="domain"
+                                                        value={formData.domain}
+                                                        onChange={handleInputChange}
+                                                        placeholder="my-store.myshopify.com"
+                                                        className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                                ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                                : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                            }`}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ) : step === 2 ? (
+                                    <motion.div
+                                        key="step2"
+                                        initial={{ x: 20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: -20, opacity: 0 }}
+                                        className="space-y-6"
+                                    >
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isLight
+                                                    ? "bg-indigo-50 border border-indigo-100"
+                                                    : "bg-indigo-500/20 border border-indigo-400/20"
+                                                }`}>
+                                                <Key className="w-6 h-6 text-indigo-500" />
+                                            </div>
+                                            <div>
+                                                <h3 className={`text-lg font-bold ${isLight ? "text-slate-900" : "text-white"}`}>API Credentials</h3>
+                                                <p className={`text-sm ${isLight ? "text-slate-500" : "text-slate-400"}`}>Provide your Shopify Admin API credentials</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                    Admin API Key <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    name="apiKey"
+                                                    type="password"
+                                                    value={formData.apiKey}
+                                                    onChange={handleInputChange}
+                                                    placeholder="Enter API Key"
+                                                    className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                    Admin API Secret <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    name="apiSecret"
+                                                    type="password"
+                                                    value={formData.apiSecret}
+                                                    onChange={handleInputChange}
+                                                    placeholder="Enter API Secret"
+                                                    className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className={`block text-sm font-bold mb-2 ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                                    Access Token <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    name="accessToken"
+                                                    type="password"
+                                                    value={formData.accessToken}
+                                                    onChange={handleInputChange}
+                                                    placeholder="shpat_..."
+                                                    className={`w-full h-12 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                ) : (
+                                    <motion.div
+                                        key="step3"
+                                        initial={{ x: 20, opacity: 0 }}
+                                        animate={{ x: 0, opacity: 1 }}
+                                        exit={{ x: -20, opacity: 0 }}
+                                        className="flex flex-col items-center justify-center py-8 text-center"
+                                    >
+                                        <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 relative ${isLight ? "bg-indigo-50 border border-indigo-100" : "bg-indigo-500/20 border border-indigo-400/20"
+                                            }`}>
+                                            <Cloud className={`w-8 h-8 ${loading ? "text-indigo-500 animate-pulse" : "text-indigo-500"}`} />
+                                            {loading && (
+                                                <motion.div
+                                                    animate={{ rotate: 360 }}
+                                                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                                                    className="absolute inset-0 border-2 border-indigo-500 border-t-transparent rounded-full"
+                                                />
+                                            )}
+                                        </div>
+                                        <h3 className={`text-lg font-bold mb-2 ${isLight ? "text-slate-900" : "text-white"}`}>Connecting Store</h3>
+                                        <p className={`text-sm max-w-sm ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                            We&apos;re connecting your store and setting up the integration...
+                                        </p>
                                     </motion.div>
                                 )}
-                            </div>
+                            </AnimatePresence>
 
-                            {/* Footer */}
-                            {!success && (
-                                <div className="p-6 border-t border-white/10 flex items-center justify-between gap-4">
-                                    <button
-                                        onClick={prevStep}
-                                        disabled={step === 1 || loading}
-                                        className="h-11 px-6 bg-white/10 text-slate-300 rounded-xl font-bold hover:bg-white/15 border border-white/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        Back
-                                    </button>
-                                    {step < 3 ? (
-                                        <button
-                                            onClick={nextStep}
-                                            disabled={loading}
-                                            className="h-11 px-6 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 border border-indigo-400/20 transition-all disabled:opacity-50 flex items-center gap-2 ml-auto"
-                                        >
-                                            Continue
-                                        </button>
-                                    ) : (
-                                        <button
-                                            onClick={handleSubmit}
-                                            disabled={loading}
-                                            className="h-11 px-6 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 border border-indigo-400/20 transition-all disabled:opacity-50 flex items-center gap-2 ml-auto"
-                                        >
-                                            {loading ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Connecting...
-                                                </>
-                                            ) : (
-                                                "Connect Store"
-                                            )}
-                                        </button>
-                                    )}
-                                </div>
+                            {error && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className={`mt-4 p-4 rounded-xl flex items-start gap-3 ${isLight
+                                            ? "bg-red-50 border border-red-100"
+                                            : "bg-red-500/10 border border-red-500/20"
+                                        }`}
+                                >
+                                    <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                                    <p className={`text-sm ${isLight ? "text-red-700" : "text-red-400"}`}>{error}</p>
+                                </motion.div>
                             )}
-                        </motion.div>
-                    </div>
-                </>
+                        </div>
+
+                        {/* Footer */}
+                        {!success && (
+                            <div className={`p-6 border-t flex items-center justify-between gap-4 ${isLight ? "border-slate-100" : "border-white/10"
+                                }`}>
+                                <button
+                                    onClick={prevStep}
+                                    disabled={step === 1 || loading}
+                                    className={`h-11 px-6 rounded-xl font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed border ${isLight
+                                            ? "bg-white text-slate-700 hover:bg-slate-50 border-slate-200"
+                                            : "bg-white/10 text-slate-300 hover:bg-white/15 border-white/10"
+                                        }`}
+                                >
+                                    Back
+                                </button>
+                                {step < 3 ? (
+                                    <button
+                                        onClick={nextStep}
+                                        disabled={loading}
+                                        className="h-11 px-6 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 border border-indigo-400/20 transition-all disabled:opacity-50 flex items-center gap-2 ml-auto"
+                                    >
+                                        Continue
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleSubmit}
+                                        disabled={loading}
+                                        className="h-11 px-6 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 border border-indigo-400/20 transition-all disabled:opacity-50 flex items-center gap-2 ml-auto"
+                                    >
+                                        {loading ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Connecting...
+                                            </>
+                                        ) : (
+                                            "Connect Store"
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        )}
+                    </motion.div>
+                </div>
             )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
     )
 }

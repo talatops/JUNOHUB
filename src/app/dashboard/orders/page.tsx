@@ -81,7 +81,7 @@ export default function OrdersPage() {
                 setLoading(false)
             }
         }
-        
+
         // Fetch store info and orders
         fetchStoreInfo()
         fetchOrders()
@@ -147,12 +147,12 @@ export default function OrdersPage() {
             o.financial_status,
             o.fulfillment_status || "unfulfilled"
         ])
-        
+
         const csvContent = [
             csvHeaders.join(","),
             ...csvRows.map(row => row.join(","))
         ].join("\n")
-        
+
         const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
         const link = document.createElement("a")
         const url = URL.createObjectURL(blob)
@@ -168,7 +168,7 @@ export default function OrdersPage() {
     const filteredOrders = orders.filter(o => {
         const matchesSearch = o.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (o.customer && `${o.customer.first_name} ${o.customer.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()))
-        const matchesStatus = statusFilter === "all" || 
+        const matchesStatus = statusFilter === "all" ||
             (statusFilter === "fulfilled" && o.fulfillment_status === "fulfilled") ||
             (statusFilter === "unfulfilled" && (!o.fulfillment_status || o.fulfillment_status !== "fulfilled")) ||
             (statusFilter === "paid" && o.financial_status === "paid") ||
@@ -195,7 +195,7 @@ export default function OrdersPage() {
                     <button className="h-10 md:h-11 px-3 md:px-6 bg-white/10 border border-white/10 rounded-xl font-bold text-white hover:bg-white/15 backdrop-blur-sm transition-all flex items-center gap-2 text-sm">
                         <Calendar className="w-4 h-4" /> <span className="hidden sm:inline">This Month</span>
                     </button>
-                    <button 
+                    <button
                         onClick={handleExport}
                         className="h-10 md:h-11 px-4 md:px-6 bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-600 border border-indigo-400/20 transition-all text-sm"
                     >
@@ -235,120 +235,119 @@ export default function OrdersPage() {
 
             {/* Orders Grid */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
-                    {loading ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
-                            <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
-                            <p className="font-medium animate-pulse">Fetching latest orders...</p>
+                {loading ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
+                        <p className="font-medium animate-pulse">Fetching latest orders...</p>
+                    </div>
+                ) : error ? (
+                    <div className="h-full flex flex-col items-center justify-center text-red-400 gap-4 p-8 text-center">
+                        <div className="w-12 h-12 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center">
+                            <AlertCircle className="w-6 h-6" />
                         </div>
-                    ) : error ? (
-                        <div className="h-full flex flex-col items-center justify-center text-red-400 gap-4 p-8 text-center">
-                            <div className="w-12 h-12 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center justify-center">
-                                <AlertCircle className="w-6 h-6" />
-                            </div>
-                            <p className="font-bold">{error}</p>
-                        </div>
-                    ) : filteredOrders.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
-                            <ShoppingCart className="w-10 h-10 opacity-20" />
-                            <p className="font-medium">No orders found.</p>
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 h-full content-start">
-                            {filteredOrders.map((order) => (
-                                <div
-                                    key={order.id}
-                                    className="bg-white/5 rounded-xl border border-white/10 p-5 hover:bg-white/10 hover:border-indigo-500/30 transition-all cursor-pointer group relative"
-                                    onClick={() => handleViewDetails(order)}
-                                >
-                                    {/* Order Header */}
-                                    <div className="flex items-start justify-between mb-4">
-                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                            <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/30 transition-all shrink-0">
-                                                <ShoppingBag className="w-5 h-5" />
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-black text-base text-white truncate">{order.name}</h3>
-                                                <p className="text-xs text-slate-400 mt-0.5">
-                                                    {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                                                </p>
-                                            </div>
+                        <p className="font-bold">{error}</p>
+                    </div>
+                ) : filteredOrders.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+                        <ShoppingCart className="w-10 h-10 opacity-20" />
+                        <p className="font-medium">No orders found.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6 h-full content-start">
+                        {filteredOrders.map((order) => (
+                            <div
+                                key={order.id}
+                                className="bg-white/5 rounded-xl border border-white/10 p-5 hover:bg-white/10 hover:border-indigo-500/30 transition-all cursor-pointer group relative"
+                                onClick={() => handleViewDetails(order)}
+                            >
+                                {/* Order Header */}
+                                <div className="flex items-start justify-between mb-4">
+                                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                                        <div className="w-10 h-10 rounded-lg bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center text-indigo-400 group-hover:bg-indigo-500/30 transition-all shrink-0">
+                                            <ShoppingBag className="w-5 h-5" />
                                         </div>
-                                        <div className="relative shrink-0" onClick={(e) => e.stopPropagation()} ref={(el) => { menuRefs.current[order.id] = el }}>
-                                            <button 
-                                                onClick={() => handleMenuToggle(order.id)}
-                                                className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all"
-                                            >
-                                                <MoreHorizontal className="w-4 h-4" />
-                                            </button>
-                                            {openMenuId === order.id && (
-                                                <div className="absolute right-0 top-full mt-1 bg-white/95 backdrop-blur-xl border border-white/20 rounded-xl shadow-xl overflow-hidden z-[200] min-w-[180px] whitespace-nowrap">
-                                                    <button
-                                                        onClick={() => handleViewDetails(order)}
-                                                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
-                                                    >
-                                                        <Eye className="w-4 h-4" />
-                                                        Details
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleViewInShopify(order.id)}
-                                                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
-                                                    >
-                                                        <ExternalLink className="w-4 h-4" />
-                                                        Show on Shopify
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleCopyOrderId(order.id)}
-                                                        className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-700 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
-                                                    >
-                                                        <Copy className="w-4 h-4" />
-                                                        Copy Order ID
-                                                    </button>
-                                                </div>
-                                            )}
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="font-black text-base text-white truncate">{order.name}</h3>
+                                            <p className="text-xs text-slate-400 mt-0.5">
+                                                {new Date(order.created_at).toLocaleDateString()} • {new Date(order.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            </p>
                                         </div>
                                     </div>
-
-                                    {/* Customer Info */}
-                                    {order.customer && (
-                                        <div className="flex items-center gap-2 mb-4">
-                                            <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                                                <User className="w-3.5 h-3.5 text-slate-400" />
+                                    <div className="relative shrink-0" onClick={(e) => e.stopPropagation()} ref={(el) => { menuRefs.current[order.id] = el }}>
+                                        <button
+                                            onClick={() => handleMenuToggle(order.id)}
+                                            className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all"
+                                        >
+                                            <MoreHorizontal className="w-4 h-4" />
+                                        </button>
+                                        {openMenuId === order.id && (
+                                            <div className="absolute right-0 top-full mt-1 bg-slate-800/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-xl overflow-hidden z-[200] min-w-[180px] whitespace-nowrap">
+                                                <button
+                                                    onClick={() => handleViewDetails(order)}
+                                                    className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-200 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                    Details
+                                                </button>
+                                                <button
+                                                    onClick={() => handleViewInShopify(order.id)}
+                                                    className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-200 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
+                                                >
+                                                    <ExternalLink className="w-4 h-4" />
+                                                    Show on Shopify
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCopyOrderId(order.id)}
+                                                    className="w-full px-4 py-2.5 text-left text-sm font-medium text-slate-200 hover:bg-indigo-500 hover:text-white transition-colors flex items-center gap-2"
+                                                >
+                                                    <Copy className="w-4 h-4" />
+                                                    Copy Order ID
+                                                </button>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-bold text-white truncate">
-                                                    {order.customer.first_name} {order.customer.last_name}
-                                                </p>
-                                                <p className="text-xs text-slate-400 truncate">{order.email}</p>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Order Details */}
-                                    <div className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total</span>
-                                            <span className="text-lg font-black text-white">{order.total_price} {order.currency}</span>
-                                        </div>
-                                        
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${
-                                                order.financial_status === "paid" 
-                                                    ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" 
-                                                    : "bg-red-500/20 text-red-400 border border-red-500/30"
-                                            }`}>
-                                                {order.financial_status === "paid" && <CheckCircle2 className="w-3 h-3" />}
-                                                Payment: {order.financial_status}
-                                            </span>
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${getStatusStyles(order.fulfillment_status)}`}>
-                                                {order.fulfillment_status === "fulfilled" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                                {order.fulfillment_status || "Unfulfilled"}
-                                            </span>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                    )}
+
+                                {/* Customer Info */}
+                                {order.customer && (
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                                            <User className="w-3.5 h-3.5 text-slate-400" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-white truncate">
+                                                {order.customer.first_name} {order.customer.last_name}
+                                            </p>
+                                            <p className="text-xs text-slate-400 truncate">{order.email}</p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Order Details */}
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total</span>
+                                        <span className="text-lg font-black text-white">{order.total_price} {order.currency}</span>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${order.financial_status === "paid"
+                                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                                                : "bg-red-500/20 text-red-400 border border-red-500/30"
+                                            }`}>
+                                            {order.financial_status === "paid" && <CheckCircle2 className="w-3 h-3" />}
+                                            Payment: {order.financial_status}
+                                        </span>
+                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${getStatusStyles(order.fulfillment_status)}`}>
+                                            {order.fulfillment_status === "fulfilled" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                            {order.fulfillment_status || "Unfulfilled"}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
         </div>
     )

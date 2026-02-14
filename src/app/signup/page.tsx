@@ -205,25 +205,26 @@ export default function SignupPage() {
                             Log in here
                         </Link>
                     </p>
+
+                    <div className="mt-8 pt-6 border-t border-white/10 flex flex-col items-center gap-1 text-[9px] text-slate-500 font-semibold uppercase tracking-widest">
+                        <div className="flex items-center gap-4">
+                            <Link
+                                href="/privacy-policy"
+                                className="hover:text-indigo-300 underline-offset-4 hover:underline normal-case"
+                            >
+                                Privacy Policy
+                            </Link>
+                            <span className="text-slate-600">•</span>
+                            <Link
+                                href="/terms-of-service"
+                                className="hover:text-indigo-300 underline-offset-4 hover:underline normal-case"
+                            >
+                                Terms of Service
+                            </Link>
+                        </div>
+                    </div>
                 </div>
             </motion.div>
-            <div className="mt-6 flex flex-col items-center gap-1 text-[9px] text-slate-500 font-semibold uppercase tracking-widest">
-                <div className="flex items-center gap-4">
-                    <Link
-                        href="/privacy-policy"
-                        className="hover:text-indigo-300 underline-offset-4 hover:underline normal-case"
-                    >
-                        Privacy Policy
-                    </Link>
-                    <span className="text-slate-600">•</span>
-                    <Link
-                        href="/terms-of-service"
-                        className="hover:text-indigo-300 underline-offset-4 hover:underline normal-case"
-                    >
-                        Terms of Service
-                    </Link>
-                </div>
-            </div>
         </div>
     )
 }

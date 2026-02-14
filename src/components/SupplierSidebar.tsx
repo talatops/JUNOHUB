@@ -58,7 +58,7 @@ export function SupplierSidebar() {
                 </div>
                 <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
             </div>
-            <div className="flex-1 px-3 space-y-1">
+            <div className="flex-1 px-3 space-y-1 overflow-y-auto">
                 {supplierRoutes.map((route) => (
                     <Link
                         key={route.href}
