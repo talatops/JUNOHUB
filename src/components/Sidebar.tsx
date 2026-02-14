@@ -18,6 +18,7 @@ import {
     HelpCircle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTheme } from "@/components/ThemeProvider"
 
 const routes = [
     {
@@ -75,25 +76,47 @@ const routes = [
     }
 ]
 
-export function Sidebar() {
+interface SidebarProps {
+    showLogo?: boolean;
+    className?: string;
+}
+
+export function Sidebar({ showLogo = true, className }: SidebarProps) {
     const pathname = usePathname()
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     return (
-        <div className="space-y-4 py-4 flex flex-col h-full text-white">
-            <div className="px-6 py-2 flex items-center mb-6">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/40 border border-white/20 flex items-center justify-center mr-3 backdrop-blur-sm">
-                    <Zap className="w-5 h-5 text-white fill-white" />
+        <div className={cn(
+            "space-y-4 py-4 flex flex-col h-full transition-colors duration-300",
+            isLight ? "bg-white border-r border-slate-100 text-slate-900" : "text-white",
+            className
+        )}>
+            {showLogo && (
+                <div className="px-6 py-2 flex items-center mb-6">
+                    <div className={cn(
+                        "w-8 h-8 rounded-lg border flex items-center justify-center mr-3 backdrop-blur-sm",
+                        isLight ? "bg-indigo-50 border-indigo-100" : "bg-indigo-500/40 border-white/20"
+                    )}>
+                        <Zap className={cn("w-5 h-5", isLight ? "text-indigo-600 fill-indigo-600" : "text-white fill-white")} />
+                    </div>
+                    <h1 className={cn("text-xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>JUNOHUB</h1>
                 </div>
-                <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
-            </div>
+            )}
             <div className="flex-1 px-3 space-y-1 overflow-y-auto">
                 {routes.map((route) => (
                     <div key={route.href}>
                         <Link
                             href={route.href}
                             className={cn(
-                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 ease-out border border-transparent",
-                                pathname.startsWith(route.href) ? "text-white bg-white/10 border-white/10" : "text-slate-400"
+                                "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-xl transition-all duration-200 ease-out border border-transparent",
+                                isLight
+                                    ? pathname.startsWith(route.href)
+                                        ? "text-indigo-600 bg-indigo-50 border-indigo-100"
+                                        : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
+                                    : pathname.startsWith(route.href)
+                                        ? "text-white bg-white/10 border-white/10"
+                                        : "text-slate-400 hover:text-white hover:bg-white/10"
                             )}
                         >
                             <div className="flex items-center flex-1">
@@ -108,8 +131,14 @@ export function Sidebar() {
                                         key={sub.href}
                                         href={sub.href}
                                         className={cn(
-                                            "text-xs group flex p-2 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/5 rounded-lg transition-all duration-200 ease-out",
-                                            pathname === sub.href ? "text-white bg-white/5" : "text-slate-500"
+                                            "text-xs group flex p-2 w-full justify-start font-medium cursor-pointer rounded-lg transition-all duration-200 ease-out",
+                                            isLight
+                                                ? pathname === sub.href
+                                                    ? "text-indigo-600 bg-indigo-50/50"
+                                                    : "text-slate-500 hover:text-indigo-600 hover:bg-slate-50"
+                                                : pathname === sub.href
+                                                    ? "text-white bg-white/5"
+                                                    : "text-slate-500 hover:text-white hover:bg-white/5"
                                         )}
                                     >
                                         <div className="flex items-center flex-1">
@@ -123,12 +152,18 @@ export function Sidebar() {
                     </div>
                 ))}
             </div>
-            <div className="px-3 pt-4 border-t border-white/10">
+            <div className={cn("px-3 pt-4 border-t", isLight ? "border-slate-100" : "border-white/10")}>
                 <Link
                     href="/dashboard/help-support"
                     className={cn(
-                        "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 ease-out border border-transparent",
-                        pathname === "/dashboard/help-support" ? "text-white bg-white/10 border-white/10" : "text-slate-400"
+                        "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-xl transition-all duration-200 ease-out border border-transparent",
+                        isLight
+                            ? pathname === "/dashboard/help-support"
+                                ? "text-blue-600 bg-blue-50 border-blue-100"
+                                : "text-slate-600 hover:text-blue-600 hover:bg-slate-50"
+                            : pathname === "/dashboard/help-support"
+                                ? "text-white bg-white/10 border-white/10"
+                                : "text-slate-400 hover:text-white hover:bg-white/10"
                     )}
                 >
                     <div className="flex items-center flex-1">

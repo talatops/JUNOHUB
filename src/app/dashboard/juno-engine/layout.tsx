@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter, usePathname } from "next/navigation"
-import { 
-    Ticket, 
-    Flag, 
-    Mail, 
+import {
+    Ticket,
+    Flag,
+    Mail,
     FileText,
     HelpCircle
 } from "lucide-react"
@@ -18,30 +18,30 @@ export default function JunoEngineLayout({
     const pathname = usePathname()
 
     const tabs = [
-        { 
-            label: "Knowledge Base", 
-            href: "/dashboard/juno-engine/knowledge-base", 
-            icon: HelpCircle 
+        {
+            label: "Knowledge Base",
+            href: "/dashboard/juno-engine/knowledge-base",
+            icon: HelpCircle
         },
-        { 
-            label: "Templates", 
-            href: "/dashboard/juno-engine/email-templates", 
-            icon: FileText 
+        {
+            label: "Templates",
+            href: "/dashboard/juno-engine/email-templates",
+            icon: FileText
         },
-        { 
-            label: "Tickets", 
-            href: "/dashboard/juno-engine/tickets", 
-            icon: Ticket 
+        {
+            label: "Tickets",
+            href: "/dashboard/juno-engine/tickets",
+            icon: Ticket
         },
-        { 
-            label: "Flagged Emails", 
-            href: "/dashboard/juno-engine/flagged-email", 
-            icon: Flag 
+        {
+            label: "Flagged Emails",
+            href: "/dashboard/juno-engine/flagged-email",
+            icon: Flag
         },
-        { 
-            label: "Gmail", 
-            href: "/dashboard/juno-engine/gmail-connect", 
-            icon: Mail 
+        {
+            label: "Gmail",
+            href: "/dashboard/juno-engine/gmail-connect",
+            icon: Mail
         },
     ]
 
@@ -62,14 +62,13 @@ export default function JunoEngineLayout({
                         <button
                             key={tab.href}
                             onClick={() => router.push(tab.href)}
-                            className={`pb-3 md:pb-4 px-3 md:px-4 font-bold transition-all duration-200 ease-out whitespace-nowrap text-sm md:text-base flex items-center gap-2 relative ${
-                                isActive 
-                                    ? "text-indigo-400 border-b-2 border-indigo-500" 
+                            className={`pb-3 md:pb-4 px-3 md:px-4 font-bold transition-all duration-200 ease-out whitespace-nowrap text-sm md:text-base flex items-center gap-2 relative ${isActive
+                                    ? "text-indigo-400 border-b-2 border-indigo-500"
                                     : "text-slate-400 hover:text-white"
-                            }`}
+                                }`}
                         >
-                            <Icon className="w-4 h-4 transition-transform duration-200" />
-                            {tab.label}
+                            <Icon className="w-4 h-5 md:w-5 md:h-5 transition-transform duration-200" />
+                            <span className="hidden sm:inline">{tab.label}</span>
                         </button>
                     )
                 })}

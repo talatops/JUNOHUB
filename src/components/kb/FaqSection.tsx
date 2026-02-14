@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 type FaqItem = {
     id: string
@@ -15,6 +17,8 @@ type FaqSectionProps = {
 }
 
 export function FaqSection({ storeId }: FaqSectionProps) {
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     const [faqs, setFaqs] = useState<FaqItem[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
@@ -25,28 +29,28 @@ export function FaqSection({ storeId }: FaqSectionProps) {
 
     useEffect(() => {
         if (!storeId) return
-        ;(async () => {
-            try {
-                setIsLoading(true)
-                setError(null)
-                const res = await fetch(
-                    `/api/stores/${encodeURIComponent(storeId)}/kb/faqs`,
-                )
-                if (!res.ok) {
-                    throw new Error("Failed to load FAQs")
+            ; (async () => {
+                try {
+                    setIsLoading(true)
+                    setError(null)
+                    const res = await fetch(
+                        `/api/stores/${encodeURIComponent(storeId)}/kb/faqs`,
+                    )
+                    if (!res.ok) {
+                        throw new Error("Failed to load FAQs")
+                    }
+                    const json = (await res.json()) as { faqs: FaqItem[] }
+                    setFaqs(json.faqs)
+                } catch (err) {
+                    setError(
+                        err instanceof Error
+                            ? err.message
+                            : "Failed to load FAQs",
+                    )
+                } finally {
+                    setIsLoading(false)
                 }
-                const json = (await res.json()) as { faqs: FaqItem[] }
-                setFaqs(json.faqs)
-            } catch (err) {
-                setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Failed to load FAQs",
-                )
-            } finally {
-                setIsLoading(false)
-            }
-        })()
+            })()
     }, [storeId])
 
     async function handleAddFaq(e: React.FormEvent) {
@@ -165,13 +169,18 @@ export function FaqSection({ storeId }: FaqSectionProps) {
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-lg font-semibold text-white">FAQs</h3>
-                    <p className="text-xs text-slate-400">
+                    <h3 className={cn("text-lg font-semibold", isLight ? "text-slate-900" : "text-white")}>FAQs</h3>
+                    <p className={cn("text-xs", isLight ? "text-slate-500" : "text-slate-400")}>
                         Manage frequently asked questions that your AI can use as
                         trusted answers.
                     </p>
                 </div>
-                <label className="inline-flex items-center px-3 py-2 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-xs font-medium text-slate-100 cursor-pointer transition-colors border border-white/10">
+                <label className={cn(
+                    "inline-flex items-center px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors border shadow-sm",
+                    isLight
+                        ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                        : "bg-slate-800/80 hover:bg-slate-800 border-white/10 text-slate-100 shadow-xl"
+                )}>
                     <span>
                         {isImporting ? "Importing..." : "Import from JSON file"}
                     </span>
@@ -186,70 +195,97 @@ export function FaqSection({ storeId }: FaqSectionProps) {
             </div>
 
             {error && (
-                <div className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-md px-3 py-2">
+                <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                     {error}
                 </div>
             )}
 
             <form
                 onSubmit={handleAddFaq}
-                className="border border-white/5 rounded-xl bg-slate-900/40 backdrop-blur-sm p-4 space-y-3"
+                className={cn(
+                    "border rounded-xl p-4 space-y-4 transition-all",
+                    isLight ? "bg-white border-slate-100 shadow-sm" : "bg-slate-900/40 border-white/5 backdrop-blur-sm"
+                )}
             >
-                <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Question
-                    </label>
-                    <input
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        placeholder="e.g. What is your return policy?"
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 focus:border-indigo-500/70"
-                    />
+                <div className="grid grid-cols-1 gap-4">
+                    <div>
+                        <label className={cn("block text-[11px] font-bold uppercase tracking-wider mb-1.5", isLight ? "text-slate-500" : "text-slate-400")}>
+                            Question
+                        </label>
+                        <input
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            placeholder="e.g. What is your return policy?"
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50",
+                                isLight
+                                    ? "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
+                                    : "bg-slate-950/60 border-white/10 text-white placeholder:text-slate-500"
+                            )}
+                        />
+                    </div>
+                    <div>
+                        <label className={cn("block text-[11px] font-bold uppercase tracking-wider mb-1.5", isLight ? "text-slate-500" : "text-slate-400")}>
+                            Answer
+                        </label>
+                        <textarea
+                            value={answer}
+                            onChange={(e) => setAnswer(e.target.value)}
+                            placeholder="Provide a clear, friendly answer that can be shown directly to customers."
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500/50 min-h-[100px]",
+                                isLight
+                                    ? "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
+                                    : "bg-slate-950/60 border-white/10 text-white placeholder:text-slate-500"
+                            )}
+                        />
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs font-medium text-slate-300 mb-1">
-                        Answer
-                    </label>
-                    <textarea
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                        placeholder="Provide a clear, friendly answer that can be shown directly to customers."
-                        className="w-full px-3 py-2 rounded-lg bg-slate-950/60 border border-white/10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 focus:border-indigo-500/70 min-h-[80px]"
-                    />
-                </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end pt-2">
                     <button
                         type="submit"
                         disabled={isSaving}
-                        className="inline-flex items-center px-3 py-2 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-xs font-medium text-white disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                        className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                     >
                         {isSaving ? "Saving..." : "Add FAQ"}
                     </button>
                 </div>
             </form>
 
-            <div className="border border-white/5 rounded-xl bg-slate-900/40 backdrop-blur-sm">
-                <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-300 uppercase tracking-wide">
+            <div className={cn(
+                "border rounded-xl transition-all",
+                isLight ? "bg-white border-slate-100 shadow-sm" : "bg-slate-900/40 border-white/5 backdrop-blur-sm"
+            )}>
+                <div className={cn(
+                    "px-4 py-3 border-b flex items-center justify-between",
+                    isLight ? "border-slate-100" : "border-white/5"
+                )}>
+                    <span className={cn(
+                        "text-xs font-semibold uppercase tracking-wide",
+                        isLight ? "text-slate-500" : "text-slate-300"
+                    )}>
                         Existing FAQs
                     </span>
                     {isLoading && (
-                        <span className="text-xs text-slate-400">Loading...</span>
+                        <span className="text-xs text-slate-400 animate-pulse">Loading...</span>
                     )}
                 </div>
-                <div className="divide-y divide-white/5">
+                <div className={cn(
+                    "divide-y",
+                    isLight ? "divide-slate-50" : "divide-white/5"
+                )}>
                     {faqs.length === 0 && !isLoading ? (
-                        <div className="px-4 py-6 text-sm text-slate-400 text-center">
+                        <div className="px-4 py-10 text-sm text-slate-400 text-center">
                             No FAQs yet. Add your first common question above or
                             import from JSON.
                         </div>
                     ) : (
                         faqs.map((faq) => (
-                            <div key={faq.id} className="px-4 py-3 text-sm">
-                                <p className="font-medium text-white">
+                            <div key={faq.id} className="px-4 py-4 text-sm hover:bg-slate-50/50 transition-colors group">
+                                <p className={cn("font-semibold", isLight ? "text-slate-900" : "text-white")}>
                                     {faq.question}
                                 </p>
-                                <p className="mt-1 text-xs text-slate-300">
+                                <p className={cn("mt-1.5 text-[13px] leading-relaxed", isLight ? "text-slate-600" : "text-slate-300")}>
                                     {faq.answer}
                                 </p>
                             </div>

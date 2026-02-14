@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 type KnowledgeDocument = {
     id: string
@@ -18,6 +20,8 @@ type DocumentsSectionProps = {
 }
 
 export function DocumentsSection({ storeId }: DocumentsSectionProps) {
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
     const [isLoading, setIsLoading] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
@@ -116,14 +120,14 @@ export function DocumentsSection({ storeId }: DocumentsSectionProps) {
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-lg font-semibold text-white">
+                    <h3 className={cn("text-lg font-semibold", isLight ? "text-slate-900" : "text-white")}>
                         Documents
                     </h3>
-                    <p className="text-xs text-slate-400">
+                    <p className={cn("text-xs", isLight ? "text-slate-500" : "text-slate-400")}>
                         Upload PDFs or DOCX files to power AI answers.
                     </p>
                 </div>
-                <label className="inline-flex items-center px-3 py-2 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-sm font-medium text-white cursor-pointer transition-colors">
+                <label className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm font-medium text-white cursor-pointer transition-colors shadow-sm">
                     <span>{isUploading ? "Uploading..." : "Upload document"}</span>
                     <input
                         type="file"
@@ -136,60 +140,76 @@ export function DocumentsSection({ storeId }: DocumentsSectionProps) {
             </div>
 
             {error && (
-                <div className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 rounded-md px-3 py-2">
+                <div className="text-xs text-red-500 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
                     {error}
                 </div>
             )}
 
-            <div className="border border-white/5 rounded-xl bg-slate-900/40 backdrop-blur-sm">
-                <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-                    <span className="text-xs font-medium text-slate-300 uppercase tracking-wide">
+            <div className={cn(
+                "border rounded-xl",
+                isLight ? "border-slate-100 bg-white" : "border-white/5 bg-slate-900/40 backdrop-blur-sm"
+            )}>
+                <div className={cn(
+                    "px-4 py-3 border-b flex items-center justify-between",
+                    isLight ? "border-slate-100" : "border-white/5"
+                )}>
+                    <span className={cn(
+                        "text-xs font-semibold uppercase tracking-wide",
+                        isLight ? "text-slate-500" : "text-slate-300"
+                    )}>
                         Uploaded documents
                     </span>
                     {isLoading && (
-                        <span className="text-xs text-slate-400">Loading...</span>
+                        <span className="text-xs text-slate-400 animate-pulse">Loading...</span>
                     )}
                 </div>
-                <div className="divide-y divide-white/5">
+                <div className={cn(
+                    "divide-y",
+                    isLight ? "divide-slate-50" : "divide-white/5"
+                )}>
                     {documents.length === 0 && !isLoading ? (
-                        <div className="px-4 py-6 text-sm text-slate-400 text-center">
+                        <div className="px-4 py-10 text-sm text-slate-400 text-center">
                             No documents yet. Upload your first knowledge base file.
                         </div>
                     ) : (
                         documents.map((doc) => (
                             <div
                                 key={doc.id}
-                                className="px-4 py-3 flex items-center justify-between gap-4 text-sm"
+                                className="px-4 py-4 flex items-center justify-between gap-4 text-sm hover:bg-slate-50/50 transition-colors"
                             >
-                                <div>
-                                    <p className="font-medium text-white">
+                                <div className="min-w-0 flex-1">
+                                    <p className={cn("font-medium truncate", isLight ? "text-slate-900" : "text-white")}>
                                         {doc.title}
                                     </p>
-                                    <p className="text-xs text-slate-400">
+                                    <p className="text-xs text-slate-400 mt-0.5">
                                         {doc.fileName} •{" "}
                                         {(doc.sizeBytes / 1024).toFixed(1)} KB
                                     </p>
                                 </div>
-                                <div className="flex items-center gap-3 text-xs text-right">
+                                <div className="flex items-center gap-4 text-xs">
                                     <span
-                                        className={`inline-flex items-center px-2 py-1 rounded-full border ${
+                                        className={cn(
+                                            "inline-flex items-center px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider",
                                             doc.status === "READY"
-                                                ? "border-emerald-500/60 text-emerald-400 bg-emerald-500/10"
+                                                ? "border-emerald-500/20 text-emerald-600 bg-emerald-50"
                                                 : doc.status === "PROCESSING"
-                                                ? "border-amber-500/60 text-amber-400 bg-amber-500/10"
-                                                : doc.status === "FAILED"
-                                                ? "border-red-500/60 text-red-400 bg-red-500/10"
-                                                : "border-slate-600 text-slate-300 bg-slate-800/60"
-                                        }`}
+                                                    ? "border-amber-500/20 text-amber-600 bg-amber-50"
+                                                    : doc.status === "FAILED"
+                                                        ? "border-red-500/20 text-red-600 bg-red-50"
+                                                        : "border-slate-200 text-slate-500 bg-slate-50"
+                                        )}
                                     >
                                         {doc.status.toLowerCase()}
                                     </span>
                                     <button
                                         type="button"
                                         onClick={() => void handleDelete(doc.id)}
-                                        className="px-2 py-1 rounded-md border border-red-500/60 text-red-400 hover:bg-red-500/10 transition-colors"
+                                        className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                                        title="Delete document"
                                     >
-                                        Delete
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                        </svg>
                                     </button>
                                 </div>
                             </div>

@@ -4,32 +4,36 @@ import { useEffect, useState } from "react"
 import { DocumentsSection } from "@/components/kb/DocumentsSection"
 import { FaqSection } from "@/components/kb/FaqSection"
 import { AskSection } from "@/components/kb/AskSection"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 export default function KnowledgeBasePage() {
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
 
     useEffect(() => {
         let cancelled = false
 
-        ;(async () => {
-            try {
-                const res = await fetch("/api/stores")
-                if (!res.ok) return
+            ; (async () => {
+                try {
+                    const res = await fetch("/api/stores")
+                    if (!res.ok) return
 
-                const data = (await res.json()) as {
-                    stores?: { id: string; isActive: boolean }[]
-                }
-                const active = (data.stores || []).find((s) => s.isActive)
+                    const data = (await res.json()) as {
+                        stores?: { id: string; isActive: boolean }[]
+                    }
+                    const active = (data.stores || []).find((s) => s.isActive)
 
-                if (!cancelled) {
-                    setActiveStoreId(active?.id ?? null)
+                    if (!cancelled) {
+                        setActiveStoreId(active?.id ?? null)
+                    }
+                } catch {
+                    if (!cancelled) {
+                        setActiveStoreId(null)
+                    }
                 }
-            } catch {
-                if (!cancelled) {
-                    setActiveStoreId(null)
-                }
-            }
-        })()
+            })()
 
         return () => {
             cancelled = true
@@ -46,10 +50,10 @@ export default function KnowledgeBasePage() {
         <div className="flex flex-col h-full space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">
+                    <h1 className={cn("text-2xl font-bold", isLight ? "text-slate-900" : "text-white")}>
                         Knowledge Base
                     </h1>
-                    <p className="text-sm text-slate-400">
+                    <p className={cn("text-sm", isLight ? "text-slate-500" : "text-slate-400")}>
                         Centralize your store&apos;s documents and FAQs so JUNO can
                         answer customer and vendor questions.
                     </p>
@@ -59,10 +63,10 @@ export default function KnowledgeBasePage() {
             {!hasStore ? (
                 <div className="flex-1 flex items-center justify-center">
                     <div className="text-center max-w-md">
-                        <h2 className="text-lg font-semibold text-white mb-2">
+                        <h2 className={cn("text-lg font-semibold mb-2", isLight ? "text-slate-900" : "text-white")}>
                             No active store selected
                         </h2>
-                        <p className="text-sm text-slate-400">
+                        <p className={cn("text-sm", isLight ? "text-slate-500" : "text-slate-400")}>
                             Select a store from the top bar to manage its knowledge
                             base.
                         </p>
@@ -70,37 +74,46 @@ export default function KnowledgeBasePage() {
                 </div>
             ) : (
                 <>
-                    <div className="flex items-center space-x-2 border-b border-white/10">
+                    <div className={cn("flex items-center space-x-2 border-b", isLight ? "border-slate-100" : "border-white/10")}>
                         <button
                             type="button"
                             onClick={() => setActiveTab("documents")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
                                 activeTab === "documents"
-                                    ? "border-indigo-500 text-white"
-                                    : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
-                            }`}
+                                    ? "border-indigo-500 text-indigo-600"
+                                    : isLight
+                                        ? "border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300"
+                                        : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
+                            )}
                         >
                             Documents
                         </button>
                         <button
                             type="button"
                             onClick={() => setActiveTab("faqs")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
                                 activeTab === "faqs"
-                                    ? "border-indigo-500 text-white"
-                                    : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
-                            }`}
+                                    ? "border-indigo-500 text-indigo-600"
+                                    : isLight
+                                        ? "border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300"
+                                        : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
+                            )}
                         >
                             FAQs
                         </button>
                         <button
                             type="button"
                             onClick={() => setActiveTab("ask")}
-                            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                            className={cn(
+                                "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors",
                                 activeTab === "ask"
-                                    ? "border-indigo-500 text-white"
-                                    : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
-                            }`}
+                                    ? "border-indigo-500 text-indigo-600"
+                                    : isLight
+                                        ? "border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300"
+                                        : "border-transparent text-slate-400 hover:text-white hover:border-slate-500"
+                            )}
                         >
                             Ask
                         </button>

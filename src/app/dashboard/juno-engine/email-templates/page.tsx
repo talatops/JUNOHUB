@@ -205,8 +205,8 @@ export default function EmailTemplatesPage() {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className={`w-full h-10 md:h-11 pl-10 md:pl-11 pr-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 transition-all text-sm font-medium ${isLight
-                                    ? "bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
-                                    : "bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500/50"
+                                ? "bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                : "bg-white/5 border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500/50"
                                 }`}
                         />
                     </div>
@@ -245,8 +245,8 @@ export default function EmailTemplatesPage() {
                                         type="button"
                                         onClick={() => startEditTemplate(template)}
                                         className={`backdrop-blur-xl p-4 md:p-6 rounded-xl md:rounded-2xl border transition-all group text-left ${isLight
-                                                ? "bg-white border-slate-200 hover:bg-slate-50 hover:border-indigo-300 shadow-sm"
-                                                : "bg-white/5 border-white/10 hover:bg-white/[0.07] hover:border-indigo-500/30"
+                                            ? "bg-white border-slate-200 hover:bg-slate-50 hover:border-indigo-300 shadow-sm"
+                                            : "bg-white/5 border-white/10 hover:bg-white/[0.07] hover:border-indigo-500/30"
                                             }`}
                                     >
                                         <div className="flex items-start justify-between mb-4">
@@ -300,272 +300,276 @@ export default function EmailTemplatesPage() {
                 </div>
             </div>
 
-            <AnimatePresence>
-                {editing && mounted && createPortal(
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4">
-                        {/* Backdrop */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => !saving && setEditing(null)}
-                            className={`absolute inset-0 pointer-events-auto backdrop-blur-sm ${isLight ? "bg-black/40" : "bg-black/60"
-                                }`}
-                        />
+            {mounted && createPortal(
+                <AnimatePresence>
+                    {editing && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none p-4">
+                            {/* Backdrop */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                key="backdrop"
+                                onClick={() => !saving && setEditing(null)}
+                                className={`absolute inset-0 pointer-events-auto backdrop-blur-sm ${isLight ? "bg-black/40" : "bg-black/60"
+                                    }`}
+                            />
 
-                        {/* Modal */}
-                        <motion.div
-                            initial={{ scale: 0.95, opacity: 0, y: 20 }}
-                            animate={{ scale: 1, opacity: 1, y: 0 }}
-                            exit={{ scale: 0.95, opacity: 0, y: 20 }}
-                            className={`relative flex w-full max-h-[90vh] max-w-3xl flex-col rounded-2xl border shadow-2xl pointer-events-auto ${isLight
-                                ? "bg-white text-slate-900 border-slate-200"
-                                : "bg-slate-900 text-slate-50 border-white/10"
-                                }`}
-                        >
-                            <div
-                                className={`flex items-center justify-between px-6 py-5 border-b ${isLight ? "border-slate-100" : "border-white/10"
+                            {/* Modal */}
+                            <motion.div
+                                initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                                key="modal"
+                                className={`relative flex w-full max-h-[90vh] max-w-3xl flex-col rounded-2xl border shadow-2xl pointer-events-auto ${isLight
+                                    ? "bg-white text-slate-900 border-slate-200"
+                                    : "bg-slate-900 text-slate-50 border-white/10"
                                     }`}
                             >
-                                <div>
-                                    <h2 className="text-xl font-bold">
-                                        {editing.id ? "Edit template" : "New template"}
-                                    </h2>
-                                    <p
-                                        className={`mt-1 text-sm ${isLight ? "text-slate-500" : "text-slate-400"
-                                            }`}
-                                    >
-                                        Use {"{{variable}}"} placeholders to personalize replies.
-                                    </p>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setEditing(null)}
-                                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isLight
-                                        ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                                        : "bg-white/10 hover:bg-white/15 text-slate-300"
+                                <div
+                                    className={`flex items-center justify-between px-6 py-5 border-b ${isLight ? "border-slate-100" : "border-white/10"
                                         }`}
                                 >
-                                    <Plus className="w-5 h-5 rotate-45" />
-                                </button>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-4">
-                                        <div>
-                                            <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
-                                                }`}>
-                                                Template Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={editing.name}
-                                                onChange={(e) =>
-                                                    setEditing((prev) =>
-                                                        prev
-                                                            ? { ...prev, name: e.target.value }
-                                                            : prev,
-                                                    )
-                                                }
-                                                placeholder="e.g. Shipping Update"
-                                                className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
-                                                    ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
-                                                    : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
-                                                    }`}
-                                            />
-                                        </div>
-
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            <div>
-                                                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
-                                                    }`}>
-                                                    Intent
-                                                </label>
-                                                <select
-                                                    value={editing.intent}
-                                                    onChange={(e) =>
-                                                        setEditing((prev) =>
-                                                            prev
-                                                                ? {
-                                                                    ...prev,
-                                                                    intent: e.target.value,
-                                                                }
-                                                                : prev,
-                                                        )
-                                                    }
-                                                    className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
-                                                        ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
-                                                        : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
-                                                        }`}
-                                                >
-                                                    {INTENT_OPTIONS.map((opt) => (
-                                                        <option key={opt.value} value={opt.value}>
-                                                            {opt.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
-                                                    }`}>
-                                                    Mood
-                                                </label>
-                                                <select
-                                                    value={editing.mood}
-                                                    onChange={(e) =>
-                                                        setEditing((prev) =>
-                                                            prev
-                                                                ? {
-                                                                    ...prev,
-                                                                    mood: e.target.value,
-                                                                }
-                                                                : prev,
-                                                        )
-                                                    }
-                                                    className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
-                                                        ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
-                                                        : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
-                                                        }`}
-                                                >
-                                                    {MOOD_OPTIONS.map((opt) => (
-                                                        <option key={opt.value} value={opt.value}>
-                                                            {opt.label}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div>
-                                            <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
-                                                }`}>
-                                                Description (optional)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={editing.description || ""}
-                                                onChange={(e) =>
-                                                    setEditing((prev) =>
-                                                        prev
-                                                            ? {
-                                                                ...prev,
-                                                                description: e.target.value,
-                                                            }
-                                                            : prev,
-                                                    )
-                                                }
-                                                placeholder="Short summary for your team"
-                                                className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
-                                                    ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
-                                                    : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
-                                                    }`}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className={`p-4 rounded-2xl border ${isLight ? "bg-indigo-50/50 border-indigo-100" : "bg-indigo-500/5 border-indigo-500/10"
-                                        }`}>
-                                        <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${isLight ? "text-indigo-600" : "text-indigo-400"
-                                            }`}>
-                                            Available variables
+                                    <div>
+                                        <h2 className="text-xl font-bold">
+                                            {editing.id ? "Edit template" : "New template"}
+                                        </h2>
+                                        <p
+                                            className={`mt-1 text-sm ${isLight ? "text-slate-500" : "text-slate-400"
+                                                }`}
+                                        >
+                                            Use {"{{variable}}"} placeholders to personalize replies.
                                         </p>
-                                        <div className="grid grid-cols-1 gap-2">
-                                            {[
-                                                { key: "{{customer_name}}", label: "Customer's name" },
-                                                { key: "{{customer_email}}", label: "Customer's email" },
-                                                { key: "{{store_name}}", label: "Store name" },
-                                                { key: "{{ticket_summary}}", label: "Email summary" }
-                                            ].map((v) => (
-                                                <div key={v.key} className="flex items-center justify-between text-[11px]">
-                                                    <code className={`px-2 py-0.5 rounded font-mono font-bold ${isLight ? "bg-white border border-indigo-200 text-indigo-700" : "bg-white/10 text-indigo-300"
-                                                        }`}>
-                                                        {v.key}
-                                                    </code>
-                                                    <span className={isLight ? "text-slate-500" : "text-slate-400"}>{v.label}</span>
-                                                </div>
-                                            ))}
-                                        </div>
                                     </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <label className={`block text-xs font-bold uppercase tracking-wider ${isLight ? "text-slate-500" : "text-slate-400"
-                                            }`}>
-                                            Template body
-                                        </label>
-                                        <span className={`text-[10px] ${isLight ? "text-slate-400" : "text-slate-500"}`}>
-                                            Markdown & HTML supported
-                                        </span>
-                                    </div>
-                                    <textarea
-                                        value={editing.body}
-                                        onChange={(e) =>
-                                            setEditing((prev) =>
-                                                prev ? { ...prev, body: e.target.value } : prev,
-                                            )
-                                        }
-                                        rows={8}
-                                        className={`w-full rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 p-4 font-mono text-xs leading-relaxed ${isLight
-                                            ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
-                                            : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
-                                            }`}
-                                    />
-                                </div>
-
-                                <div className="space-y-4">
-                                    <label className={`block text-xs font-bold uppercase tracking-wider ${isLight ? "text-slate-500" : "text-slate-400"
-                                        }`}>
-                                        Preview with example data
-                                    </label>
-                                    <div className={`rounded-xl border p-5 text-sm leading-relaxed whitespace-pre-wrap ${isLight
-                                        ? "bg-slate-50 border-slate-200 text-slate-800"
-                                        : "bg-slate-950 border-white/5 text-slate-300 shadow-inner"
-                                        }`}>
-                                        {currentPreview || "Preview will appear here..."}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className={`px-6 py-4 border-t flex items-center justify-between ${isLight ? "border-slate-100 bg-slate-50/50" : "border-white/10 bg-white/[0.02]"
-                                }`}>
-                                <p className={`text-[11px] font-medium ${isLight ? "text-slate-500" : "text-slate-500"}`}>
-                                    Autosaved to your draft templates.
-                                </p>
-                                <div className="flex items-center gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setEditing(null)}
-                                        className={`h-10 px-6 rounded-xl font-bold transition-all border ${isLight
-                                            ? "bg-white text-slate-700 hover:bg-slate-50 border-slate-200"
-                                            : "bg-white/10 text-slate-300 hover:bg-white/20 border-white/10"
+                                        className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${isLight
+                                            ? "bg-slate-100 hover:bg-slate-200 text-slate-600"
+                                            : "bg-white/10 hover:bg-white/15 text-slate-300"
                                             }`}
                                     >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="button"
-                                        disabled={saving}
-                                        onClick={() => void handleSave()}
-                                        className="h-10 px-6 bg-indigo-500 text-sm font-bold text-white hover:bg-indigo-600 border border-indigo-400/20 shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 rounded-xl"
-                                    >
-                                        {saving ? (
-                                            <>
-                                                <Loader2 className="w-4 h-4 animate-spin" />
-                                                Saving...
-                                            </>
-                                        ) : (
-                                            "Save template"
-                                        )}
+                                        <Plus className="w-5 h-5 rotate-45" />
                                     </button>
                                 </div>
-                            </div>
-                        </motion.div>
-                    </div>,
-                    document.body
-                )}
-            </AnimatePresence>
+
+                                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
+                                                    }`}>
+                                                    Template Name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={editing.name}
+                                                    onChange={(e) =>
+                                                        setEditing((prev) =>
+                                                            prev
+                                                                ? { ...prev, name: e.target.value }
+                                                                : prev,
+                                                        )
+                                                    }
+                                                    placeholder="e.g. Shipping Update"
+                                                    className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                        ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                        : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
+                                                        }`}>
+                                                        Intent
+                                                    </label>
+                                                    <select
+                                                        value={editing.intent}
+                                                        onChange={(e) =>
+                                                            setEditing((prev) =>
+                                                                prev
+                                                                    ? {
+                                                                        ...prev,
+                                                                        intent: e.target.value,
+                                                                    }
+                                                                    : prev,
+                                                            )
+                                                        }
+                                                        className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
+                                                            }`}
+                                                    >
+                                                        {INTENT_OPTIONS.map((opt) => (
+                                                            <option key={opt.value} value={opt.value}>
+                                                                {opt.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
+                                                        }`}>
+                                                        Mood
+                                                    </label>
+                                                    <select
+                                                        value={editing.mood}
+                                                        onChange={(e) =>
+                                                            setEditing((prev) =>
+                                                                prev
+                                                                    ? {
+                                                                        ...prev,
+                                                                        mood: e.target.value,
+                                                                    }
+                                                                    : prev,
+                                                            )
+                                                        }
+                                                        className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                            ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
+                                                            : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
+                                                            }`}
+                                                    >
+                                                        {MOOD_OPTIONS.map((opt) => (
+                                                            <option key={opt.value} value={opt.value}>
+                                                                {opt.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isLight ? "text-slate-500" : "text-slate-400"
+                                                    }`}>
+                                                    Description (optional)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={editing.description || ""}
+                                                    onChange={(e) =>
+                                                        setEditing((prev) =>
+                                                            prev
+                                                                ? {
+                                                                    ...prev,
+                                                                    description: e.target.value,
+                                                                }
+                                                                : prev,
+                                                        )
+                                                    }
+                                                    placeholder="Short summary for your team"
+                                                    className={`w-full h-11 px-4 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 ${isLight
+                                                        ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-indigo-500"
+                                                        : "bg-white/5 border border-white/10 text-white placeholder:text-slate-500 focus:border-indigo-500"
+                                                        }`}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className={`p-4 rounded-2xl border ${isLight ? "bg-indigo-50/50 border-indigo-100" : "bg-indigo-500/5 border-indigo-500/10"
+                                            }`}>
+                                            <p className={`text-xs font-bold uppercase tracking-wider mb-3 ${isLight ? "text-indigo-600" : "text-indigo-400"
+                                                }`}>
+                                                Available variables
+                                            </p>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                {[
+                                                    { key: "{{customer_name}}", label: "Customer's name" },
+                                                    { key: "{{customer_email}}", label: "Customer's email" },
+                                                    { key: "{{store_name}}", label: "Store name" },
+                                                    { key: "{{ticket_summary}}", label: "Email summary" }
+                                                ].map((v) => (
+                                                    <div key={v.key} className="flex items-center justify-between text-[11px]">
+                                                        <code className={`px-2 py-0.5 rounded font-mono font-bold ${isLight ? "bg-white border border-indigo-200 text-indigo-700" : "bg-white/10 text-indigo-300"
+                                                            }`}>
+                                                            {v.key}
+                                                        </code>
+                                                        <span className={isLight ? "text-slate-500" : "text-slate-400"}>{v.label}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <label className={`block text-xs font-bold uppercase tracking-wider ${isLight ? "text-slate-500" : "text-slate-400"
+                                                }`}>
+                                                Template body
+                                            </label>
+                                            <span className={`text-[10px] ${isLight ? "text-slate-400" : "text-slate-500"}`}>
+                                                Markdown & HTML supported
+                                            </span>
+                                        </div>
+                                        <textarea
+                                            value={editing.body}
+                                            onChange={(e) =>
+                                                setEditing((prev) =>
+                                                    prev ? { ...prev, body: e.target.value } : prev,
+                                                )
+                                            }
+                                            rows={8}
+                                            className={`w-full rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/30 p-4 font-mono text-xs leading-relaxed ${isLight
+                                                ? "bg-slate-50 border border-slate-200 text-slate-900 focus:border-indigo-500"
+                                                : "bg-white/5 border border-white/10 text-white focus:border-indigo-500"
+                                                }`}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className={`block text-xs font-bold uppercase tracking-wider ${isLight ? "text-slate-500" : "text-slate-400"
+                                            }`}>
+                                            Preview with example data
+                                        </label>
+                                        <div className={`rounded-xl border p-5 text-sm leading-relaxed whitespace-pre-wrap ${isLight
+                                            ? "bg-slate-50 border-slate-200 text-slate-800"
+                                            : "bg-slate-950 border-white/5 text-slate-300 shadow-inner"
+                                            }`}>
+                                            {currentPreview || "Preview will appear here..."}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className={`px-6 py-4 border-t flex items-center justify-between ${isLight ? "border-slate-100 bg-slate-50/50" : "border-white/10 bg-white/[0.02]"
+                                    }`}>
+                                    <p className={`text-[11px] font-medium ${isLight ? "text-slate-500" : "text-slate-500"}`}>
+                                        Autosaved to your draft templates.
+                                    </p>
+                                    <div className="flex items-center gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditing(null)}
+                                            className={`h-10 px-6 rounded-xl font-bold transition-all border ${isLight
+                                                ? "bg-white text-slate-700 hover:bg-slate-50 border-slate-200"
+                                                : "bg-white/10 text-slate-300 hover:bg-white/20 border-white/10"
+                                                }`}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={saving}
+                                            onClick={() => void handleSave()}
+                                            className="h-10 px-6 bg-indigo-500 text-sm font-bold text-white hover:bg-indigo-600 border border-indigo-400/20 shadow-lg shadow-indigo-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 rounded-xl"
+                                        >
+                                            {saving ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                "Save template"
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
         </div>
     )
 }
