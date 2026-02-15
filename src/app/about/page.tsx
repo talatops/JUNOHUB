@@ -67,7 +67,7 @@ export default function AboutPage() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.2 }}
-                            className="max-w-3xl mx-auto text-xl text-slate-400 font-medium leading-relaxed"
+                            className="max-w-3xl mx-auto text-xl text-slate-300 font-medium leading-relaxed"
                         >
                             We started JUNOHUB with a simple belief: the global supply chain is broken, and
                             technology is the only way to fix it. We&apos;re building the infrastructure for a
@@ -87,7 +87,7 @@ export default function AboutPage() {
                         transition={{ duration: 0.8 }}
                     >
                         <h2 className="text-4xl font-black text-white mb-8 tracking-tighter uppercase">Our Vision</h2>
-                        <div className="space-y-6 text-slate-400 font-medium text-lg leading-relaxed">
+                        <div className="space-y-6 text-slate-300 font-medium text-lg leading-relaxed">
                             <p>
                                 Every day, millions of dollars are lost due to inefficient communication,
                                 lost inventory data, and slow synchronization.
@@ -115,7 +115,7 @@ export default function AboutPage() {
                             <div key={item.label} className={`p-8 rounded-3xl bg-white/[0.03] border border-white/10 text-center ${i % 2 !== 0 ? 'mt-8' : ''}`}>
                                 <item.icon className="w-8 h-8 text-indigo-400 mx-auto mb-4" />
                                 <div className="text-2xl font-black text-white">{item.value}</div>
-                                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{item.label}</div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{item.label}</div>
                             </div>
                         ))}
                     </motion.div>
@@ -141,7 +141,7 @@ export default function AboutPage() {
                                     <v.icon className="w-7 h-7 text-white" />
                                 </div>
                                 <h3 className="text-xl font-black text-white mb-4 uppercase tracking-tight">{v.title}</h3>
-                                <p className="text-slate-400 text-sm font-medium leading-relaxed">{v.description}</p>
+                                <p className="text-slate-300 text-sm font-medium leading-relaxed">{v.description}</p>
                             </motion.div>
                         ))}
                     </div>
@@ -156,7 +156,7 @@ export default function AboutPage() {
                             viewport={{ once: true }}
                         >
                             <h2 className="text-5xl md:text-7xl font-black text-white mb-8 tracking-tighter uppercase">Join the Movement</h2>
-                            <p className="text-slate-400 font-medium mb-12 max-w-2xl mx-auto text-lg leading-relaxed">
+                            <p className="text-slate-300 font-medium mb-12 max-w-2xl mx-auto text-lg leading-relaxed">
                                 We&apos;re always looking for ambitious vendors and suppliers to join our
                                 expanding ecosystem. Let&apos;s build the future together.
                             </p>

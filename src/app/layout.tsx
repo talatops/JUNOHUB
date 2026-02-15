@@ -24,6 +24,7 @@ export const viewport = {
 
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SmoothScroll } from "@/components/SmoothScroll";
 
 export default function RootLayout({
   children,
@@ -33,10 +34,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased selection:bg-indigo-500/30`}
       >
         <ErrorBoundary>
-          <Providers>{children}</Providers>
+          <Providers>
+            <SmoothScroll>
+              {children}
+            </SmoothScroll>
+          </Providers>
         </ErrorBoundary>
       </body>
     </html>

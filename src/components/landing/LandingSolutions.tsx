@@ -57,7 +57,7 @@ export function LandingSolutions() {
                                 {sol.title}
                             </h3>
 
-                            <p className="text-slate-400 font-medium mb-8 text-lg">
+                            <p className="text-slate-300 font-medium mb-8 text-lg">
                                 {sol.description}
                             </p>
 

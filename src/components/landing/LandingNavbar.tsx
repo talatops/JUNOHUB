@@ -57,7 +57,7 @@ export function LandingNavbar({ isLoggedIn }: LandingNavbarProps) {
                         <Link
                             key={link.name}
                             href={link.href}
-                            className="text-sm font-bold text-slate-400 hover:text-white transition-colors"
+                            className="text-sm font-bold text-slate-300 hover:text-indigo-400 transition-colors"
                         >
                             {link.name}
                         </Link>
@@ -84,6 +84,8 @@ export function LandingNavbar({ isLoggedIn }: LandingNavbarProps) {
                 <button
                     className="md:hidden text-white p-1"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                    aria-expanded={mobileMenuOpen}
                 >
                     {mobileMenuOpen ? <X /> : <Menu />}
                 </button>

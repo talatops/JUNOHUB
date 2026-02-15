@@ -22,9 +22,9 @@ export function LandingHero() {
             className="relative min-h-screen flex items-center justify-center pt-20 overflow-hidden"
         >
             {/* Background Decorative Elements */}
-            <div className="absolute inset-0 z-0">
-                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 blur-[120px] rounded-full animate-pulse" />
-                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 blur-[120px] rounded-full animate-pulse delay-700" />
+            <div className="absolute inset-0 z-0 pointer-events-none">
+                <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/20 blur-[120px] rounded-full animate-pulse will-change-[transform,opacity]" />
+                <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/20 blur-[120px] rounded-full animate-pulse delay-700 will-change-[transform,opacity]" />
             </div>
 
             {/* Grid Pattern */}
@@ -54,9 +54,9 @@ export function LandingHero() {
 
                 {/* Main Heading */}
                 <motion.h1
-                    initial={{ opacity: 0, y: 30 }}
+                    initial={{ opacity: 1, y: 30 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.8, delay: 0.2 }}
+                    transition={{ duration: 0.8 }}
                     className="text-5xl md:text-8xl font-black tracking-tighter text-white mb-8 leading-[0.9]"
                 >
                     THE PULSE OF <br />
@@ -67,8 +67,8 @@ export function LandingHero() {
                 <motion.p
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ duration: 1, delay: 0.4 }}
-                    className="max-w-2xl mx-auto text-lg md:text-xl text-slate-400 font-medium mb-12 leading-relaxed"
+                    transition={{ duration: 1, delay: 0.2 }}
+                    className="max-w-2xl mx-auto text-lg md:text-xl text-slate-300 font-medium mb-12 leading-relaxed"
                 >
                     Bridge the gap between vendors and suppliers with the world&apos;s most advanced
                     encrypted ecosystem. Sync Shopify, chat securely, and scale effortlessly.
@@ -135,7 +135,7 @@ export function LandingHero() {
                         className="absolute top-0 left-0 w-full h-1/3 bg-indigo-500"
                     />
                 </div>
-                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-500">Scroll</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">Scroll</span>
             </motion.div>
         </section>
     )
