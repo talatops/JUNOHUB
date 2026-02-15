@@ -5,16 +5,19 @@ import "./globals.css";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "JUNOHUB",
-  description: "JUNOHUB - Your dropshipping and e-commerce management platform",
+  title: "JUNOHUB | Modern Commerce Infrastructure",
+  description: "The world's most advanced encrypted ecosystem for vendors and suppliers.",
+  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
 };
 
 export const viewport = {

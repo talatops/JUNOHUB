@@ -4,10 +4,16 @@ import { useMediaQuery } from "@/hooks/useMediaQuery"
 import { LandingNavbar } from "@/components/landing/LandingNavbar"
 import { LandingHero } from "@/components/landing/LandingHero"
 import { LandingFeatures } from "@/components/landing/LandingFeatures"
-import { LandingSolutions } from "@/components/landing/LandingSolutions"
 import { LandingFooter } from "@/components/landing/LandingFooter"
 import { MobileHero } from "@/components/landing/mobile/MobileHero"
 import { MobileFeatures } from "@/components/landing/mobile/MobileFeatures"
+
+import dynamic from "next/dynamic"
+
+const LandingSolutions = dynamic(() => import("@/components/landing/LandingSolutions").then(mod => mod.LandingSolutions), {
+  ssr: true,
+  loading: () => <div className="min-h-[400px] bg-[#0a0e1a]" />
+})
 
 export default function HomePage() {
   const isMobile = useMediaQuery("(max-width: 768px)")

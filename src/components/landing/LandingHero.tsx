@@ -28,7 +28,7 @@ export function LandingHero() {
             </div>
 
             {/* Grid Pattern */}
-            <div className="absolute inset-0 z-0 opacity-[0.03] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] pointer-events-none" />
+            <div className="absolute inset-0 z-0 opacity-[0.03] bg-[url('/noise.svg')] pointer-events-none" />
             <div
                 className="absolute inset-0 z-0 opacity-[0.4]"
                 style={{

@@ -176,7 +176,7 @@ html {
 
 /* Optimize backdrop blur performance during scroll */
 [data-scroll-container] .backdrop-blur-xl {
-  will-change: auto;
+  will-change: transform;
 }
 
 /* Smooth transitions for interactive elements */
@@ -220,7 +220,7 @@ button, a, input, select, textarea {
 
 /* Optimize backdrop blur performance */
 .backdrop-blur-xl {
-  will-change: backdrop-filter;
+  will-change: transform;
   transform: translateZ(0);
 }
 
