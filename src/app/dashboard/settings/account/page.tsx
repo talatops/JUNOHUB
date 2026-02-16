@@ -222,6 +222,7 @@ export default function AccountSettingsPage() {
                 </h2>
                 <p className="text-sm text-slate-400 mt-1 mb-4">
                     Get notified in your browser when you receive new messages and updates.
+                    When you click Enable, your browser will show a permission prompt—choose <strong>Allow</strong>.
                 </p>
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                     {pushLoading ? (
@@ -262,10 +263,11 @@ export default function AccountSettingsPage() {
                             type="button"
                             onClick={async () => {
                                 setPushActionLoading(true)
-                                const ok = await subscribe()
+                                setError("")
+                                const result = await subscribe()
                                 setPushActionLoading(false)
-                                if (!ok) {
-                                    setError("Could not enable notifications. Check that the site has permission.")
+                                if (!result.success) {
+                                    setError(result.error ?? "Could not enable notifications. Try again or check browser settings.")
                                 }
                             }}
                             disabled={pushActionLoading}

@@ -232,6 +232,7 @@ export default function SupplierSettingsPage() {
                 </h2>
                 <p className="text-sm text-slate-400 mb-4">
                     Get notified in your browser when you receive new messages and updates.
+                    When you click Enable, your browser will show a permission prompt—choose <strong>Allow</strong>.
                 </p>
                 <div className="bg-white/5 rounded-xl p-4 border border-white/10">
                     {pushLoading ? (
@@ -272,9 +273,10 @@ export default function SupplierSettingsPage() {
                             type="button"
                             onClick={async () => {
                                 setPushActionLoading(true)
-                                const ok = await subscribe()
+                                setError("")
+                                const result = await subscribe()
                                 setPushActionLoading(false)
-                                if (!ok) setError("Could not enable notifications. Check that the site has permission.")
+                                if (!result.success) setError(result.error ?? "Could not enable notifications. Try again or check browser settings.")
                             }}
                             disabled={pushActionLoading}
                             className="px-4 py-2.5 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 transition-colors flex items-center gap-2 disabled:opacity-50"

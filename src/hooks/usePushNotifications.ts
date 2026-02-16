@@ -57,10 +57,17 @@ export function usePushNotifications() {
         checkSubscription()
     }, [checkSubscription])
 
-    const subscribe = async () => {
+    const subscribe = async (): Promise<{ success: boolean; error?: string }> => {
         if (!VAPID_PUBLIC_KEY) {
             console.error('VAPID public key not found')
-            return false
+            return { success: false, error: 'Server configuration error. Please try again later or contact support.' }
+        }
+
+        if (Notification.permission === 'denied') {
+            return {
+                success: false,
+                error: 'Notifications are blocked. In your browser, click the lock icon in the address bar → Site settings → Notifications → set to Allow, then refresh this page.'
+            }
         }
 
         try {
@@ -79,12 +86,28 @@ export function usePushNotifications() {
             if (response.ok) {
                 setIsSubscribed(true)
                 setPermission(Notification.permission)
-                return true
+                return { success: true }
             }
-            return false
+
+            const data = await response.json().catch(() => ({}))
+            const msg = data?.message || (response.status === 401 ? 'Please log in again.' : 'Server error. Please try again later.')
+            return { success: false, error: msg }
         } catch (error) {
             console.error('Error subscribing to push notifications:', error)
-            return false
+            const isPermissionDenied = error instanceof Error && (
+                error.name === 'NotAllowedError' ||
+                (error as DOMException).name === 'NotAllowedError'
+            )
+            if (isPermissionDenied) {
+                return {
+                    success: false,
+                    error: 'Notification permission was denied. To enable: click the lock icon in the address bar → Site settings → Notifications → Allow, then refresh.'
+                }
+            }
+            return {
+                success: false,
+                error: 'Could not enable notifications. Make sure the site is allowed to show notifications in your browser settings, then try again.'
+            }
         }
     }
 
