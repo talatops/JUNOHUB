@@ -4,6 +4,7 @@ import { sendEmail } from "@/lib/email"
 import { emailSchema } from "@/lib/validation"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { handleApiError } from "@/lib/errors"
+import { getBaseUrl } from "@/lib/utils"
 import crypto from "crypto"
 
 export async function POST(req: Request) {
@@ -64,8 +65,8 @@ export async function POST(req: Request) {
         })
 
         // Send reset email
-        const resetUrl = `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
-        
+        const resetUrl = `${getBaseUrl()}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`
+
         const emailHtml = `
 <!DOCTYPE html>
 <html>

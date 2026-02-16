@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { handleApiError } from "@/lib/errors"
+import { getBaseUrl } from "@/lib/utils"
 import crypto from "crypto"
 
 export async function POST(req: Request) {
@@ -63,8 +64,8 @@ export async function POST(req: Request) {
         })
 
         // Send verification email
-        const verifyUrl = `${process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`
-        
+        const verifyUrl = `${getBaseUrl()}/verify-email?token=${verificationToken}&email=${encodeURIComponent(user.email)}`
+
         const emailHtml = `
 <!DOCTYPE html>
 <html>

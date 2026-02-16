@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
         // Decode base64url encoded message data
         const decodedData = Buffer.from(messageData, "base64")
             .toString("utf-8")
-        
+
         const notification = JSON.parse(decodedData)
         const emailAddress = notification.emailAddress
         const historyId = notification.historyId
@@ -74,6 +74,19 @@ export async function POST(req: NextRequest) {
             )
         }
 
+        // 🛡️ SECURITY: Only allow VENDORS to use automated replies
+        // Suppliers should not send automated responses via JUNOHUB
+        if (integration.user.role !== "VENDOR") {
+            logger.info("Skipping Gmail processing for non-vendor role", {
+                emailAddress,
+                role: integration.user.role
+            })
+            return NextResponse.json({
+                success: true,
+                message: "Skipping processing for non-vendor account"
+            })
+        }
+
         const userId = integration.userId
         const storeId = integration.user.stores[0]?.id || null
 
@@ -89,7 +102,7 @@ export async function POST(req: NextRequest) {
             error: result.error,
         })
 
-        return NextResponse.json({ 
+        return NextResponse.json({
             success: result.success,
             error: result.error,
             message: result.success
@@ -112,7 +125,7 @@ export async function POST(req: NextRequest) {
  * Health check endpoint
  */
 export async function GET() {
-    return NextResponse.json({ 
+    return NextResponse.json({
         status: "ok",
         message: "Gmail webhook endpoint is active"
     })

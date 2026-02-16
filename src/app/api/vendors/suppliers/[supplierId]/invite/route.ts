@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { sendEmail, generateInvitationEmailHtml } from "@/lib/email"
 import { notifyInvitationReceived } from "@/lib/notifications"
+import { getBaseUrl } from "@/lib/utils"
 import crypto from "crypto"
 
 /**
@@ -39,8 +40,8 @@ export async function DELETE(
             )
         }
 
-        const storeIdsToCheck = storeId 
-            ? [storeId] 
+        const storeIdsToCheck = storeId
+            ? [storeId]
             : vendorStores.map(s => s.id)
 
         // Find and delete pending invitations
@@ -122,8 +123,8 @@ export async function POST(
         }
 
         // Determine which stores to connect
-        const storesToConnect = connectToAllStores 
-            ? vendorStores 
+        const storesToConnect = connectToAllStores
+            ? vendorStores
             : vendorStores.filter(store => store.isActive)
 
         if (storesToConnect.length === 0) {
@@ -203,8 +204,8 @@ export async function POST(
         if (storesToInvite.length === 0) {
             const allConnected = storesToConnect.length === existingConnections.length + existingInvitations.length
             return NextResponse.json(
-                { 
-                    message: allConnected 
+                {
+                    message: allConnected
                         ? "All selected stores are already connected or have pending invitations"
                         : "No stores available to invite (all have existing connections or pending invitations)"
                 },
@@ -221,7 +222,7 @@ export async function POST(
 
         for (const store of storesToInvite) {
             const invitationToken = crypto.randomBytes(32).toString("hex").toUpperCase().slice(0, 16)
-            
+
             try {
                 const invitation = await (prisma as any).invitation.create({
                     data: {
@@ -248,8 +249,8 @@ export async function POST(
 
         // Send invitation email (use first store's name or combined names)
         const primaryStore = storesToInvite[0]
-        const invitationLink = `${process.env.NEXTAUTH_URL || "http://localhost:3000"}/supplier/vendors?token=${invitations[0].token}`
-        
+        const invitationLink = `${getBaseUrl()}/supplier/vendors?token=${invitations[0].token}`
+
         const emailSubject = connectToAllStores && storesToInvite.length > 1
             ? `Invitation to Connect - ${storesToInvite.length} Stores`
             : `Invitation to Connect - ${primaryStore.businessName}`
@@ -273,10 +274,10 @@ export async function POST(
         // Create notification for supplier about the invitation
         try {
             const vendorName = session.user.name || storesToInvite[0].businessName
-            const storeDisplayName = connectToAllStores && storesToInvite.length > 1 
-                ? `${storesToInvite.length} Stores` 
+            const storeDisplayName = connectToAllStores && storesToInvite.length > 1
+                ? `${storesToInvite.length} Stores`
                 : primaryStore.businessName
-            
+
             await notifyInvitationReceived(
                 supplierProfile.user.id,
                 vendorName,
@@ -307,9 +308,9 @@ export async function POST(
         const errorStack = error instanceof Error ? error.stack : undefined
         console.error("Error details:", { errorMessage, errorStack })
         return NextResponse.json(
-            { 
+            {
                 message: "Failed to send invitation",
-                error: errorMessage 
+                error: errorMessage
             },
             { status: 500 }
         )
