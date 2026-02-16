@@ -7,8 +7,11 @@ import {
     Loader2,
     AlertCircle,
     CheckCircle2,
-    Save
+    Save,
+    Bell,
+    BellOff
 } from "lucide-react"
+import { usePushNotifications } from "@/hooks/usePushNotifications"
 
 interface SupplierProfile {
     id: string
@@ -25,6 +28,8 @@ interface SupplierProfile {
 }
 
 export default function SupplierSettingsPage() {
+    const { permission, isSubscribed, loading: pushLoading, subscribe, unsubscribe } = usePushNotifications()
+    const [pushActionLoading, setPushActionLoading] = useState(false)
     const [profile, setProfile] = useState<SupplierProfile | null>(null)
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -218,6 +223,77 @@ export default function SupplierSettingsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Push notifications */}
+            <div className="pt-6 border-t border-white/10">
+                <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-1">
+                    <Bell className="w-5 h-5" />
+                    Push notifications
+                </h2>
+                <p className="text-sm text-slate-400 mb-4">
+                    Get notified in your browser when you receive new messages and updates.
+                </p>
+                <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+                    {pushLoading ? (
+                        <div className="flex items-center gap-2 text-slate-400">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span className="text-sm">Checking notification status...</span>
+                        </div>
+                    ) : !("Notification" in window) || !("serviceWorker" in navigator) ? (
+                        <p className="text-sm text-slate-400">
+                            Push notifications are not supported in this browser.
+                        </p>
+                    ) : permission === "denied" ? (
+                        <p className="text-sm text-slate-400">
+                            Notifications are blocked. Enable them in your browser settings for this site, then refresh the page.
+                        </p>
+                    ) : isSubscribed ? (
+                        <div className="flex items-center justify-between gap-4 flex-wrap">
+                            <div className="flex items-center gap-2 text-emerald-400">
+                                <CheckCircle2 className="w-5 h-5" />
+                                <span className="text-sm font-medium">Notifications enabled</span>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setPushActionLoading(true)
+                                    await unsubscribe()
+                                    setPushActionLoading(false)
+                                }}
+                                disabled={pushActionLoading}
+                                className="px-4 py-2 rounded-lg text-sm font-medium bg-white/10 text-slate-300 hover:bg-white/20 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {pushActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellOff className="w-4 h-4" />}
+                                Disable
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                setPushActionLoading(true)
+                                const ok = await subscribe()
+                                setPushActionLoading(false)
+                                if (!ok) setError("Could not enable notifications. Check that the site has permission.")
+                            }}
+                            disabled={pushActionLoading}
+                            className="px-4 py-2.5 bg-indigo-500 text-white rounded-xl font-bold hover:bg-indigo-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                        >
+                            {pushActionLoading ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                    Enabling...
+                                </>
+                            ) : (
+                                <>
+                                    <Bell className="w-4 h-4" />
+                                    Enable notifications
+                                </>
+                            )}
+                        </button>
+                    )}
+                </div>
+            </div>
         </div>
     )
 }
