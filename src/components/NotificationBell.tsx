@@ -147,7 +147,7 @@ export default function NotificationBell() {
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: -4 }}
                         transition={{ duration: 0.15, ease: "easeOut" }}
-                        className={`absolute right-0 top-full z-50 mt-2 flex max-h-[600px] w-80 sm:w-96 max-w-[calc(100vw-2rem)] flex-col rounded-xl border shadow-xl ${isLight
+                        className={`absolute right-[-3.5rem] sm:right-0 top-full z-50 mt-2 flex max-h-[600px] w-80 sm:w-96 max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border shadow-xl ${isLight
                             ? "bg-white border-slate-200"
                             : "bg-slate-800 border-white/10"
                             }`}

@@ -47,7 +47,7 @@ export default async function SupplierLayout({
             </div>
 
             <main className="md:pl-72 flex flex-col flex-1 h-full min-w-0">
-                <header className="h-16 px-4 md:px-8 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between flex-shrink-0 z-50">
+                <header className="h-16 px-4 md:px-8 border-b border-white/10 bg-slate-900/50 backdrop-blur-xl flex items-center justify-between flex-shrink-0 z-[100]">
                     <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
                         <MobileSupplierSidebar />
                         <h2 className="hidden sm:block text-xs md:text-sm font-semibold text-slate-400 uppercase tracking-wider">Supplier Portal</h2>
@@ -62,10 +62,8 @@ export default async function SupplierLayout({
                     </div>
                 </header>
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    <PageTransition className="p-4 md:p-8 overflow-y-auto custom-scrollbar">
-                        <div className="flex-1 flex flex-col min-h-0">
-                            {children}
-                        </div>
+                    <PageTransition className="p-4 md:p-8 overflow-y-auto custom-scrollbar flex-1 flex flex-col min-h-0" data-lenis-prevent>
+                        {children}
                     </PageTransition>
                 </div>
             </main>

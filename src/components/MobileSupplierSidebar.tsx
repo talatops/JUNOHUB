@@ -48,14 +48,14 @@ export function MobileSupplierSidebar() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsOpen(false)}
-                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[90] md:hidden"
+                            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] md:hidden"
                         />
                         <motion.div
                             initial={{ x: -288 }}
                             animate={{ x: 0 }}
                             exit={{ x: -288 }}
                             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                            className="fixed left-0 top-0 bottom-0 w-72 bg-slate-900/95 backdrop-blur-xl border-r border-white/10 z-[100] md:hidden overflow-y-auto"
+                            className="fixed left-0 top-0 bottom-0 w-72 bg-slate-900/95 backdrop-blur-xl border-r border-white/10 z-[210] md:hidden overflow-y-auto"
                         >
                             <div className="p-4 flex items-center justify-between border-b border-white/10">
                                 <div className="flex items-center gap-2">
