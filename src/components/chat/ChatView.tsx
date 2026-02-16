@@ -123,6 +123,19 @@ export function ChatView() {
         try {
             setLoadingContacts(true)
             setContactsError(null)
+            // Sync current user's public key to DB so the other party always has our latest key (fixes decrypt when they send to us)
+            const storedPublic = getStoredPublicKey?.() ?? null
+            if (storedPublic) {
+                try {
+                    await fetch("/api/user/chat-setup", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ publicKey: storedPublic })
+                    })
+                } catch {
+                    // Non-blocking; contacts can still load
+                }
+            }
             const res = await fetch("/api/chat/contacts")
             if (res.ok) {
                 const data = await res.json()
@@ -149,29 +162,34 @@ export function ChatView() {
             if (res.ok) {
                 const data = await res.json()
                 const decryptedMessages = await Promise.all(
-                    data.messages.map(async (m: any) => {
-                        try {
-                            const decrypted = await ChatCrypto.decryptMessage(
-                                m.encryptedContent,
-                                m.senderId === contact.id ? m.encryptedKeyForReceiver : m.encryptedKeyForSender,
-                                m.iv,
-                                privateKey
-                            )
-                            return {
-                                id: m.id,
-                                senderId: m.senderId,
-                                receiverId: m.receiverId,
-                                content: decrypted,
-                                createdAt: m.createdAt
+                    data.messages.map(async (m: { id: string; senderId: string; receiverId: string; encryptedContent: string; encryptedKeyForSender: string; encryptedKeyForReceiver: string; iv: string; createdAt: string }) => {
+                        const primaryKey = m.senderId === contact.id ? m.encryptedKeyForReceiver : m.encryptedKeyForSender
+                        const fallbackKey = m.senderId === contact.id ? m.encryptedKeyForSender : m.encryptedKeyForReceiver
+                        for (const keyBlob of [primaryKey, fallbackKey]) {
+                            try {
+                                const decrypted = await ChatCrypto.decryptMessage(
+                                    m.encryptedContent,
+                                    keyBlob,
+                                    m.iv,
+                                    privateKey
+                                )
+                                return {
+                                    id: m.id,
+                                    senderId: m.senderId,
+                                    receiverId: m.receiverId,
+                                    content: decrypted,
+                                    createdAt: m.createdAt
+                                }
+                            } catch {
+                                continue
                             }
-                        } catch (err) {
-                            return {
-                                id: m.id,
-                                senderId: m.senderId,
-                                receiverId: m.receiverId,
-                                content: "[Encrypted Message - Error Decrypting]",
-                                createdAt: m.createdAt
-                            }
+                        }
+                        return {
+                            id: m.id,
+                            senderId: m.senderId,
+                            receiverId: m.receiverId,
+                            content: "[Encrypted Message - Error Decrypting]",
+                            createdAt: m.createdAt
                         }
                     })
                 )

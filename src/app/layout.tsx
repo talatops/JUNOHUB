@@ -17,7 +17,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JUNOHUB | Modern Commerce Infrastructure",
   description: "The world's most advanced encrypted ecosystem for vendors and suppliers.",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=5",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
@@ -31,6 +30,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 5,
 };
 
 import { Providers } from "@/components/providers";
