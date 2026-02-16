@@ -17,6 +17,7 @@ import {
     User
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Image from "next/image"
 
 const steps = [
     { id: 1, title: "Business Info", icon: Building2 },
@@ -319,9 +320,15 @@ export default function OnboardingClient() {
     return (
         <div className="min-h-screen flex flex-col auth-glass-dark">
             <nav className="h-16 md:h-20 bg-slate-900/50 border-b border-white/10 flex items-center px-4 md:px-10 justify-between shrink-0 backdrop-blur-xl">
-                <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-indigo-500/40 border border-white/20 flex items-center justify-center backdrop-blur-sm">
-                        <Layout className="w-4 h-4 md:w-5 md:h-5 text-white" />
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-sm">
+                        <Image
+                            src="/logo.png"
+                            alt="JUNOHUB Logo"
+                            width={48}
+                            height={48}
+                            className="object-cover"
+                        />
                     </div>
                     <span className="font-bold text-white tracking-tight text-lg md:text-xl">JUNOHUB</span>
                 </div>

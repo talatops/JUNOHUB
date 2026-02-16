@@ -2,10 +2,11 @@
 
 import { useState, Suspense } from "react"
 import { motion } from "framer-motion"
-import { Mail, Lock, Loader2, User, ShoppingBag, Truck, Zap } from "lucide-react"
+import { Mail, Lock, Loader2, User, ShoppingBag, Truck } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { signIn } from "next-auth/react"
+import Image from "next/image"
 
 function SignupFormContent() {
     const [loading, setLoading] = useState(false)
@@ -53,8 +54,14 @@ function SignupFormContent() {
         <div className="bg-white/5 backdrop-blur-xl rounded-2xl md:rounded-3xl p-6 md:p-8 border border-white/10">
             <div className="text-center mb-8">
                 <div className="inline-flex items-center justify-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/40 border border-white/20 flex items-center justify-center backdrop-blur-sm">
-                        <Zap className="w-6 h-6 text-white fill-white" />
+                    <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20">
+                        <Image
+                            src="/logo.png"
+                            alt="JUNOHUB Logo"
+                            width={56}
+                            height={56}
+                            className="object-cover"
+                        />
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
                 </div>

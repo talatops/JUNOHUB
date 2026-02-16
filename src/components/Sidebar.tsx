@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/ThemeProvider"
+import Image from "next/image"
 
 const routes = [
     {
@@ -101,10 +102,16 @@ export function Sidebar({ showLogo = true, className }: SidebarProps) {
             {showLogo && (
                 <div className="px-6 py-2 flex items-center mb-6">
                     <div className={cn(
-                        "w-8 h-8 rounded-lg border flex items-center justify-center mr-3 backdrop-blur-sm",
-                        isLight ? "bg-indigo-50 border-indigo-100" : "bg-indigo-500/40 border-white/20"
+                        "w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center mr-3 shadow-md border",
+                        isLight ? "border-slate-200" : "border-white/10"
                     )}>
-                        <Zap className={cn("w-5 h-5", isLight ? "text-indigo-600 fill-indigo-600" : "text-white fill-white")} />
+                        <Image
+                            src="/logo.png"
+                            alt="JUNOHUB Logo"
+                            width={40}
+                            height={40}
+                            className="object-cover"
+                        />
                     </div>
                     <h1 className={cn("text-xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>JUNOHUB</h1>
                 </div>

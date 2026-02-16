@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { motion } from "framer-motion"
-import { Twitter, Github, Linkedin, Mail, Zap } from "lucide-react"
+import { Twitter, Github, Linkedin, Mail } from "lucide-react"
+import Image from "next/image"
 
 export function LandingFooter() {
     return (
@@ -13,9 +14,15 @@ export function LandingFooter() {
             <div className="container mx-auto px-6">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-16">
                     <div className="col-span-1 md:col-span-1">
-                        <Link href="/" className="flex items-center gap-2 mb-6 group">
-                            <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
-                                <Zap className="w-6 h-6 fill-white" />
+                        <Link href="/" className="flex items-center gap-3 mb-6 group">
+                            <div className="w-10 h-10 rounded-xl bg-indigo-600/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
+                                <Image
+                                    src="/logo.png"
+                                    alt="JUNOHUB Logo"
+                                    width={40}
+                                    height={40}
+                                    className="object-cover"
+                                />
                             </div>
                             <span className="text-xl font-black tracking-tighter text-white">JUNOHUB</span>
                         </Link>

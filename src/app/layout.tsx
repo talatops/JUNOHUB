@@ -17,6 +17,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JUNOHUB | Modern Commerce Infrastructure",
   description: "The world's most advanced encrypted ecosystem for vendors and suppliers.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/logo.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
