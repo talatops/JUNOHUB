@@ -18,7 +18,15 @@ export const metadata: Metadata = {
   title: "JUNOHUB | Modern Commerce Infrastructure",
   description: "The world's most advanced encrypted ecosystem for vendors and suppliers.",
   viewport: "width=device-width, initial-scale=1, maximum-scale=5",
-};
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "JUNOHUB",
+  },
+  formatDetection: {
+    telephone: false,
+  },
+}
 
 export const viewport = {
   width: "device-width",
@@ -28,6 +36,7 @@ export const viewport = {
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SmoothScroll } from "@/components/SmoothScroll";
+import { PWARegistration } from "@/components/PWARegistration";
 
 export default function RootLayout({
   children,
@@ -41,6 +50,7 @@ export default function RootLayout({
       >
         <ErrorBoundary>
           <Providers>
+            <PWARegistration />
             <SmoothScroll>
               {children}
             </SmoothScroll>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { sendPushNotification } from "@/lib/push"
 
 export async function POST(req: Request) {
     try {
@@ -25,6 +26,17 @@ export async function POST(req: Request) {
                 iv,
             }
         })
+
+        // Send push notification to receiver
+        try {
+            await sendPushNotification(receiverId, {
+                title: "New Encrypted Message",
+                body: `${session.user.name || "A user"} sent you a secure message.`,
+                url: "/dashboard/chat" // Correct to your chat dashboard path
+            })
+        } catch (pushError) {
+            console.error("Failed to send push notification", pushError)
+        }
 
         return NextResponse.json(message)
     } catch (error) {

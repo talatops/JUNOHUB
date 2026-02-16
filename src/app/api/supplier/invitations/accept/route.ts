@@ -35,7 +35,7 @@ export async function POST(req: Request) {
 
         // Find invitation by token
         // TypeScript may not recognize invitation model due to cache, but it exists at runtime
-        const invitation = await (prisma as any).invitation.findUnique({
+        const invitation = await prisma.invitation.findUnique({
             where: { token: token.toUpperCase() },
             include: {
                 store: {
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
         if (existingConnection) {
             // Mark invitation as used even if connection exists
             // TypeScript may not recognize invitation model due to cache, but it exists at runtime
-            await (prisma as any).invitation.update({
+            await prisma.invitation.update({
                 where: { id: invitation.id },
                 data: { used: true, usedAt: new Date() }
             })

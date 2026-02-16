@@ -45,7 +45,7 @@ export async function DELETE(
             : vendorStores.map(s => s.id)
 
         // Find and delete pending invitations
-        const pendingInvitations = await (prisma as any).invitation.findMany({
+        const pendingInvitations = await prisma.invitation.findMany({
             where: {
                 storeId: { in: storeIdsToCheck },
                 supplierId: supplierId,
@@ -64,9 +64,9 @@ export async function DELETE(
         }
 
         // Delete all pending invitations
-        await (prisma as any).invitation.deleteMany({
+        await prisma.invitation.deleteMany({
             where: {
-                id: { in: pendingInvitations.map((inv: any) => inv.id) }
+                id: { in: pendingInvitations.map((inv) => inv.id) }
             }
         })
 
@@ -148,19 +148,6 @@ export async function POST(
             }
         })
 
-        // Get vendor stores with user info for notifications
-        const vendorStoresWithUser = await prisma.store.findMany({
-            where: {
-                userId: session.user.id,
-                onboardingComplete: true
-            },
-            select: {
-                id: true,
-                businessName: true,
-                userId: true
-            }
-        })
-
         if (!supplierProfile) {
             return NextResponse.json({ message: "Supplier not found" }, { status: 404 })
         }
@@ -182,7 +169,7 @@ export async function POST(
             }
         })
 
-        const existingInvitations = await (prisma as any).invitation.findMany({
+        const existingInvitations = await prisma.invitation.findMany({
             where: {
                 storeId: { in: storeIds },
                 supplierId: supplierProfile.id,
@@ -196,7 +183,7 @@ export async function POST(
         // Filter out stores that already have connections or pending invitations
         const connectedStoreIds = new Set([
             ...existingConnections.map(c => c.storeId),
-            ...existingInvitations.map((i: any) => i.storeId)
+            ...existingInvitations.map((i) => i.storeId)
         ])
 
         const storesToInvite = storesToConnect.filter(store => !connectedStoreIds.has(store.id))
@@ -224,7 +211,7 @@ export async function POST(
             const invitationToken = crypto.randomBytes(32).toString("hex").toUpperCase().slice(0, 16)
 
             try {
-                const invitation = await (prisma as any).invitation.create({
+                const invitation = await prisma.invitation.create({
                     data: {
                         token: invitationToken,
                         storeId: store.id,
