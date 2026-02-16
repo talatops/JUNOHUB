@@ -9,14 +9,10 @@ COPY prisma ./prisma
 # Install ALL dependencies (including devDependencies needed for build)
 RUN npm ci && npx prisma generate
 
-# Copy application code
+# Copy application code (includes .env created in CI from EC2_ENV for NEXT_PUBLIC_* at build time)
 COPY . .
 
-# Build-time env vars (NEXT_PUBLIC_* are embedded into the JS bundle)
-ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
-ENV NEXT_PUBLIC_VAPID_PUBLIC_KEY=$NEXT_PUBLIC_VAPID_PUBLIC_KEY
-
-# Build the Next.js application
+# Build the Next.js application (reads .env and embeds NEXT_PUBLIC_* into the bundle)
 RUN npm run build
 
 # Copy and set up entrypoint script

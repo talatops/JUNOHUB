@@ -27,6 +27,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Next.js embeds NEXT_PUBLIC_* at build time. Create .env from EC2_ENV so the Docker build sees it.
+      - name: Create .env for build
+        run: |
+          cat > .env << 'ENVFILE'
+          ${{ secrets.EC2_ENV }}
+          ENVFILE
+          echo "NEXT_PUBLIC_VAPID_PUBLIC_KEY is set: $(grep -q 'NEXT_PUBLIC_VAPID_PUBLIC_KEY=.' .env && echo yes || echo no)"
+
       - name: Build application image
         uses: docker/build-push-action@v6
         with:
@@ -37,8 +45,6 @@ jobs:
           tags: ${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_VAPID_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
 
       - name: Save application image
         run: |
