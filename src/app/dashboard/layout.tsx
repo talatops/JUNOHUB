@@ -55,9 +55,7 @@ export default async function DashboardLayout({
                     </div>
                     <div className="flex items-center gap-1.5 md:gap-4 shrink-0">
                         <ThemeToggle />
-                        <div className="hidden xs:block">
-                            <NotificationBell />
-                        </div>
+                        <NotificationBell />
                         <div className="hidden sm:flex flex-col text-right">
                             <span className="text-xs font-bold text-white truncate max-w-[120px]">
                                 {session.user?.name || "Vendor User"}

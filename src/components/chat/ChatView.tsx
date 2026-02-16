@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { getSession } from "next-auth/react"
+import { getSession, useSession } from "next-auth/react"
 import { useChatCrypto, PRIVATE_KEY_STORAGE_KEY, PUBLIC_KEY_STORAGE_KEY } from "@/hooks/useChatCrypto"
 import { ChatCrypto } from "@/lib/chat-crypto"
 import { useTheme } from "@/components/ThemeProvider"
@@ -69,7 +69,9 @@ export function ChatView() {
     const isSupplier = pathname.startsWith("/supplier")
     const { theme } = useTheme()
     const isLight = theme === "light"
-    const { hasKeys, loading: cryptoLoading, setupKeys, privateKey, getStoredPublicKey } = useChatCrypto()
+    const { data: session } = useSession()
+    const userId = (session?.user as { id?: string })?.id
+    const { hasKeys, loading: cryptoLoading, setupKeys, privateKey, getStoredPublicKey } = useChatCrypto(userId)
 
     const [contacts, setContacts] = useState<Contact[]>([])
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
@@ -95,6 +97,11 @@ export function ChatView() {
     const handleSetup = async () => {
         try {
             setContactsError(null)
+            // Ensure we have a user id before trying to set up keys
+            if (!userId) {
+                setContactsError("Session not ready. Please refresh the page and try again.")
+                return
+            }
             await setupKeys()
             await getSession()
             fetchContacts()
@@ -106,7 +113,7 @@ export function ChatView() {
 
     // Auto-setup chat keys when user has none (e.g. supplier who just accepted invitation)
     useEffect(() => {
-        if (cryptoLoading || hasKeys || autoSetupAttemptedRef.current) return
+        if (cryptoLoading || hasKeys || autoSetupAttemptedRef.current || !userId) return
         autoSetupAttemptedRef.current = true
         setContactsError(null)
         setupKeys()

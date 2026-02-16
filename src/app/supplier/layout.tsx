@@ -24,19 +24,52 @@ export default async function SupplierLayout({
 
     // Ensure supplier profile exists, create if not
     const { prisma } = await import("@/lib/prisma")
+
+    // Safety guard: make sure the corresponding User row exists in our application database.
+    // This can be missing after a database reset or if auth is backed by a different store.
+    const existingUser = await prisma.user.findUnique({
+        where: { id: session.user.id }
+    })
+
+    if (!existingUser) {
+        await prisma.user.create({
+            data: {
+                id: session.user.id,
+                name: session.user.name,
+                email: session.user.email,
+                image: (session.user as { image?: string | null })?.image ?? null,
+                role: session.user.role,
+            }
+        })
+    }
+
     let supplierProfile = await prisma.supplierProfile.findUnique({
         where: { userId: session.user.id }
     })
 
     if (!supplierProfile) {
-        // Create default supplier profile
-        supplierProfile = await prisma.supplierProfile.create({
-            data: {
-                userId: session.user.id,
-                companyName: session.user.name || "My Company",
-                description: null
+        // Create default supplier profile, but guard against inconsistent data
+        try {
+            supplierProfile = await prisma.supplierProfile.create({
+                data: {
+                    userId: session.user.id,
+                    companyName: session.user.name || "My Company",
+                    description: null
+                }
+            })
+        } catch (error) {
+            if (error && typeof error === "object" && (error as { code?: string }).code === "P2003") {
+                console.error(
+                    "[SUPPLIER_LAYOUT] Failed to create supplier profile due to missing user row",
+                    { userId: session.user.id, error }
+                )
+                // Session says user exists but DB row is missing; surface a clear error instead of looping redirects.
+                throw new Error(
+                    "Your supplier account is missing required data in the database. Please try logging out and back in, or contact support."
+                )
             }
-        })
+            throw error
+        }
     }
 
     return (

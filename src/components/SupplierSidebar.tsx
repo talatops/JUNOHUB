@@ -8,8 +8,8 @@ import {
     ShoppingCart,
     Users,
     Mail,
-    Zap,
 } from "lucide-react"
+import Image from "next/image"
 import { cn } from "@/lib/utils"
 
 const supplierRoutes = [
@@ -45,17 +45,29 @@ const supplierRoutes = [
     },
 ]
 
-export function SupplierSidebar() {
+interface SupplierSidebarProps {
+    showLogo?: boolean
+}
+
+export function SupplierSidebar({ showLogo = true }: SupplierSidebarProps) {
     const pathname = usePathname()
 
     return (
         <div className="space-y-4 py-4 flex flex-col h-full text-white">
-            <div className="px-6 py-2 flex items-center mb-6">
-                <div className="w-8 h-8 rounded-lg bg-indigo-500/40 border border-white/20 flex items-center justify-center mr-3 backdrop-blur-sm">
-                    <Zap className="w-5 h-5 text-white fill-white" />
+            {showLogo && (
+                <div className="px-6 py-2 flex items-center mb-6">
+                    <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center mr-3 shadow-md border border-white/10">
+                        <Image
+                            src="/logo.png"
+                            alt="JUNOHUB Logo"
+                            width={36}
+                            height={36}
+                            className="object-cover"
+                        />
+                    </div>
+                    <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
                 </div>
-                <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
-            </div>
+            )}
             <div className="flex-1 px-3 space-y-1 overflow-y-auto">
                 {supplierRoutes.map((route) => (
                     <Link

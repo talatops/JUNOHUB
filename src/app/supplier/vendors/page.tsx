@@ -437,9 +437,15 @@ function SupplierVendorsContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredConnections.map((connection) => (
-                        <div
+                        <button
                             key={connection.id}
-                            className="bg-white/5 rounded-xl p-6 border border-white/10 hover:border-white/20 transition-colors"
+                            type="button"
+                            onClick={() => {
+                                if (connection.status === "CONNECTED") {
+                                    router.push(`/supplier/vendors/${connection.id}`)
+                                }
+                            }}
+                            className="bg-white/5 rounded-xl p-6 border border-white/10 hover:border-white/20 transition-colors text-left w-full"
                         >
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-2">
@@ -454,7 +460,11 @@ function SupplierVendorsContent() {
                                 </div>
                                 {connection.status !== "PENDING" && (
                                     <button
-                                        onClick={() => handleDelete(connection.id)}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleDelete(connection.id)
+                                        }}
                                         className="p-1 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
                                         title="Remove"
                                     >
@@ -494,14 +504,22 @@ function SupplierVendorsContent() {
                             {connection.status === "PENDING" && (
                                 <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
                                     <button
-                                        onClick={() => handleStatusChange(connection.id, "CONNECTED")}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleStatusChange(connection.id, "CONNECTED")
+                                        }}
                                         className="flex-1 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                     >
                                         <CheckCircle2 className="w-4 h-4" />
                                         Accept
                                     </button>
                                     <button
-                                        onClick={() => handleStatusChange(connection.id, "REJECTED")}
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            handleStatusChange(connection.id, "REJECTED")
+                                        }}
                                         className="flex-1 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                     >
                                         <XCircle className="w-4 h-4" />
@@ -509,7 +527,7 @@ function SupplierVendorsContent() {
                                     </button>
                                 </div>
                             )}
-                        </div>
+                        </button>
                     ))}
                 </div>
             )}

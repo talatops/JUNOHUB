@@ -28,6 +28,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "*.ngrok-free.dev",
       },
+      {
+        protocol: "https",
+        hostname: "junohub-product-images.s3.us-east-1.amazonaws.com",
+      },
     ],
   },
   // Allow ngrok origin for development (fixes cross-origin warnings)

@@ -19,16 +19,40 @@ export function useChatCrypto(userId?: string) {
             setLoading(false)
             return
         }
-        const stored = localStorage.getItem(privateKeyKey)
+
+        const stored = typeof window !== "undefined" ? localStorage.getItem(privateKeyKey) : null
         if (stored) {
             setPrivateKey(stored)
             setHasKeys(true)
-        } else {
-            setPrivateKey(null)
-            setHasKeys(false)
+            setLoading(false)
+            return
         }
-        setLoading(false)
-    }, [userId, privateKeyKey])
+
+        // No local key – try to restore from server backup
+        ; (async () => {
+            try {
+                const res = await fetch("/api/user/chat-key", { cache: "no-store" })
+                if (!res.ok) {
+                    setLoading(false)
+                    return
+                }
+                const data = await res.json()
+                if (data.hasBackup && data.privateKey && typeof window !== "undefined") {
+                    localStorage.setItem(privateKeyKey, data.privateKey as string)
+                    localStorage.setItem(publicKeyKey, (data.publicKey as string | undefined) ?? localStorage.getItem(publicKeyKey) ?? "")
+                    setPrivateKey(data.privateKey as string)
+                    setHasKeys(true)
+                } else {
+                    setPrivateKey(null)
+                    setHasKeys(false)
+                }
+            } catch (error) {
+                console.error("restore chat key failed", error)
+            } finally {
+                setLoading(false)
+            }
+        })()
+    }, [userId, privateKeyKey, publicKeyKey])
 
     const setupKeys = useCallback(async () => {
         if (!userId) throw new Error("User ID required for chat setup")
@@ -44,7 +68,7 @@ export function useChatCrypto(userId?: string) {
             const res = await fetch("/api/user/chat-setup", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ publicKey: keys.publicKey })
+                body: JSON.stringify({ publicKey: keys.publicKey, privateKey: keys.privateKey })
             })
 
             if (!res.ok) throw new Error("Failed to save public key")

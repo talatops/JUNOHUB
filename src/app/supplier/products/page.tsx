@@ -49,6 +49,7 @@ export default function SupplierProductsPage() {
         sku: "",
         imageUrl: ""
     })
+    const [imageFile, setImageFile] = useState<File | null>(null)
     const [submitting, setSubmitting] = useState(false)
 
     useEffect(() => {
@@ -93,6 +94,7 @@ export default function SupplierProductsPage() {
             sku: "",
             imageUrl: ""
         })
+        setImageFile(null)
         setShowModal(true)
     }
 
@@ -105,6 +107,7 @@ export default function SupplierProductsPage() {
             sku: product.sku || "",
             imageUrl: product.imageUrl || ""
         })
+        setImageFile(null)
         setShowModal(true)
     }
 
@@ -144,6 +147,23 @@ export default function SupplierProductsPage() {
                 : "/api/supplier/products"
             const method = editingProduct ? "PUT" : "POST"
 
+            // If a new image file is selected, upload it first to get a URL
+            let finalImageUrl = formData.imageUrl || null
+            if (imageFile) {
+                const fd = new FormData()
+                fd.append("file", imageFile)
+                const uploadRes = await fetch("/api/uploads/supplier-product-image", {
+                    method: "POST",
+                    body: fd
+                })
+                if (!uploadRes.ok) {
+                    const data = await uploadRes.json().catch(() => ({}))
+                    throw new Error(data.message || "Failed to upload image")
+                }
+                const uploadData = await uploadRes.json()
+                finalImageUrl = uploadData.url || null
+            }
+
             const res = await fetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
@@ -152,7 +172,7 @@ export default function SupplierProductsPage() {
                     description: formData.description || null,
                     price: parseFloat(formData.price),
                     sku: formData.sku || null,
-                    imageUrl: formData.imageUrl || null
+                    imageUrl: finalImageUrl
                 })
             })
 
@@ -378,14 +398,31 @@ export default function SupplierProductsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-slate-400 mb-2">Image URL</label>
-                                <input
-                                    type="url"
-                                    value={formData.imageUrl}
-                                    onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
-                                    placeholder="https://example.com/image.jpg"
-                                />
+                                <label className="block text-sm font-medium text-slate-400 mb-2">Product image</label>
+                                <div className="space-y-2">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0] || null
+                                            setImageFile(file)
+                                        }}
+                                        className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-500 file:text-white hover:file:bg-indigo-600"
+                                    />
+                                    <p className="text-xs text-slate-500">
+                                        Optional: you can also paste an external URL instead of uploading.
+                                    </p>
+                                    <input
+                                        type="url"
+                                        value={formData.imageUrl}
+                                        onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                                        className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
+                                        placeholder="https://example.com/image.jpg"
+                                    />
+                                    <p className="text-xs text-slate-500">
+                                        If you upload a file and also provide a URL, the uploaded image will be used.
+                                    </p>
+                                </div>
                             </div>
 
                             <div className="flex gap-3 pt-4">

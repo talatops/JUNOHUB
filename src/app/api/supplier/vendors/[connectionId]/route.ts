@@ -3,6 +3,69 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 
 /**
+ * GET /api/supplier/vendors/[connectionId]
+ * Get a single vendor connection with store details for the authenticated supplier
+ */
+export async function GET(
+    req: Request,
+    { params }: { params: Promise<{ connectionId: string }> }
+) {
+    try {
+        const session = await auth()
+
+        if (!session?.user?.id || session.user.role !== "SUPPLIER") {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+
+        const { connectionId } = await params
+
+        const supplierProfile = await prisma.supplierProfile.findUnique({
+            where: { userId: session.user.id }
+        })
+
+        if (!supplierProfile) {
+            return NextResponse.json({ message: "Supplier profile not found" }, { status: 404 })
+        }
+
+        const connection = await prisma.connection.findFirst({
+            where: {
+                id: connectionId,
+                supplierId: supplierProfile.id
+            },
+            include: {
+                store: {
+                    select: {
+                        id: true,
+                        businessName: true,
+                        shopifyDomain: true,
+                        shopifyStoreName: true,
+                        email: true,
+                        user: {
+                            select: {
+                                name: true,
+                                email: true
+                            }
+                        }
+                    }
+                }
+            }
+        })
+
+        if (!connection) {
+            return NextResponse.json({ message: "Connection not found" }, { status: 404 })
+        }
+
+        return NextResponse.json({ connection })
+    } catch (error) {
+        console.error("Error fetching vendor connection:", error)
+        return NextResponse.json(
+            { message: "Failed to fetch vendor connection" },
+            { status: 500 }
+        )
+    }
+}
+
+/**
  * PUT /api/supplier/vendors/[connectionId]
  * Update connection status (accept/reject)
  */

@@ -27,7 +27,8 @@ model User {
   mfaEnabled    Boolean   @default(false)
   mfaSecret     String?   // Encrypted TOTP secret
   
-  chatPublicKey String?
+  chatPublicKey           String?
+  chatPrivateKeyEncrypted String?   @db.Text
   
   // Relations
   sentMessages     ChatMessage[] @relation("SentMessages")
@@ -110,6 +111,7 @@ model Store {
   syncMetadata     SyncMetadata[]
   invitations      Invitation[]
   productSyncs     ProductSync[]
+  supplierProductOffers SupplierProductOffer[]
   knowledgeDocuments KnowledgeDocument[]
   faqItems        FaqItem[]
   knowledgeChunks KnowledgeChunk[]
@@ -217,6 +219,7 @@ model SupplierProfile {
   products     Product[]
   invitations  Invitation[]
   productSyncs ProductSync[]
+  supplierProductOffers SupplierProductOffer[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -235,6 +238,7 @@ model Connection {
   updatedAt  DateTime @updatedAt
 
   @@unique([storeId, supplierId])
+  supplierProductOffers SupplierProductOffer[]
 }
 
 model Invitation {
@@ -276,6 +280,30 @@ model Product {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  offers      SupplierProductOffer[]
+}
+
+model SupplierProductOffer {
+  id           String   @id @default(cuid())
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storeId      String
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  supplierId   String
+  supplier     SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  price        Float
+  quantity     Int
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([productId, storeId])
+  @@index([storeId])
+  @@index([supplierId])
+  @@index([connectionId])
 }
 
 enum ProductSyncStatus {

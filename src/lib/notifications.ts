@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { sendPushNotification } from "@/lib/push"
 
 // Keep this union in sync with the NotificationType enum in prisma/schema.prisma
 type NotificationType =
@@ -18,6 +19,7 @@ interface CreateNotificationParams {
     title: string
     message: string
     metadata?: Record<string, unknown>
+    url?: string
 }
 
 /**
@@ -28,7 +30,8 @@ export async function createNotification({
     type,
     title,
     message,
-    metadata
+    metadata,
+    url
 }: CreateNotificationParams) {
     try {
         // Use dynamic access to handle environments where the Notification model
@@ -43,6 +46,18 @@ export async function createNotification({
                 metadata: metadata ? metadata : undefined
             }
         })
+
+        // Fire-and-forget push notification for this event, if push is enabled
+        if (url) {
+            sendPushNotification(userId, {
+                title,
+                body: message,
+                url
+            }).catch((error) => {
+                logger.error("Error sending push notification for notification", error)
+            })
+        }
+
         return notification
     } catch (error) {
         logger.error("Error creating notification", error)
@@ -68,7 +83,8 @@ export async function notifyInvitationAccepted(
             connectionId,
             supplierName,
             storeName
-        }
+        },
+        url: "/dashboard/suppliers/my"
     })
 }
 
@@ -90,7 +106,8 @@ export async function notifyInvitationReceived(
             invitationId,
             vendorName,
             storeName
-        }
+        },
+        url: "/supplier/vendors"
     })
 }
 
@@ -115,7 +132,8 @@ export async function notifyConnectionStatusChanged(
             connectionId,
             status,
             otherPartyName
-        }
+        },
+        url: "/dashboard"
     })
 }
 
@@ -137,7 +155,8 @@ export async function notifyProductSyncRequested(
             syncId,
             vendorName,
             productTitle
-        }
+        },
+        url: "/supplier/vendors"
     })
 }
 
@@ -164,6 +183,7 @@ export async function notifyProductSyncStatusChanged(
             supplierName,
             productTitle,
             status
-        }
+        },
+        url: "/dashboard/new-products"
     })
 }

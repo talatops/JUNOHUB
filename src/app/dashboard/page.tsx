@@ -247,7 +247,7 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="h-[250px] md:h-[350px] w-full">
+                <div className="h-[250px] md:h-[350px] w-full min-w-0">
                     {loading ? (
                         <div className="w-full h-full flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
                             <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />

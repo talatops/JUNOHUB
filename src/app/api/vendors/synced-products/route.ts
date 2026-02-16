@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma"
 
 /**
  * GET /api/vendors/synced-products
- * Get all synced products for the vendor (read-only)
- * These are products that vendors have synced with suppliers
+ * Get all products available to the vendor (read-only)
+ * Includes:
+ * - Products that vendors have synced with suppliers (ProductSync ACCEPTED)
+ * - Products that suppliers have provided directly to this vendor (SupplierProductOffer)
  */
 export async function GET() {
     try {
@@ -27,7 +29,7 @@ export async function GET() {
             return NextResponse.json({ products: [] })
         }
 
-        // Get all ACCEPTED product syncs for this store
+        // Get all ACCEPTED product syncs for this store (vendor-initiated)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const acceptedSyncs = await (prisma as any).productSync.findMany({
             where: {
@@ -65,12 +67,70 @@ export async function GET() {
                 },
                 syncedAt: sync.acceptedAt || sync.createdAt,
                 isSynced: true, // Flag to indicate this is a synced product
+                source: "synced",
                 // Include full Shopify product data for reference
                 shopifyData: productData
             }
         })
 
-        return NextResponse.json({ products: syncedProducts })
+        // Get supplier-provided products for this store
+        if (!("supplierProductOffer" in prisma)) {
+            console.error("Prisma Client missing supplierProductOffer model. Run: npx prisma generate")
+            // Return only synced products if SupplierProductOffer model is missing
+            return NextResponse.json({ products: syncedProducts })
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const supplierOffers = await (prisma as any).supplierProductOffer.findMany({
+            where: {
+                storeId: vendorStore.id
+            },
+            include: {
+                product: {
+                    select: {
+                        id: true,
+                        title: true,
+                        description: true,
+                        price: true,
+                        sku: true,
+                        imageUrl: true
+                    }
+                },
+                supplier: {
+                    select: {
+                        id: true,
+                        companyName: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: "desc"
+            }
+        })
+
+        const supplierProducts = supplierOffers.map((offer: any) => ({
+            id: offer.id,
+            syncId: null,
+            shopifyProductId: null,
+            title: offer.product.title,
+            description: offer.product.description,
+            // Store as string for consistency with existing response
+            price: offer.price.toFixed(2),
+            sku: offer.product.sku,
+            imageUrl: offer.product.imageUrl,
+            supplier: {
+                id: offer.supplier.id,
+                companyName: offer.supplier.companyName
+            },
+            syncedAt: offer.createdAt,
+            isSynced: false,
+            source: "supplier_offer",
+            offerQuantity: offer.quantity,
+            offerId: offer.id
+        }))
+
+        const allProducts = [...syncedProducts, ...supplierProducts]
+
+        return NextResponse.json({ products: allProducts })
     } catch (error) {
         console.error("Error fetching synced products:", error)
         return NextResponse.json(
