@@ -26,10 +26,25 @@ export function usePushNotifications() {
             return
         }
 
+        const TIMEOUT_MS = 8000
+
         try {
-            const registration = await navigator.serviceWorker.ready
-            const subscription = await registration.pushManager.getSubscription()
-            setIsSubscribed(!!subscription)
+            // Ensure SW is registered so "ready" can resolve (PWARegistration may not have run yet)
+            if (!navigator.serviceWorker.controller) {
+                navigator.serviceWorker.register('/sw.js').catch(() => {})
+            }
+
+            const registration = await Promise.race([
+                navigator.serviceWorker.ready,
+                new Promise<ServiceWorkerRegistration | null>((resolve) =>
+                    setTimeout(() => resolve(null), TIMEOUT_MS)
+                )
+            ])
+
+            if (registration) {
+                const subscription = await registration.pushManager.getSubscription()
+                setIsSubscribed(!!subscription)
+            }
             setPermission(Notification.permission)
         } catch (error) {
             console.error('Error checking push subscription:', error)
