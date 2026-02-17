@@ -15,8 +15,8 @@ client.connect()
   sleep 1
 done
 
-echo "Running Prisma migrations (migrate deploy)..."
-npx prisma migrate deploy
+echo "Syncing database schema with Prisma (db push)..."
+npx prisma db push --accept-data-loss
 
 if [ "$RUN_TEMPLATE_SEED_ON_START" = "true" ]; then
   echo "Seeding predefined email templates..."
