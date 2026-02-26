@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { sendEmail } from "@/lib/email"
+import { sendEmail, getEmailLogoUrl } from "@/lib/email"
 import { emailSchema } from "@/lib/validation"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { handleApiError } from "@/lib/errors"
@@ -80,6 +80,16 @@ export async function POST(req: Request) {
         <tr>
             <td style="padding: 40px 20px; text-align: center;">
                 <table role="presentation" style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); overflow: hidden;">
+                    <tr>
+                        <td style="padding: 40px 40px 30px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
+                            <div style="text-align: center;">
+                                <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;">
+                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
+                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNOHUB</h1>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
                     <tr>
                         <td style="padding: 40px;">
                             <h2 style="margin: 0 0 16px; font-size: 24px; font-weight: 700; color: #ffffff;">Reset Your Password</h2>

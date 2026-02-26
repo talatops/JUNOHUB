@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "re-embed-knowledge-base": "tsx scripts/re-embed-knowledge-base.ts"
+    "re-embed-knowledge-base": "tsx scripts/re-embed-knowledge-base.ts",
+    "db:reset": "prisma migrate reset",
+    "db:studio": "prisma studio",
+    "db:fix-migration": "tsx scripts/fix-failed-migration.ts"
   },
   "dependencies": {
     "@auth/core": "^0.41.0",

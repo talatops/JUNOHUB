@@ -1,5 +1,11 @@
 import nodemailer from "nodemailer"
 import { logger } from "@/lib/logger"
+import { getBaseUrl } from "@/lib/utils"
+
+/** Returns the absolute URL for the JUNOHUB logo (for use in email templates) */
+export function getEmailLogoUrl(): string {
+    return `${getBaseUrl()}/icon.png`
+}
 
 // Create reusable transporter (only if SMTP is configured)
 function getTransporter() {
@@ -80,11 +86,7 @@ export function generateInvitationEmailHtml(
                         <td style="padding: 40px 40px 30px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
                             <div style="text-align: center;">
                                 <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;">
-                                    <div style="width: 48px; height: 48px; background-color: rgba(79, 70, 229, 0.4); border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.2); display: flex; align-items: center; justify-content: center;">
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: block;">
-                                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="white"/>
-                                        </svg>
-                                    </div>
+                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
                                     <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNOHUB</h1>
                                 </div>
                             </div>

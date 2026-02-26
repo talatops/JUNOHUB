@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { sendEmail } from "@/lib/email"
+import { sendEmail, getEmailLogoUrl } from "@/lib/email"
 import { logger } from "@/lib/logger"
 
 // This is a simple mock-up of a newsletter subscription API
@@ -63,11 +63,7 @@ function generateNewsletterWelcomeHtml(email: string): string {
                         <td style="padding: 50px 40px 30px; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">
                             <div style="text-align: center;">
                                 <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
-                                    <div style="width: 56px; height: 56px; background-color: rgba(255, 255, 255, 0.2); border-radius: 16px; display: inline-block; vertical-align: middle;">
-                                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-top: 12px;">
-                                            <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="white"/>
-                                        </svg>
-                                    </div>
+                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="56" height="56" style="display: block; border-radius: 16px; object-fit: contain;" />
                                     <h1 style="margin: 0; font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -1px; display: inline-block; vertical-align: middle; margin-left: 10px;">JUNOHUB</h1>
                                 </div>
                             </div>
