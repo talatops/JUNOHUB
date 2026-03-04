@@ -25,7 +25,7 @@ export async function POST() {
         const secret = generateSecret()
         
         // Create service name and account name for the QR code
-        const serviceName = process.env.MFA_ISSUER_NAME || "JUNOHUB"
+        const serviceName = process.env.MFA_ISSUER_NAME || "JUNO"
         const accountName = user.email || user.name || "User"
         
         // Generate TOTP URI

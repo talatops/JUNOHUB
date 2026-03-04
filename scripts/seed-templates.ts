@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Seed script for predefined JUNOHUB email templates.
+ * Seed script for predefined JUNO email templates.
  *
  * Usage:
  *   tsx scripts/seed-templates.ts

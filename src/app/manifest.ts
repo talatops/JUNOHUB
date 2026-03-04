@@ -2,8 +2,8 @@ import { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: 'JUNOHUB',
-        short_name: 'JUNOHUB',
+    name: 'JUNO',
+    short_name: 'JUNO',
         description: 'The Unified Supply Chain Hub',
         start_url: '/',
         display: 'standalone',

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
         // and then save it to your 'Newsletter' table.
         // For now, we'll proceed to sending the welcome email.
 
-        const subject = "Welcome to the JUNOHUB Newsletter! ⚡"
+        const subject = "Welcome to the JUNO Newsletter! ⚡"
         const emailHtml = generateNewsletterWelcomeHtml(email)
 
         const result = await sendEmail({
@@ -51,7 +51,7 @@ function generateNewsletterWelcomeHtml(email: string): string {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Welcome to JUNOHUB</title>
+    <title>Welcome to JUNO</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0e1a; color: #ffffff;">
     <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -63,8 +63,8 @@ function generateNewsletterWelcomeHtml(email: string): string {
                         <td style="padding: 50px 40px 30px; background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);">
                             <div style="text-align: center;">
                                 <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 20px;">
-                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="56" height="56" style="display: block; border-radius: 16px; object-fit: contain;" />
-                                    <h1 style="margin: 0; font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -1px; display: inline-block; vertical-align: middle; margin-left: 10px;">JUNOHUB</h1>
+                                    <img src="${getEmailLogoUrl()}" alt="JUNO" width="56" height="56" style="display: block; border-radius: 16px; object-fit: contain;" />
+                                    <h1 style="margin: 0; font-size: 32px; font-weight: 900; color: #ffffff; letter-spacing: -1px; display: inline-block; vertical-align: middle; margin-left: 10px;">JUNO</h1>
                                 </div>
                             </div>
                         </td>
@@ -77,7 +77,7 @@ function generateNewsletterWelcomeHtml(email: string): string {
                                 YOU&apos;RE IN THE LOOP. ⚡
                             </h2>
                             <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #cbd5e1;">
-                                Welcome to the JUNOHUB inner circle. You&apos;ve successfully subscribed to our newsletter.
+                                Welcome to the JUNO inner circle. You&apos;ve successfully subscribed to our newsletter.
                             </p>
                             <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #cbd5e1;">
                                 Get ready for exclusive insights into global supply chain trends, early access to new features, and strategies to scale your commerce ecosystem.
@@ -118,7 +118,7 @@ function generateNewsletterWelcomeHtml(email: string): string {
                                 <a href="#" style="color: #4f46e5; text-decoration: none;">Unsubscribe</a> • <a href="https://app.jurassiq-dev.org/privacy-policy" style="color: #4f46e5; text-decoration: none;">Privacy Policy</a>
                             </p>
                             <p style="margin: 0; font-size: 11px; color: #475569; text-align: center; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
-                                © 2026 JUNOHUB Systems. Powering Modern Commerce.
+                                © 2026 JUNO Systems. Powering Modern Commerce.
                             </p>
                         </td>
                     </tr>

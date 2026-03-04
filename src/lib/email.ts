@@ -2,7 +2,7 @@ import nodemailer from "nodemailer"
 import { logger } from "@/lib/logger"
 import { getBaseUrl } from "@/lib/utils"
 
-/** Returns the absolute URL for the JUNOHUB logo (for use in email templates) */
+/** Returns the absolute URL for the JUNO logo (for use in email templates) */
 export function getEmailLogoUrl(): string {
     return `${getBaseUrl()}/icon.png`
 }
@@ -45,7 +45,7 @@ export async function sendEmail({ to, subject, html }: EmailOptions) {
         }
 
         const info = await transporter.sendMail({
-            from: `"JUNOHUB" <${process.env.SMTP_USER}>`,
+            from: `"JUNO" <${process.env.SMTP_USER}>`,
             to,
             subject,
             html,
@@ -74,7 +74,7 @@ export function generateInvitationEmailHtml(
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Supplier Invitation - JUNOHUB</title>
+    <title>Supplier Invitation - JUNO</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0e1a;">
     <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -86,8 +86,8 @@ export function generateInvitationEmailHtml(
                         <td style="padding: 40px 40px 30px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
                             <div style="text-align: center;">
                                 <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;">
-                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
-                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNOHUB</h1>
+                                    <img src="${getEmailLogoUrl()}" alt="JUNO" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
+                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNO</h1>
                                 </div>
                             </div>
                         </td>
@@ -103,7 +103,7 @@ export function generateInvitationEmailHtml(
                                 Hello ${supplierName || "Supplier"},
                             </p>
                             <p style="margin: 0 0 24px; font-size: 16px; line-height: 1.6; color: #cbd5e1;">
-                                <strong style="color: #ffffff;">${vendorCompanyName}</strong> has invited you to connect on JUNOHUB. They're interested in partnering with you and would like to explore your product catalog.
+                                <strong style="color: #ffffff;">${vendorCompanyName}</strong> has invited you to connect on JUNO. They're interested in partnering with you and would like to explore your product catalog.
                             </p>
                             
                             <!-- Invitation Token Box -->
@@ -145,7 +145,7 @@ export function generateInvitationEmailHtml(
                                 This invitation will expire in 7 days.
                             </p>
                             <p style="margin: 0; font-size: 12px; color: #475569; text-align: center;">
-                                © 2026 JUNOHUB Systems. All rights reserved.
+                                © 2026 JUNO Systems. All rights reserved.
                             </p>
                         </td>
                     </tr>

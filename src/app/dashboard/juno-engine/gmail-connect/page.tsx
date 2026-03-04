@@ -222,7 +222,7 @@ function GmailConnectContent() {
                             </button>
 
                             <p className="text-xs text-slate-500 text-center">
-                                By connecting, you authorize JUNOHUB to access your Gmail account for email management purposes.
+                                By connecting, you authorize JUNO to access your Gmail account for email management purposes.
                             </p>
                         </div>
                     )}

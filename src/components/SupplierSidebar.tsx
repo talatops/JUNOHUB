@@ -59,13 +59,13 @@ export function SupplierSidebar({ showLogo = true }: SupplierSidebarProps) {
                     <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center mr-3 shadow-md border border-white/10">
                         <Image
                             src="/logo.png"
-                            alt="JUNOHUB Logo"
+                            alt="JUNO Logo"
                             width={36}
                             height={36}
                             className="object-cover"
                         />
                     </div>
-                    <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
+                    <h1 className="text-xl font-bold tracking-tight">JUNO</h1>
                 </div>
             )}
             <div className="flex-1 px-3 space-y-1 overflow-y-auto">

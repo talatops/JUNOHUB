@@ -53,6 +53,10 @@ export async function GET(
 
         if (sync) {
             const productData = sync.shopifyProductData || {}
+            const supplierQuantity =
+                typeof productData.supplier_quantity === "number"
+                    ? productData.supplier_quantity
+                    : undefined
             const product = {
                 id: sync.id,
                 syncId: sync.id,
@@ -69,6 +73,7 @@ export async function GET(
                 syncedAt: sync.acceptedAt || sync.createdAt,
                 isSynced: true,
                 source: "synced",
+                offerQuantity: supplierQuantity,
                 shopifyData: productData
             }
 

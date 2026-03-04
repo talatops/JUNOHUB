@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
               Privacy Policy
             </h1>
             <p className="text-sm text-slate-400">
-              This page explains how JUNOHUB collects, uses, and protects your
+              This page explains how JUNO collects, uses, and protects your
               data, including data accessed from connected services such as
               Gmail.
             </p>
@@ -22,7 +22,7 @@ export default function PrivacyPolicyPage() {
                 1. Overview
               </h2>
               <p>
-                JUNOHUB is a dropshipping and e-commerce management platform. We
+                JUNO is a dropshipping and e-commerce management platform. We
                 collect and process only the data necessary to provide and
                 improve our services, operate your account, and integrate with
                 third-party platforms you choose to connect.
@@ -34,7 +34,7 @@ export default function PrivacyPolicyPage() {
                 2. Data We Collect
               </h2>
               <p className="mb-2">
-                When you use JUNOHUB, we may collect the following categories of
+                When you use JUNO, we may collect the following categories of
                 data:
               </p>
               <ul className="list-disc list-inside space-y-1 text-slate-200">
@@ -43,7 +43,7 @@ export default function PrivacyPolicyPage() {
                   Store and order data from your connected e-commerce platforms.
                 </li>
                 <li>
-                  Configuration and usage data related to your JUNOHUB account.
+                  Configuration and usage data related to your JUNO account.
                 </li>
               </ul>
             </section>
@@ -53,9 +53,9 @@ export default function PrivacyPolicyPage() {
                 3. Gmail and Google Data
               </h2>
               <p className="mb-2">
-                If you connect your Gmail account, JUNOHUB will request access
+                If you connect your Gmail account, JUNO will request access
                 to Gmail scopes that allow us to read relevant messages in order
-                to power JUNOHUB&apos;s email and support features.
+                to power JUNO&apos;s email and support features.
               </p>
               <ul className="list-disc list-inside space-y-1 text-slate-200 mb-2">
                 <li>
@@ -67,12 +67,12 @@ export default function PrivacyPolicyPage() {
                   advertising or marketing purposes.
                 </li>
                 <li>
-                  Access to Gmail data is restricted to the JUNOHUB systems that
+                  Access to Gmail data is restricted to the JUNO systems that
                   need it to provide the features you enable.
                 </li>
               </ul>
               <p>
-                You can revoke JUNOHUB&apos;s access to your Google account at
+                You can revoke JUNO&apos;s access to your Google account at
                 any time via your Google Account security settings.
               </p>
             </section>
@@ -83,7 +83,7 @@ export default function PrivacyPolicyPage() {
               </h2>
               <p className="mb-2">We use your data to:</p>
               <ul className="list-disc list-inside space-y-1 text-slate-200">
-                <li>Authenticate you and operate your JUNOHUB account.</li>
+                <li>Authenticate you and operate your JUNO account.</li>
                 <li>
                   Sync and manage products, orders, and inventory with your
                   connected stores.
@@ -93,7 +93,7 @@ export default function PrivacyPolicyPage() {
                   features.
                 </li>
                 <li>
-                  Improve the reliability, security, and performance of JUNOHUB.
+                  Improve the reliability, security, and performance of JUNO.
                 </li>
               </ul>
             </section>
@@ -133,20 +133,20 @@ export default function PrivacyPolicyPage() {
               <p>
                 If you have questions about this Privacy Policy or our data
                 practices, please contact us using the support email provided in
-                your JUNOHUB account or documentation.
+                your JUNO account or documentation.
               </p>
             </section>
 
             <section className="pt-4 border-t border-white/10 mt-6 text-xs text-slate-400">
               <p>
                 This Privacy Policy is provided for informational purposes and
-                may be updated from time to time as JUNOHUB evolves.
+                may be updated from time to time as JUNO evolves.
               </p>
             </section>
           </div>
 
           <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <span>JUNOHUB Systems &copy; {new Date().getFullYear()}</span>
+            <span>JUNO Systems &copy; {new Date().getFullYear()}</span>
             <div className="flex items-center gap-4">
               <Link
                 href="/terms-of-service"

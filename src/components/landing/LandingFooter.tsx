@@ -18,13 +18,13 @@ export function LandingFooter() {
                             <div className="w-10 h-10 rounded-xl bg-indigo-600/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
                                 <Image
                                     src="/logo.png"
-                                    alt="JUNOHUB Logo"
+                                    alt="JUNO Logo"
                                     width={40}
                                     height={40}
                                     className="object-cover"
                                 />
                             </div>
-                            <span className="text-xl font-black tracking-tighter text-white">JUNOHUB</span>
+                            <span className="text-xl font-black tracking-titter text-white">JUNO</span>
                         </Link>
                         <p className="text-slate-300 font-medium mb-8">
                             The next generation of supply chain connectivity. Secure, encrypted, and real-time.
@@ -133,7 +133,7 @@ export function LandingFooter() {
 
                 <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-slate-400 font-medium">
-                        © 2026 JUNOHUB. All rights reserved.
+                        © 2026 JUNO. All rights reserved.
                     </p>
                     <div className="flex items-center gap-6">
                         <Link href="/terms-of-service" className="text-xs text-slate-400 hover:text-indigo-300 font-bold uppercase tracking-widest">Terms</Link>

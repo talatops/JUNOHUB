@@ -97,7 +97,7 @@ export function MobileSidebar() {
                                         )}>
                                             <Image
                                                 src="/logo.png"
-                                                alt="JUNOHUB Logo"
+                                                alt="JUNO Logo"
                                                 width={36}
                                                 height={36}
                                                 className="object-cover"
@@ -106,7 +106,7 @@ export function MobileSidebar() {
                                         <h1 className={cn(
                                             "text-xl font-bold tracking-tight",
                                             isLight ? "text-slate-900" : "text-white"
-                                        )}>JUNOHUB</h1>
+                                        )}>JUNO</h1>
                                     </div>
                                     <button
                                         onClick={() => setIsOpen(false)}

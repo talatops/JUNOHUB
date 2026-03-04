@@ -33,7 +33,7 @@ export default function CookiesPage() {
                         <section>
                             <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-4">2. How we use cookies</h2>
                             <p>
-                                JUNOHUB uses cookies to:
+                                JUNO uses cookies to:
                             </p>
                             <ul className="list-disc pl-6 space-y-2">
                                 <li>Keep you signed in during your session.</li>

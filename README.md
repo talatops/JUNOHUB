@@ -1,28 +1,267 @@
-## JUNOHUB
+## JUNO
 
-JUNOHUB is a Next.js application that powers an admin and supplier portal with:
+![JUNO logo](./public/icon.png)
 
-- Authentication and multi-factor auth
-- Gmail integration for support tickets (Juno Engine)
-- Shopify integration for orders, products, and inventory
-- Knowledge base and FAQ management
-- Admin dashboards for stores, suppliers, and email events
+**Tech stack:** ⚛️ Next.js · 💙 TypeScript · 🐘 PostgreSQL · ☁️ AWS Bedrock · 📬 Gmail API · 🐳 Docker · 🔐 NextAuth
 
-The frontend and backend are implemented in a single Next.js App Router project.
+Modern commerce and support infrastructure for Shopify‑based dropshipping businesses. 🚀
+
+JUNO is a full‑stack Next.js application that powers:
+
+- A **Vendor Portal** for Shopify merchants
+- A **Supplier Portal** for product providers
+- An **Admin view** for operations
+- An AI‑powered helpdesk and knowledge engine called **JUNOCHAT / Juno Engine**
+
+Everything runs inside a single Next.js App Router project (frontend + backend + background jobs).
 
 ---
 
-## Tech Stack
+## Table of Contents
+
+1. [High‑Level Overview](#high-level-overview)
+2. [Core Features](#core-features)
+   - [Vendor Portal](#vendor-portal)
+   - [Supplier Portal](#supplier-portal)
+   - [Admin / Ops](#admin--ops)
+   - [JUNOCHAT (AI Helpdesk)](#junochat-ai-helpdesk)
+3. [Architecture & Tech Stack](#architecture--tech-stack)
+4. [Problems & Solutions](#problems--solutions)
+5. [Future Enhancements](#future-enhancements)
+   - [JUNOCHAT & AI](#future-enhancements-for-junochat--ai)
+6. [Local Development](#local-development)
+7. [Docker & Deployment](#docker--deployment)
+8. [AWS Bedrock & AI Setup](#aws-bedrock--ai-setup)
+9. [Prisma & Database](#prisma--database)
+10. [License](#license)
+
+---
+
+## High‑Level Overview
+
+JUNO centralizes communication and operations between **vendors** (Shopify stores) and **suppliers**:
+
+- Vendors can:
+  - Connect Shopify stores and sync products.
+  - Receive products and price offers from suppliers.
+  - See new products in a clean, auto‑refreshing **New Products** view.
+  - Get notifications when suppliers change prices or withdraw products.
+
+- Suppliers can:
+  - Manage their product catalog with images and pricing.
+  - Accept product sync requests from vendors.
+  - Provide products and custom pricing per vendor.
+  - Edit synced product price/quantity **per vendor** with inline controls.
+
+- Both sides are supported by:
+  - **JUNOCHAT** – an AI assistant powered by AWS Bedrock (Titan + Claude) that can answer questions based on the knowledge base and FAQs.
+  - A **Juno Engine** area for Gmail and ticketing workflows.
+
+---
+
+## Core Features
+
+### Vendor Portal
+
+- **Shopify connections**
+  - Connect one or more Shopify stores to JUNO.
+  - Webhooks keep orders, inventory, and products in sync.
+
+- **New Products**
+  - Consolidated list of:
+    - Products vendors requested and had **synced** by suppliers.
+    - Products **provided directly** by suppliers via offers.
+  - Clean row‑based layout (no heavy cards) that:
+    - Auto‑refreshes in the background on an interval and when the tab becomes visible.
+    - Avoids UI flicker by only updating when data actually changes.
+  - Product detail sheet with:
+    - Price
+    - Supplier
+    - Optional quantity/amount
+    - Description and image
+  - Clicking outside the detail closes it (no need to aim at a tiny “X”).
+
+- **Suppliers Directory**
+  - Discover global suppliers.
+  - Send connection invitations.
+  - Track connection status (PENDING / CONNECTED / REJECTED).
+
+- **Notifications**
+  - Vendors are notified when:
+    - A supplier accepts a product sync request.
+    - A supplier provides a new product.
+    - A supplier updates the price or quantity of an offered/synced product.
+
+### Supplier Portal
+
+- **Vendor Connections**
+  - Accept invitations using secure tokens.
+  - See all connected vendors with status filters.
+  - Accept / reject product sync requests from vendors with a dedicated panel.
+
+- **Synced Products Per Vendor**
+  - For each vendor, suppliers see a **synced products** block:
+    - Compact, scrollable list for large catalogs.
+    - Shows image, title, SKU, description.
+    - Inline edit controls for:
+      - **Price** (for that vendor)
+      - **Available amount / quantity** (for that vendor)
+  - Updates flow through `ProductSync` so the vendor’s New Products view reflects the new price/amount.
+
+- **Provided Products (Offers)**
+  - Suppliers can:
+    - Select products from their catalog.
+    - Specify **per‑vendor price** and **total quantity**.
+    - See all offers in a tidy list with image, SKU, and timestamps.
+  - **Edit offer**:
+    - Opens a modal (no page jump) to change price and quantity.
+    - Sends a notification to the vendor about the update.
+  - **Withdraw offer**:
+    - Opens a custom confirmation dialog:
+      - “You are about to withdraw *{productName}* from *{vendorName}*…”
+    - On confirm, removes the offer and the product disappears from the vendor’s New Products list.
+
+- **Products Catalog**
+  - Manage own products (create/update/delete).
+  - Upload images via:
+    - S3 in hosted environments, or
+    - Local `public/uploads` in pure local dev.
+  - Safeguards:
+    - Synced products from vendors are **editable but not deletable**.
+    - UI labels clarify when a product is “Synced” and where it came from.
+
+### Admin / Ops
+
+- Admin page with an overview of:
+  - Stores
+  - Vendors
+  - Suppliers
+  - Juno Engine activity
+
+- Email‑centric ops:
+  - Gmail polling and webhook endpoints.
+  - Email logs and templates.
+  - MFA setup, notifications, and account hygiene flows.
+
+### JUNOCHAT (AI Helpdesk)
+
+JUNOCHAT (a.k.a. Juno Engine chat) is the AI layer that:
+
+- Uses **AWS Bedrock**:
+  - **Amazon Titan Text Embeddings V2** for vector embeddings.
+  - **Anthropic Claude 3 Haiku** for chat and knowledge‑base answers.
+- Supports:
+  - FAQ ingestion and retrieval.
+  - Knowledge document upload + chunking.
+  - RAG‑style responses for store‑specific questions (orders, products, policies, etc.).
+- Integrates with the rest of JUNO:
+  - Can respond based on vendor/supplier context.
+  - Ties into the Juno Engine Gmail / ticketing workflow so AI can assist with replies.
+
+---
+
+## Future Enhancements
+
+### Future Enhancements for JUNOCHAT & AI
+
+- **Deeper Shopify awareness**
+  - Let JUNOCHAT answer questions like:
+    - “Which supplier provides the top‑selling items in the last 30 days?”
+    - “What is the margin per vendor on synced products?”
+
+- **Multi‑channel support**
+  - Extend Juno Engine beyond Gmail:
+    - WhatsApp / SMS
+    - Messenger / Instagram DMs
+    - Shopify Inbox
+
+- **Active suggestion engine**
+  - Use embeddings + usage data to:
+    - Suggest products suppliers should offer to specific vendors.
+    - Recommend pricing bands per market/region.
+
+- **Self‑service playbooks**
+  - Let admins define reusable “AI playbooks”, e.g.:
+    - “Handle delayed shipment” flow.
+    - “Out‑of‑stock product” flow.
+  - JUNOCHAT would follow these playbooks when generating replies.
+
+---
+
+## Architecture & Tech Stack
 
 - **Framework**: Next.js (App Router, TypeScript)
-- **UI**: React + modern Tailwind-style components
+- **UI**: React + Tailwind‑style utility classes
 - **Auth**: NextAuth
-- **Database**: PostgreSQL (Prisma ORM)
+- **Database**: PostgreSQL via Prisma ORM
 - **Background / Integrations**:
-  - Gmail APIs (via OAuth)
-  - Shopify APIs
-  - AWS Bedrock for embeddings and chat (Titan Text Embeddings V2 + Claude 3 Haiku)
+  - Gmail APIs (OAuth)
+  - Shopify APIs (orders, products, inventory)
+  - AWS Bedrock (Titan embeddings + Claude 3 Haiku chat)
 - **Deployment**: Docker + GitHub Actions → AWS EC2
+
+---
+
+## Problems & Solutions
+
+### 1. Dropshipping is glued together with spreadsheets and chats 😵‍💫
+
+**Typical Shopify dropshipping today:**
+
+- Vendors discover suppliers in WhatsApp groups, email threads, or random marketplaces.
+- Product info, pricing, and availability live in:
+  - Google Sheets
+  - Excel files
+  - Long chat histories and voice notes
+- When something changes (price increases, product discontinued), it’s easy to miss and very hard to trace.
+
+**How JUNO helps:**
+
+- Formal **connections** between Shopify stores and suppliers.
+- Structured models (`ProductSync`, `SupplierProductOffer`) instead of ad‑hoc spreadsheets.
+- Every new product or change becomes:
+  - A record in the database.
+  - A visible entry in the **New Products** list.
+  - A notification to the affected party (vendor or supplier).
+
+👉 Result: less “Did you see my message?” and more “The system already updated this.”  
+
+### 2. No single source of truth for cost, price, and margin per vendor 💸
+
+**In a typical Shopify setup:**
+
+- Supplier sends a Google Sheet with “latest prices”.
+- Vendor copies that into Shopify, maybe with manual mark‑ups.
+- If the supplier changes cost for **one** vendor, everyone else may still see old prices.
+- Nobody is sure what the **current agreed cost** is for a given product/vendor pair.
+
+**How JUNO helps:**
+
+- Suppliers manage **per‑vendor offers** directly in the Supplier Portal:
+  - Price and quantity are editable inline.
+  - Synced products from vendors can be overridden per store.
+- Vendors see the resulting price and available amount in one place:
+  - The **New Products** page, refreshed in the background.
+  - Notifications whenever suppliers change price/quantity.
+
+👉 Result: vendors always see the latest cost per product per supplier, and suppliers stay in control of what each partner gets.  
+
+### 3. Operational noise across email, tickets, and knowledge 💬
+
+**Pain today:**
+
+- Support lives in Gmail, while operations live in Shopify, and documentation is buried in Notion/Docs.
+- Agents manually copy/paste order IDs, tracking links, and policy snippets into replies.
+- Repeated questions (“Where is my order?”, “What’s your return policy?”) steal time from real issues.
+
+**How JUNO helps:**
+
+- **JUNOCHAT + Juno Engine**:
+  - Ingest FAQs and internal docs into a vectorized knowledge base (via Bedrock embeddings).
+  - Answer questions using **RAG** against that knowledge.
+  - Integrate with Gmail so tickets and AI context live in the same place.
+
+👉 Result: fewer repetitive replies, faster accurate responses, and a single surface for “what we know” + “what customers ask”.  
 
 ---
 
@@ -66,7 +305,7 @@ Visit `http://localhost:3000` in your browser.
 
 ---
 
-## Docker
+## Docker & Deployment
 
 The project can be run via Docker using the provided `Dockerfile` and `docker-compose.yml`.
 
@@ -78,9 +317,7 @@ docker compose up -d --build
 
 Make sure your `.env` is present next to the app code so the container can read it.
 
----
-
-## CI/CD on AWS EC2
+### CI/CD on AWS EC2
 
 This repo includes a GitHub Actions workflow at `.github/workflows/deploy-ec2.yml` that:
 
@@ -91,7 +328,7 @@ This repo includes a GitHub Actions workflow at `.github/workflows/deploy-ec2.ym
 5. Uses `docker compose` / `docker-compose` to build and run the app.
 6. Performs a health check and **automatically rolls back** to the previous commit if the deployment or health check fails.
 
-### Required GitHub Secrets
+#### Required GitHub Secrets
 
 Set the following secrets in **GitHub → Settings → Secrets and variables → Actions**:
 
@@ -102,7 +339,7 @@ Set the following secrets in **GitHub → Settings → Secrets and variables →
 - `EC2_ENV` – **multi-line secret containing the full contents of the `.env` file** used in production.  
   This is written to `.env` on the server during deployment.
 
-### Deployment Flow
+#### Deployment Flow
 
 - Push to `main`.
 - GitHub Actions:
@@ -119,28 +356,23 @@ This gives you a sharp deployment with an automatic rollback path.
 
 ---
 
-## AWS Bedrock Setup
+## AWS Bedrock & AI Setup
 
-The knowledge base feature uses AWS Bedrock for AI-powered embeddings and chat completion.
+The knowledge base and JUNOCHAT features use AWS Bedrock for AI‑powered embeddings and chat completion.
 
 ### Prerequisites
 
-1. **AWS Account**: Create an account at https://aws.amazon.com/
+1. **AWS Account**: Create an account at `https://aws.amazon.com/`
 2. **Enable Bedrock Access**: 
-   - Go to https://console.aws.amazon.com/bedrock/
-   - Navigate to "Model access" in the left sidebar
+   - Go to `https://console.aws.amazon.com/bedrock/`
+   - Navigate to **Model access**
    - Request access to:
      - **Amazon Titan Text Embeddings V2** (for embeddings)
      - **Anthropic Claude 3 Haiku** (for chat completion)
-   - Wait for approval (usually instant for Titan, may take a few hours for Claude)
 
 ### IAM Setup
 
 Create an IAM user or role with Bedrock permissions:
-
-1. Go to IAM Console → Users (or Roles)
-2. Create a new user/role or select existing
-3. Attach the following policy (or create a custom policy):
 
 ```json
 {
@@ -158,16 +390,7 @@ Create an IAM user or role with Bedrock permissions:
 }
 ```
 
-4. **Create Access Keys** (for IAM user):
-   - Go to Security credentials tab
-   - Click "Create access key"
-   - Choose "Application running outside AWS" or "EC2" depending on your deployment
-   - Copy the Access Key ID and Secret Access Key
-   - Add these to your `.env` file
-
-### Environment Variables
-
-Add to your `.env` file:
+Create access keys for that user and add them to `.env`:
 
 ```bash
 AWS_ACCESS_KEY_ID="your-access-key-id"
@@ -175,60 +398,38 @@ AWS_SECRET_ACCESS_KEY="your-secret-access-key"
 AWS_REGION="us-east-1"  # or your preferred region
 ```
 
-### Database Migration
+### Database Migration & Re‑Embedding
 
-After setting up AWS Bedrock, you need to migrate existing embeddings:
+After setting up AWS Bedrock:
 
-1. **Run the database migration** to change embedding dimensions from 1536 to 1024:
-   ```bash
-   npx prisma migrate deploy
-   ```
-
-2. **Re-embed existing knowledge base data**:
-   ```bash
-   npm run re-embed-knowledge-base
-   ```
-   
-   This script will:
-   - Read all existing `KnowledgeChunk` records
-   - Generate new 1024-dimension embeddings using Bedrock Titan V2
-   - Update the database with new embeddings
-   - Process in batches to avoid rate limiting
-
-### Models Used
-
-- **Embeddings**: Amazon Titan Text Embeddings V2 (`amazon.titan-embed-text-v2:0`)
-  - Output dimension: 1024 (configurable: 256, 512, or 1024)
-  - Used for: FAQ embeddings, document chunk embeddings, query embeddings
-
-- **Chat**: Anthropic Claude 3 Haiku (`anthropic.claude-3-haiku-20240307-v1:0`)
-  - Used for: RAG (Retrieval-Augmented Generation) query responses
-  - Fast and cost-effective for knowledge base Q&A
-
-### Optional: Override Models
-
-You can override the default models via environment variables:
+1. Apply Prisma migrations:
 
 ```bash
-BEDROCK_EMBEDDING_MODEL="amazon.titan-embed-text-v2:0"
-BEDROCK_CHAT_MODEL="anthropic.claude-3-haiku-20240307-v1:0"
+npx prisma migrate deploy
 ```
 
-### Prisma:
+2. Re‑embed existing knowledge base data:
 
-If you want to visualize the database:
+```bash
+npm run re-embed-knowledge-base
 ```
+
+This script:
+
+- Reads all existing `KnowledgeChunk` records.
+- Generates new embeddings using Titan V2.
+- Updates the database in batches to avoid rate limiting.
+
+---
+
+## Prisma & Database
+
+To inspect the database locally:
+
+```bash
 export DATABASE_URL='<YOUR_DB_URL>'
 npx prisma studio
 ```
-
-
-### Troubleshooting
-
-- **"Access Denied" errors**: Ensure Bedrock model access is enabled in AWS Console
-- **"Invalid credentials"**: Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are correct
-- **"Model not found"**: Check that you've requested access to the models in Bedrock Console
-- **Re-embedding fails**: Ensure AWS credentials are set and Bedrock access is enabled
 
 ---
 

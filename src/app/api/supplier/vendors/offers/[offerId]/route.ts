@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { createNotification } from "@/lib/notifications"
 
 /**
  * PUT /api/supplier/vendors/offers/[offerId]
@@ -65,6 +66,20 @@ export async function PUT(
             where: {
                 id: offerId,
                 supplierId: supplierProfile.id
+            },
+            include: {
+                store: {
+                    select: {
+                        id: true,
+                        businessName: true,
+                        userId: true
+                    }
+                },
+                product: {
+                    select: {
+                        title: true
+                    }
+                }
             }
         })
 
@@ -80,6 +95,29 @@ export async function PUT(
                 ...(quantity !== undefined ? { quantity } : {})
             }
         })
+
+        // Notify vendor that this offer has been updated
+        try {
+            if (existingOffer.store?.userId) {
+                await createNotification({
+                    userId: existingOffer.store.userId,
+                    type: "PRODUCT_UPDATED",
+                    title: "Supplier updated product",
+                    message: `${supplierProfile.companyName} updated the price or quantity for "${existingOffer.product.title}".`,
+                    metadata: {
+                        offerId,
+                        storeId: existingOffer.store.id,
+                        supplierId: supplierProfile.id
+                    },
+                    url: "/dashboard/new-products"
+                })
+            }
+        } catch (notifError) {
+            console.error(
+                "Error creating notification for supplier product offer update:",
+                notifError
+            )
+        }
 
         return NextResponse.json({
             message: "Offer updated successfully",

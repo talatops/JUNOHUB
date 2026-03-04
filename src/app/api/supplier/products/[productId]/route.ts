@@ -18,7 +18,7 @@ export async function PUT(
         }
 
         const { productId } = await params
-        const { title, description, price, sku, imageUrl } = await req.json()
+        const { title, description, price, sku, imageUrl, quantity } = await req.json()
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({
@@ -40,6 +40,13 @@ export async function PUT(
                 include: {
                     supplier: {
                         select: { id: true }
+                    },
+                    store: {
+                        select: {
+                            id: true,
+                            businessName: true,
+                            userId: true
+                        }
                     }
                 }
             })
@@ -48,7 +55,7 @@ export async function PUT(
                 return NextResponse.json({ message: "Synced product not found" }, { status: 404 })
             }
 
-            // Update the shopifyProductData with new values
+            // Update the shopifyProductData with new values (including optional supplier-specific quantity)
             const updatedData = {
                 ...(productSync.shopifyProductData || {}),
                 title: title || productSync.shopifyProductTitle,
@@ -58,17 +65,42 @@ export async function PUT(
                     price: idx === 0 && price !== undefined ? price.toString() : v.price,
                     sku: idx === 0 && sku !== undefined ? sku : v.sku
                 })) || [],
-                image: imageUrl ? { src: imageUrl } : productSync.shopifyProductData?.image
+                image: imageUrl ? { src: imageUrl } : productSync.shopifyProductData?.image,
+                supplier_quantity:
+                    quantity !== undefined
+                        ? quantity
+                        : productSync.shopifyProductData?.supplier_quantity
             }
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            await (prisma as any).productSync.update({
+            const updatedSync = await (prisma as any).productSync.update({
                 where: { id: syncId },
                 data: {
                     shopifyProductTitle: title || productSync.shopifyProductTitle,
                     shopifyProductData: updatedData
                 }
             })
+
+            // Notify the vendor that the supplier updated this synced product
+            try {
+                if (productSync.store?.userId) {
+                    const { createNotification } = await import("@/lib/notifications")
+                    await createNotification({
+                        userId: productSync.store.userId,
+                        type: "PRODUCT_UPDATED",
+                        title: "Supplier updated product",
+                        message: `${supplierProfile.companyName} updated the price or amount for "${title || productSync.shopifyProductTitle}".`,
+                        metadata: {
+                            syncId,
+                            storeId: productSync.store.id,
+                            supplierId: supplierProfile.id
+                        },
+                        url: "/dashboard/new-products"
+                    })
+                }
+            } catch (notifError) {
+                console.error("Error creating notification for synced product update:", notifError)
+            }
 
             return NextResponse.json({
                 message: "Synced product updated successfully",
@@ -77,9 +109,10 @@ export async function PUT(
                     syncId,
                     title: title || productSync.shopifyProductTitle,
                     description,
-                    price: parseFloat(price || "0"),
+                    price: price !== undefined ? parseFloat(price) : parseFloat(updatedData.variants?.[0]?.price || "0"),
                     sku,
                     imageUrl,
+                    availableQuantity: updatedData.supplier_quantity,
                     isSynced: true
                 }
             })

@@ -74,7 +74,7 @@ export default function PlatformPage() {
                         transition={{ delay: 0.2 }}
                         className="max-w-2xl mx-auto text-xl text-slate-400 font-medium"
                     >
-                        JUNOHUB isn&apos;t just an app—it&apos;s a high-performance infrastructure designed to power
+                        JUNO isn&apos;t just an app—it&apos;s a high-performance infrastructure designed to power
                         the world&apos;s most ambitious supply chains.
                     </motion.p>
                 </section>

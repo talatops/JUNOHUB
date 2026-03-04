@@ -91,7 +91,7 @@ export default function TicketsPage() {
                 <div>
                     <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Tickets</h1>
                     <p className="text-sm md:text-base text-slate-400 mt-1">
-                        View conversations between your customers and JUNOHUB support.
+                        View conversations between your customers and JUNO support.
                     </p>
                 </div>
                 <div className="flex gap-2">

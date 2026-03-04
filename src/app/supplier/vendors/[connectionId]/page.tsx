@@ -15,6 +15,8 @@ import {
     Trash2
 } from "lucide-react"
 import Image from "next/image"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 interface StoreSummary {
     id: string
@@ -63,7 +65,15 @@ interface SupplierProduct {
     price: number
     sku: string | null
     imageUrl: string | null
+    // Flags and metadata for synced products from vendors
     isSynced?: boolean
+    syncId?: string
+    shopifyProductId?: string | null
+    vendor?: {
+        id: string
+        businessName: string
+    } | null
+    availableQuantity?: number
 }
 
 export default function SupplierVendorDetailPage() {
@@ -78,11 +88,24 @@ export default function SupplierVendorDetailPage() {
 
     const [showProvideModal, setShowProvideModal] = useState(false)
     const [products, setProducts] = useState<SupplierProduct[]>([])
+    const [syncedProducts, setSyncedProducts] = useState<SupplierProduct[]>([])
     const [productsLoading, setProductsLoading] = useState(false)
     const [selectedProductId, setSelectedProductId] = useState<string>("")
     const [priceInput, setPriceInput] = useState<string>("")
     const [quantityInput, setQuantityInput] = useState<string>("")
     const [submittingOffer, setSubmittingOffer] = useState(false)
+
+    const [editingSyncedId, setEditingSyncedId] = useState<string>("")
+    const [syncedPriceInput, setSyncedPriceInput] = useState<string>("")
+    const [syncedQuantityInput, setSyncedQuantityInput] = useState<string>("")
+    const [updatingSynced, setUpdatingSynced] = useState(false)
+    const [editingOffer, setEditingOffer] = useState<Offer | null>(null)
+    const [editOfferPrice, setEditOfferPrice] = useState<string>("")
+    const [editOfferQuantity, setEditOfferQuantity] = useState<string>("")
+    const [updatingOffer, setUpdatingOffer] = useState(false)
+    const [withdrawingOffer, setWithdrawingOffer] = useState<Offer | null>(null)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     const connectionId = params?.connectionId
 
@@ -110,9 +133,10 @@ export default function SupplierVendorDetailPage() {
             setLoading(true)
             setError("")
 
-            const [connRes, offersRes] = await Promise.all([
+            const [connRes, offersRes, productsRes] = await Promise.all([
                 fetch(`/api/supplier/vendors/${connectionId}`),
-                fetch(`/api/supplier/vendors/${connectionId}/offers`)
+                fetch(`/api/supplier/vendors/${connectionId}/offers`),
+                fetch("/api/supplier/products")
             ])
 
             if (!connRes.ok) {
@@ -128,6 +152,23 @@ export default function SupplierVendorDetailPage() {
                 setOffers(offersData.offers || [])
             } else {
                 setOffers([])
+            }
+
+            // Load synced products for this specific vendor (store)
+            if (productsRes.ok) {
+                const productsData = await productsRes.json()
+                const allProducts: SupplierProduct[] = productsData.products || []
+                const storeId = connData.connection?.store?.id
+                if (storeId) {
+                    const syncedForVendor = allProducts.filter(
+                        (p) => p.isSynced && p.vendor && p.vendor.id === storeId
+                    )
+                    setSyncedProducts(syncedForVendor)
+                } else {
+                    setSyncedProducts([])
+                }
+            } else {
+                setSyncedProducts([])
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load vendor")
@@ -210,11 +251,29 @@ export default function SupplierVendorDetailPage() {
         }
     }
 
-    const handleUpdateOffer = async (offerId: string, price: number, quantity: number) => {
+    const openEditOfferModal = (offer: Offer) => {
+        setEditingOffer(offer)
+        setEditOfferPrice(offer.price.toString())
+        setEditOfferQuantity(offer.quantity.toString())
+        setError("")
+        setSuccess("")
+    }
+
+    const handleUpdateOffer = async () => {
+        if (!editingOffer) return
+        const price = parseFloat(editOfferPrice)
+        const quantity = parseInt(editOfferQuantity, 10)
+
+        if (Number.isNaN(price) || price < 0 || Number.isNaN(quantity) || quantity <= 0) {
+            setError("Please enter a valid non-negative price and quantity greater than zero")
+            return
+        }
+
+        setUpdatingOffer(true)
         setError("")
         setSuccess("")
         try {
-            const res = await fetch(`/api/supplier/vendors/offers/${offerId}`, {
+            const res = await fetch(`/api/supplier/vendors/offers/${editingOffer.id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ price, quantity })
@@ -224,19 +283,28 @@ export default function SupplierVendorDetailPage() {
                 throw new Error(data.message || "Failed to update offer")
             }
             setSuccess(data.message || "Offer updated successfully")
+            setEditingOffer(null)
             fetchData()
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to update offer")
+        } finally {
+            setUpdatingOffer(false)
         }
     }
 
-    const handleWithdrawOffer = async (offerId: string) => {
-        if (!confirm("Are you sure you want to withdraw this product from the vendor?")) return
+    const handleWithdrawOffer = (offer: Offer) => {
+        setWithdrawingOffer(offer)
+        setError("")
+        setSuccess("")
+    }
+
+    const handleConfirmWithdraw = async () => {
+        if (!withdrawingOffer) return
         setError("")
         setSuccess("")
 
         try {
-            const res = await fetch(`/api/supplier/vendors/offers/${offerId}`, {
+            const res = await fetch(`/api/supplier/vendors/offers/${withdrawingOffer.id}`, {
                 method: "DELETE"
             })
             const data = await res.json().catch(() => ({}))
@@ -244,9 +312,82 @@ export default function SupplierVendorDetailPage() {
                 throw new Error(data.message || "Failed to withdraw offer")
             }
             setSuccess(data.message || "Offer withdrawn successfully")
-            setOffers((prev) => prev.filter((o) => o.id !== offerId))
+            setOffers((prev) => prev.filter((o) => o.id !== withdrawingOffer.id))
+            setWithdrawingOffer(null)
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to withdraw offer")
+        }
+    }
+
+    const handleStartEditSynced = (product: SupplierProduct) => {
+        setEditingSyncedId(product.id)
+        setSyncedPriceInput(product.price.toString())
+        setSyncedQuantityInput(
+            product.availableQuantity !== undefined ? product.availableQuantity.toString() : ""
+        )
+        setError("")
+        setSuccess("")
+    }
+
+    const handleCancelEditSynced = () => {
+        setEditingSyncedId("")
+        setSyncedPriceInput("")
+        setSyncedQuantityInput("")
+    }
+
+    const handleSaveSynced = async () => {
+        if (!editingSyncedId) return
+        const product = syncedProducts.find((p) => p.id === editingSyncedId)
+        if (!product) return
+
+        const price = parseFloat(syncedPriceInput)
+        const quantity = parseInt(syncedQuantityInput, 10)
+
+        if (Number.isNaN(price) || price < 0) {
+            setError("Please enter a valid non-negative price")
+            return
+        }
+        if (Number.isNaN(quantity) || quantity <= 0) {
+            setError("Please enter a valid quantity greater than zero")
+            return
+        }
+
+        setUpdatingSynced(true)
+        setError("")
+        setSuccess("")
+
+        try {
+            const res = await fetch(`/api/supplier/products/${editingSyncedId}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: product.title,
+                    description: product.description,
+                    price,
+                    sku: product.sku,
+                    imageUrl: product.imageUrl,
+                    quantity
+                })
+            })
+
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(data.message || "Failed to update synced product")
+            }
+
+            setSyncedProducts((prev) =>
+                prev.map((p) =>
+                    p.id === editingSyncedId ? { ...p, price, availableQuantity: quantity } : p
+                )
+            )
+            setSuccess(data.message || "Synced product updated successfully")
+            setEditingSyncedId("")
+            setSyncedPriceInput("")
+            setSyncedQuantityInput("")
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to update synced product")
+        } finally {
+            setUpdatingSynced(false)
         }
     }
 
@@ -329,6 +470,146 @@ export default function SupplierVendorDetailPage() {
                         </div>
 
                         <div className="lg:col-span-2 flex flex-col gap-4">
+                            {/* Synced products from this vendor (via product sync requests) */}
+                            {syncedProducts.length > 0 && (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                                            <Package className="w-5 h-5 text-slate-400" />
+                                            Synced products from this vendor
+                                        </h2>
+                                        <span className="px-3 py-1 rounded-full text-xs bg-white/5 border border-white/10 text-slate-300">
+                                            {syncedProducts.length} product
+                                            {syncedProducts.length > 1 ? "s" : ""}
+                                        </span>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+                                        <div className="max-h-96 overflow-y-auto divide-y divide-white/5">
+                                            {syncedProducts.map((product) => {
+                                                const isEditing = editingSyncedId === product.id
+                                                return (
+                                                    <div
+                                                        key={product.id}
+                                                        className="flex items-center gap-4 px-4 py-3 hover:bg-white/5 transition-colors"
+                                                    >
+                                                        <div className="relative w-14 h-14 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
+                                                            {product.imageUrl ? (
+                                                                <Image
+                                                                    src={product.imageUrl}
+                                                                    alt={product.title}
+                                                                    fill
+                                                                    className="object-cover"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-full h-full flex items-center justify-center text-slate-500">
+                                                                    <Package className="w-5 h-5" />
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0 space-y-1">
+                                                            <p className="text-sm font-semibold text-white truncate">
+                                                                {product.title}
+                                                            </p>
+                                                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                                                {product.sku && (
+                                                                    <span className="font-mono">
+                                                                        SKU: {product.sku}
+                                                                    </span>
+                                                                )}
+                                                                {product.description && (
+                                                                    <span className="truncate max-w-[260px]">
+                                                                        {product.description}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end gap-1 w-48">
+                                                            <p className="text-[11px] text-slate-500 uppercase tracking-wide">
+                                                                Current price
+                                                            </p>
+                                                            {isEditing ? (
+                                                                <div className="flex items-center gap-1 w-full">
+                                                                    <span className="text-slate-400 text-sm">
+                                                                        $
+                                                                    </span>
+                                                                    <input
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        value={syncedPriceInput}
+                                                                        onChange={(e) =>
+                                                                            setSyncedPriceInput(e.target.value)
+                                                                        }
+                                                                        className="flex-1 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <p className="text-lg font-bold text-white">
+                                                                    ${product.price.toFixed(2)}
+                                                                </p>
+                                                            )}
+                                                            <p className="text-[11px] text-slate-500 uppercase tracking-wide mt-2">
+                                                                Available amount
+                                                            </p>
+                                                            {isEditing ? (
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={syncedQuantityInput}
+                                                                    onChange={(e) =>
+                                                                        setSyncedQuantityInput(
+                                                                            e.target.value
+                                                                        )
+                                                                    }
+                                                                    className="w-full px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
+                                                                />
+                                                            ) : (
+                                                                <p className="text-sm font-semibold text-white">
+                                                                    {product.availableQuantity ??
+                                                                        "—"}
+                                                                </p>
+                                                            )}
+
+                                                            <div className="flex items-center gap-2 mt-2">
+                                                                {isEditing ? (
+                                                                    <>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={updatingSynced}
+                                                                            onClick={handleSaveSynced}
+                                                                            className="px-2 py-1 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        >
+                                                                            {updatingSynced ? "Saving..." : "Save"}
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            disabled={updatingSynced}
+                                                                            onClick={handleCancelEditSynced}
+                                                                            className="px-2 py-1 rounded-md border border-white/10 text-xs text-slate-200 hover:bg-white/5"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleStartEditSynced(product)}
+                                                                        className="px-2 py-1 rounded-md bg-white/5 hover:bg-white/10 text-xs text-slate-200 font-medium flex items-center gap-1"
+                                                                    >
+                                                                        <Edit className="w-3 h-3" />
+                                                                        Edit price
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex items-center justify-between">
                                 <h2 className="text-lg font-bold text-white flex items-center gap-2">
                                     <Package className="w-5 h-5 text-slate-400" />
@@ -409,13 +690,7 @@ export default function SupplierVendorDetailPage() {
                                             <div className="flex items-center gap-2 md:flex-col md:items-stretch">
                                                 <button
                                                     type="button"
-                                                    onClick={() =>
-                                                        handleUpdateOffer(
-                                                            offer.id,
-                                                            offer.price,
-                                                            offer.quantity
-                                                        )
-                                                    }
+                                                    onClick={() => openEditOfferModal(offer)}
                                                     className="flex-1 px-3 py-2 bg-white/10 hover:bg-white/15 text-slate-200 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
                                                 >
                                                     <Edit className="w-4 h-4" />
@@ -423,7 +698,7 @@ export default function SupplierVendorDetailPage() {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => handleWithdrawOffer(offer.id)}
+                                                    onClick={() => handleWithdrawOffer(offer)}
                                                     className="flex-1 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm font-medium flex items-center justify-center gap-2"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -441,7 +716,14 @@ export default function SupplierVendorDetailPage() {
 
             {showProvideModal && (
                 <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col">
+                    <div
+                        className={cn(
+                            "rounded-2xl shadow-xl max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col border transition-colors",
+                            isLight
+                                ? "bg-white border-slate-200"
+                                : "bg-slate-900 border-white/10"
+                        )}
+                    >
                         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                             <div className="flex items-center gap-2">
                                 <Package className="w-5 h-5 text-indigo-400" />
@@ -620,6 +902,140 @@ export default function SupplierVendorDetailPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {editingOffer && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div
+                        className={cn(
+                            "rounded-2xl shadow-xl max-w-md w-full mx-4 border transition-colors p-6 space-y-4",
+                            isLight ? "bg-white border-slate-200" : "bg-slate-900 border-white/10"
+                        )}
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h2 className="text-lg font-bold text-white">Edit offer</h2>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Update price or quantity for{" "}
+                                    <span className="font-semibold">{editingOffer.product.title}</span>{" "}
+                                    for{" "}
+                                    <span className="font-semibold">
+                                        {connection?.store.businessName}
+                                    </span>
+                                    .
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setEditingOffer(null)}
+                                className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                    Price for this vendor
+                                </label>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-400">$</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={editOfferPrice}
+                                        onChange={(e) => setEditOfferPrice(e.target.value)}
+                                        className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                    Total items (quantity)
+                                </label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    value={editOfferQuantity}
+                                    onChange={(e) => setEditOfferQuantity(e.target.value)}
+                                    className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setEditingOffer(null)}
+                                className="px-4 py-2 rounded-lg border border-white/10 text-slate-200 hover:bg-white/5 transition-colors text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                disabled={updatingOffer}
+                                onClick={handleUpdateOffer}
+                                className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium flex items-center gap-2"
+                            >
+                                {updatingOffer ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    "Save changes"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {withdrawingOffer && (
+                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div
+                        className={cn(
+                            "rounded-2xl shadow-xl max-w-md w-full mx-4 border transition-colors p-6 space-y-4",
+                            isLight ? "bg-white border-slate-200" : "bg-slate-900 border-white/10"
+                        )}
+                    >
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-white">Withdraw product</h2>
+                            <button
+                                type="button"
+                                onClick={() => setWithdrawingOffer(null)}
+                                className="p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-300">
+                            You are about to withdraw{" "}
+                            <span className="font-semibold">
+                                {withdrawingOffer.product.title}
+                            </span>{" "}
+                            from{" "}
+                            <span className="font-semibold">
+                                {connection?.store.businessName}
+                            </span>
+                            . This product will no longer appear in their New Products list.
+                        </p>
+                        <div className="flex items-center justify-end gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setWithdrawingOffer(null)}
+                                className="px-4 py-2 rounded-lg border border-white/10 text-slate-200 hover:bg-white/5 transition-colors text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmWithdraw}
+                                className="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium"
+                            >
+                                Yes, withdraw
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

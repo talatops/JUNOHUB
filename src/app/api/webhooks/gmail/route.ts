@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 🛡️ SECURITY: Only allow VENDORS to use automated replies
-        // Suppliers should not send automated responses via JUNOHUB
+        // Suppliers should not send automated responses via JUNO
         if (integration.user.role !== "VENDOR") {
             logger.info("Skipping Gmail processing for non-vendor role", {
                 emailAddress,

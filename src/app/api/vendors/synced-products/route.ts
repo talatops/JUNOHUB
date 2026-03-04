@@ -52,6 +52,10 @@ export async function GET() {
         // Transform syncs into product-like objects for display
         const syncedProducts = acceptedSyncs.map((sync: any) => {
             const productData = sync.shopifyProductData || {}
+            const supplierQuantity =
+                typeof productData.supplier_quantity === "number"
+                    ? productData.supplier_quantity
+                    : undefined
             return {
                 id: sync.id,
                 syncId: sync.id,
@@ -68,6 +72,7 @@ export async function GET() {
                 syncedAt: sync.acceptedAt || sync.createdAt,
                 isSynced: true, // Flag to indicate this is a synced product
                 source: "synced",
+                offerQuantity: supplierQuantity,
                 // Include full Shopify product data for reference
                 shopifyData: productData
             }

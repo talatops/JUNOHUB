@@ -82,7 +82,7 @@ export function LandingFeatures() {
                         transition={{ delay: 0.2 }}
                         className="text-slate-400 max-w-2xl mx-auto font-medium"
                     >
-                        We built JUNOHUB to be the ultimate operating system for modern commerce.
+                        We built JUNO to be the ultimate operating system for modern commerce.
                         Fast, secure, and beautiful.
                     </motion.p>
                 </div>

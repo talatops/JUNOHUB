@@ -15,6 +15,8 @@ import {
     Building2
 } from "lucide-react"
 import Image from "next/image"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 interface Product {
     id: string
@@ -51,6 +53,8 @@ export default function SupplierProductsPage() {
     })
     const [imageFile, setImageFile] = useState<File | null>(null)
     const [submitting, setSubmitting] = useState(false)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     useEffect(() => {
         fetchProducts()
@@ -273,6 +277,7 @@ export default function SupplierProductsPage() {
                                                         width={40}
                                                         height={40}
                                                         className="rounded-lg object-cover"
+                                                        unoptimized
                                                     />
                                                 ) : (
                                                     <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
@@ -333,7 +338,14 @@ export default function SupplierProductsPage() {
             {/* Add/Edit Modal */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-900 rounded-xl border border-white/10 w-full max-w-md p-6">
+                    <div
+                        className={cn(
+                            "rounded-xl w-full max-w-md p-6 border transition-colors",
+                            isLight
+                                ? "bg-white border-slate-200 shadow-xl"
+                                : "bg-slate-900 border-white/10"
+                        )}
+                    >
                         <div className="flex items-center justify-between mb-6">
                             <h2 className="text-xl font-bold text-white">
                                 {editingProduct ? "Edit Product" : "Add Product"}

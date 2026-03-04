@@ -324,13 +324,13 @@ export default function OnboardingClient() {
                     <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-sm">
                         <Image
                             src="/logo.png"
-                            alt="JUNOHUB Logo"
+                            alt="JUNO Logo"
                             width={48}
                             height={48}
                             className="object-cover"
                         />
                     </div>
-                    <span className="font-bold text-white tracking-tight text-lg md:text-xl">JUNOHUB</span>
+                    <span className="font-bold text-white tracking-tight text-lg md:text-xl">JUNO</span>
                 </div>
                 <div className="flex items-center gap-3 md:gap-6">
                     <div className="flex items-center gap-2">

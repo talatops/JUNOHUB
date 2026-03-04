@@ -57,19 +57,19 @@ function SignupFormContent() {
                     <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20">
                         <Image
                             src="/logo.png"
-                            alt="JUNOHUB Logo"
+                            alt="JUNO Logo"
                             width={56}
                             height={56}
                             className="object-cover"
                         />
                     </div>
-                    <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-white">JUNO</h1>
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
                     Create your <span className="text-indigo-400">Account</span>
                 </h2>
                 <p className="text-slate-400 text-sm">
-                    Join JUNOHUB and streamline your dropshipping business.
+                    Join JUNO and streamline your dropshipping business.
                 </p>
             </div>
 

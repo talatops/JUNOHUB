@@ -99,7 +99,7 @@ export function MobileFeatures() {
             <div className="mt-20 p-8 rounded-[2.5rem] bg-gradient-to-br from-indigo-600 to-purple-600 text-center relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 blur-[40px] rounded-full" />
                 <h3 className="text-2xl font-black text-white mb-4 uppercase italic">Ready to sync?</h3>
-                <p className="text-indigo-100 text-sm font-medium mb-8 opacity-90">Join the thousands of vendors scaling with JUNOHUB.</p>
+                <p className="text-indigo-100 text-sm font-medium mb-8 opacity-90">Join the thousands of vendors scaling with JUNO.</p>
                 <Link href="/signup" className="inline-flex items-center gap-2 px-8 py-4 bg-white text-indigo-600 rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg">
                     Get Started <ArrowRight className="w-4 h-4" />
                 </Link>

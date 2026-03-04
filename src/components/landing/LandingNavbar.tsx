@@ -49,13 +49,13 @@ export function LandingNavbar({ isLoggedIn }: LandingNavbarProps) {
                     <div className="w-10 h-10 rounded-xl bg-indigo-600/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
                         <Image
                             src="/logo.png"
-                            alt="JUNOHUB Logo"
+                            alt="JUNO Logo"
                             width={40}
                             height={40}
                             className="object-cover"
                         />
                     </div>
-                    <span className="text-xl font-black tracking-tighter text-white">JUNOHUB</span>
+                    <span className="text-xl font-black tracking-tighter text-white">JUNO</span>
                 </Link>
 
                 {/* Desktop Nav */}

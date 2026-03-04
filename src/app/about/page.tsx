@@ -69,7 +69,7 @@ export default function AboutPage() {
                             transition={{ delay: 0.2 }}
                             className="max-w-3xl mx-auto text-xl text-slate-300 font-medium leading-relaxed"
                         >
-                            We started JUNOHUB with a simple belief: the global supply chain is broken, and
+                            We started JUNO with a simple belief: the global supply chain is broken, and
                             technology is the only way to fix it. We&apos;re building the infrastructure for a
                             more connected, efficient, and transparent future.
                         </motion.p>
@@ -93,7 +93,7 @@ export default function AboutPage() {
                                 lost inventory data, and slow synchronization.
                             </p>
                             <p>
-                                JUNOHUB eliminates these bottlenecks by providing a unified, high-octane
+                                JUNO eliminates these bottlenecks by providing a unified, high-octane
                                 platform where data flows as fast as the commerce it supports.
                             </p>
                         </div>

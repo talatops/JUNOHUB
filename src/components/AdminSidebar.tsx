@@ -69,7 +69,7 @@ export function AdminSidebar() {
                     <Radar className="w-5 h-5 text-white" />
                 </div>
                 <div className="flex flex-col">
-                    <h1 className="text-xl font-bold tracking-tight">JUNOHUB</h1>
+                    <h1 className="text-xl font-bold tracking-tight">JUNO</h1>
                     <span className="text-[11px] uppercase tracking-widest text-slate-400 font-semibold">
                         Admin Portal
                     </span>

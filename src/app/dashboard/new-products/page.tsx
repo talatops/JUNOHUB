@@ -13,6 +13,8 @@ import {
     Info
 } from "lucide-react"
 import Image from "next/image"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 interface SyncedProduct {
     id: string
@@ -42,23 +44,74 @@ export default function NewProductsPage() {
     const [selectedProduct, setSelectedProduct] = useState<SyncedProduct | null>(null)
     const [detailLoading, setDetailLoading] = useState(false)
     const [detailError, setDetailError] = useState("")
+    const { theme } = useTheme()
+    const isLight = theme === "light"
+    const [refreshing, setRefreshing] = useState(false)
 
     useEffect(() => {
-        fetchSyncedProducts()
+        // Initial load with full-page skeleton
+        fetchSyncedProducts(false)
+
+        // Periodically refresh in the background without resetting layout
+        const interval = setInterval(() => {
+            fetchSyncedProducts(true)
+        }, 10000) // every 10 seconds
+
+        // Also refresh when the tab becomes visible again, silently
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                fetchSyncedProducts(true)
+            }
+        }
+
+        document.addEventListener("visibilitychange", handleVisibilityChange)
+
+        return () => {
+            clearInterval(interval)
+            document.removeEventListener("visibilitychange", handleVisibilityChange)
+        }
     }, [])
 
-    const fetchSyncedProducts = async () => {
+    const fetchSyncedProducts = async (silent: boolean) => {
         try {
-            setLoading(true)
+            if (silent) {
+                setRefreshing(true)
+            } else {
+                setLoading(true)
+            }
             const res = await fetch("/api/vendors/synced-products")
             if (!res.ok) throw new Error("Failed to fetch synced products")
             const data = await res.json()
-            setProducts(data.products || [])
+            const nextProducts: SyncedProduct[] = data.products || []
+
+            // Avoid unnecessary re-renders (which can cause subtle flicker)
+            setProducts((prev) => {
+                if (prev.length === nextProducts.length) {
+                    const same = prev.every((p, idx) => {
+                        const n = nextProducts[idx]
+                        return (
+                            p.id === n.id &&
+                            p.price === n.price &&
+                            p.sku === n.sku &&
+                            p.imageUrl === n.imageUrl &&
+                            p.syncedAt === n.syncedAt &&
+                            p.source === n.source &&
+                            p.offerQuantity === n.offerQuantity
+                        )
+                    })
+                    if (same) return prev
+                }
+                return nextProducts
+            })
             setError("")
         } catch {
             setError("Failed to load synced products")
         } finally {
-            setLoading(false)
+            if (silent) {
+                setRefreshing(false)
+            } else {
+                setLoading(false)
+            }
         }
     }
 
@@ -116,87 +169,105 @@ export default function NewProductsPage() {
                         <p className="text-sm text-slate-500">Sync products with suppliers from the Inventory page</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                        {products.map((product) => (
-                            <button
-                                key={product.id}
-                                type="button"
-                                onClick={() => openProductDetail(product)}
-                                className="bg-white/5 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 overflow-hidden hover:border-indigo-500/50 transition-colors group text-left"
-                            >
-                                <div className="relative w-full h-48 bg-white/10 overflow-hidden">
-                                    {product.imageUrl ? (
-                                        <Image
-                                            src={product.imageUrl}
-                                            alt={product.title}
-                                            fill
-                                            className="object-cover group-hover:scale-105 transition-transform"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <ImageIcon className="w-12 h-12 text-slate-500" />
-                                        </div>
-                                    )}
-                                    <div className="absolute top-2 right-2 flex gap-2">
-                                        <span className="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-xs font-bold uppercase">
-                                            {product.source === "supplier_offer" ? "From Supplier" : "Synced"}
-                                        </span>
+                    <div className="bg-white/5 backdrop-blur-xl rounded-xl border border-white/10 overflow-hidden">
+                        <div className="divide-y divide-white/10">
+                            {products.map((product) => (
+                                <button
+                                    key={product.id}
+                                    type="button"
+                                    onClick={() => openProductDetail(product)}
+                                    className="w-full flex items-center gap-4 px-4 md:px-6 py-3 md:py-4 hover:bg-white/5 text-left transition-colors"
+                                >
+                                    <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-white/10 flex-shrink-0">
+                                        {product.imageUrl ? (
+                                            <Image
+                                                src={product.imageUrl}
+                                                alt={product.title}
+                                                fill
+                                                className="object-cover"
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                                <ImageIcon className="w-7 h-7 text-slate-500" />
+                                            </div>
+                                        )}
                                     </div>
-                                </div>
-                                <div className="p-4 md:p-6">
-                                    <h3 className="font-bold text-white text-lg mb-2 line-clamp-2 group-hover:text-indigo-400 transition-colors">
-                                        {product.title}
-                                    </h3>
-                                    
-                                    {product.description && (
-                                        <p className="text-sm text-slate-400 mb-3 line-clamp-2">
-                                            {product.description.replace(/<[^>]*>/g, "")}
-                                        </p>
-                                    )}
-
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div>
-                                            <p className="text-2xl font-bold text-white">
-                                                ${parseFloat(product.price).toFixed(2)}
+                                    <div className="flex-1 min-w-0 space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-semibold text-white truncate">
+                                                {product.title}
+                                            </h3>
+                                            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded-full text-[10px] font-bold uppercase whitespace-nowrap">
+                                                {product.source === "supplier_offer" ? "From Supplier" : "Synced"}
+                                            </span>
+                                        </div>
+                                        {product.description && (
+                                            <p className="text-xs text-slate-400 line-clamp-2">
+                                                {product.description.replace(/<[^>]*>/g, "")}
                                             </p>
-                                            {product.sku && (
-                                                <p className="text-xs text-slate-500 font-mono">SKU: {product.sku}</p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-3 border-t border-white/10 space-y-2">
-                                        <div className="flex items-center gap-2 text-sm text-slate-400">
-                                            <Building2 className="w-4 h-4" />
-                                            <span className="truncate">{product.supplier.companyName}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                                            <div className="flex items-center gap-2">
+                                        )}
+                                        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                                            <span className="flex items-center gap-1">
+                                                <Building2 className="w-3 h-3" />
+                                                <span className="truncate max-w-[160px]">
+                                                    {product.supplier.companyName}
+                                                </span>
+                                            </span>
+                                            <span className="flex items-center gap-1">
                                                 <Calendar className="w-3 h-3" />
                                                 <span>
                                                     {product.source === "supplier_offer"
                                                         ? `Provided ${new Date(product.syncedAt).toLocaleDateString()}`
                                                         : `Synced ${new Date(product.syncedAt).toLocaleDateString()}`}
                                                 </span>
-                                            </div>
-                                            {product.source === "supplier_offer" && product.offerQuantity !== undefined && (
-                                                <span className="flex items-center gap-1">
-                                                    <Info className="w-3 h-3" />
-                                                    Qty: {product.offerQuantity}
-                                                </span>
-                                            )}
+                                            </span>
+                                            {(product.source === "supplier_offer" ||
+                                                product.source === "synced") &&
+                                                product.offerQuantity !== undefined && (
+                                                    <span className="flex items-center gap-1">
+                                                        <Info className="w-3 h-3" />
+                                                        Qty: {product.offerQuantity}
+                                                    </span>
+                                                )}
                                         </div>
                                     </div>
-                                </div>
-                            </button>
-                        ))}
+                                    <div className="flex flex-col items-end gap-1">
+                                        <p className="text-xs text-slate-500 uppercase tracking-wide">
+                                            Price
+                                        </p>
+                                        <p className="text-lg font-bold text-white">
+                                            ${parseFloat(product.price).toFixed(2)}
+                                        </p>
+                                        {product.sku && (
+                                            <p className="text-[11px] text-slate-500 font-mono">
+                                                SKU: {product.sku}
+                                            </p>
+                                        )}
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
 
             {selectedProduct && (
-                <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col">
+                <div
+                    className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+                    onClick={() => {
+                        setSelectedProduct(null)
+                        setDetailError("")
+                    }}
+                >
+                    <div
+                        className={cn(
+                            "rounded-2xl shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] flex flex-col border transition-colors",
+                            isLight
+                                ? "bg-white border-slate-200"
+                                : "bg-slate-900 border-white/10"
+                        )}
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
                             <div className="flex items-center gap-2">
                                 <Package className="w-5 h-5 text-indigo-400" />
@@ -258,7 +329,8 @@ export default function NewProductsPage() {
                                         <p className="text-2xl font-bold text-white">
                                             ${parseFloat(selectedProduct.price).toFixed(2)}
                                         </p>
-                                        {selectedProduct.source === "supplier_offer" &&
+                                        {(selectedProduct.source === "supplier_offer" ||
+                                            selectedProduct.source === "synced") &&
                                             selectedProduct.offerQuantity !== undefined && (
                                                 <p className="mt-1 text-xs text-slate-500">
                                                     Quantity available from supplier:{" "}

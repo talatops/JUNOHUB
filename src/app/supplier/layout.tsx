@@ -3,6 +3,7 @@ import { MobileSupplierSidebar } from "@/components/MobileSupplierSidebar"
 import UserAccountMenu from "@/components/UserAccountMenu"
 import NotificationBell from "@/components/NotificationBell"
 import PageTransition from "@/components/PageTransition"
+import ThemeToggle from "@/components/ThemeToggle"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 
@@ -86,6 +87,7 @@ export default async function SupplierLayout({
                         <h2 className="hidden sm:block text-xs md:text-sm font-semibold text-slate-400 uppercase tracking-wider">Supplier Portal</h2>
                     </div>
                     <div className="flex items-center gap-2 md:gap-4 shrink-0">
+                        <ThemeToggle />
                         <NotificationBell />
                         <div className="hidden sm:flex flex-col text-right">
                             <span className="text-xs font-bold text-white truncate max-w-[120px]">{session.user?.name || "Supplier User"}</span>

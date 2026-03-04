@@ -10,7 +10,7 @@ export default function TermsOfServicePage() {
               Terms of Service
             </h1>
             <p className="text-sm text-slate-400">
-              These Terms govern your use of JUNOHUB. By creating an account or
+              These Terms govern your use of JUNO. By creating an account or
               using the platform, you agree to these Terms.
             </p>
           </header>
@@ -18,10 +18,10 @@ export default function TermsOfServicePage() {
           <div className="space-y-6 text-sm md:text-base leading-relaxed text-slate-200">
             <section>
               <h2 className="text-lg font-semibold text-white mb-2">
-                1. Using JUNOHUB
+                1. Using JUNO
               </h2>
               <p>
-                JUNOHUB provides tools for managing dropshipping and e-commerce
+                JUNO provides tools for managing dropshipping and e-commerce
                 operations. You agree to use the platform only for lawful
                 purposes and in compliance with all applicable laws and
                 regulations.
@@ -51,13 +51,13 @@ export default function TermsOfServicePage() {
                 3. Third-Party Integrations
               </h2>
               <p className="mb-2">
-                JUNOHUB integrates with third-party services such as e-commerce
+                JUNO integrates with third-party services such as e-commerce
                 platforms and email providers (including Gmail). Your use of
                 those services is also governed by their respective terms and
                 policies.
               </p>
               <p>
-                By connecting these services, you authorize JUNOHUB to access
+                By connecting these services, you authorize JUNO to access
                 and process data from them as necessary to provide in-app
                 features, subject to our{" "}
                 <Link
@@ -75,14 +75,14 @@ export default function TermsOfServicePage() {
                 4. Data and Content
               </h2>
               <p className="mb-2">
-                You retain ownership of your data and content. By using JUNOHUB,
+                You retain ownership of your data and content. By using JUNO,
                 you grant us a limited license to process that data solely to
                 operate and improve the service.
               </p>
               <p>
                 You are responsible for ensuring that you have all necessary
                 rights and permissions to use and process any data you connect
-                to JUNOHUB.
+                to JUNO.
               </p>
             </section>
 
@@ -91,7 +91,7 @@ export default function TermsOfServicePage() {
                 5. Service Availability
               </h2>
               <p>
-                We aim to provide a reliable and performant service, but JUNOHUB
+                We aim to provide a reliable and performant service, but JUNO
                 is provided on an &quot;as is&quot; and &quot;as available&quot;
                 basis. We may modify, suspend, or discontinue features from time
                 to time.
@@ -103,7 +103,7 @@ export default function TermsOfServicePage() {
                 6. Limitation of Liability
               </h2>
               <p>
-                To the maximum extent permitted by law, JUNOHUB will not be
+                To the maximum extent permitted by law, JUNO will not be
                 liable for indirect, incidental, special, consequential, or
                 punitive damages, or any loss of profits or revenues arising out
                 of or related to your use of the service.
@@ -117,7 +117,7 @@ export default function TermsOfServicePage() {
               <p>
                 We may update these Terms from time to time. If we make
                 material changes, we will provide notice by appropriate means.
-                Your continued use of JUNOHUB after the changes become
+                Your continued use of JUNO after the changes become
                 effective constitutes your acceptance of the updated Terms.
               </p>
             </section>
@@ -128,7 +128,7 @@ export default function TermsOfServicePage() {
               </h2>
               <p>
                 If you have any questions about these Terms, please contact us
-                using the support email provided in your JUNOHUB account or
+                using the support email provided in your JUNO account or
                 documentation.
               </p>
             </section>
@@ -136,13 +136,13 @@ export default function TermsOfServicePage() {
             <section className="pt-4 border-t border-white/10 mt-6 text-xs text-slate-400">
               <p>
                 These Terms of Service are provided for informational purposes
-                and may be updated from time to time as JUNOHUB evolves.
+                and may be updated from time to time as JUNO evolves.
               </p>
             </section>
           </div>
 
           <footer className="mt-8 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-            <span>JUNOHUB Systems &copy; {new Date().getFullYear()}</span>
+            <span>JUNO Systems &copy; {new Date().getFullYear()}</span>
             <div className="flex items-center gap-4">
               <Link
                 href="/privacy-policy"

@@ -185,7 +185,7 @@ ${safeSnippet || "No additional message content was detected."}
                     </p>
                     <p style="margin: 0; color: #e5e7eb;">
                         Best regards,<br/>
-                        <span style="color: #a5b4fc;">JUNOHUB Support Team</span>
+                        <span style="color: #a5b4fc;">JUNO Support Team</span>
                     </p>
                 </div>
             </div>

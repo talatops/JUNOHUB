@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { createNotification } from "@/lib/notifications"
 
 /**
  * GET /api/supplier/vendors/[connectionId]/offers
@@ -129,6 +130,19 @@ export async function POST(
             where: {
                 id: connectionId,
                 supplierId: supplierProfile.id
+            },
+            include: {
+                store: {
+                    select: {
+                        id: true,
+                        businessName: true,
+                        user: {
+                            select: {
+                                id: true
+                            }
+                        }
+                    }
+                }
             }
         })
 
@@ -192,6 +206,27 @@ export async function POST(
                 quantity
             }
         })
+
+        // Notify vendor that a new product is available in their New Products page
+        try {
+            if (connection.store?.user?.id) {
+                await createNotification({
+                    userId: connection.store.user.id,
+                    type: "PRODUCT_UPDATED",
+                    title: "New product from supplier",
+                    message: `${supplierProfile.companyName} has provided a new product "${product.title}" for your store ${connection.store.businessName}.`,
+                    metadata: {
+                        offerId: offer.id,
+                        productId: product.id,
+                        supplierId: supplierProfile.id,
+                        storeId: connection.store.id
+                    },
+                    url: "/dashboard/new-products"
+                })
+            }
+        } catch (notifError) {
+            console.error("Error creating notification for supplier product offer:", notifError)
+        }
 
         return NextResponse.json({
             message: "Product provided to vendor successfully",

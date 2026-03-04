@@ -41,7 +41,7 @@ export default function DashboardSidebar({
                         <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-100">
                             <Layout className="w-6 h-6 text-white" />
                         </div>
-                        <span className="font-extrabold text-2xl tracking-tighter text-slate-900">JUNOHUB</span>
+                        <span className="font-extrabold text-2xl tracking-tighter text-slate-900">JUNO</span>
                     </div>
                 </div>
 

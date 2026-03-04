@@ -140,7 +140,7 @@ export default async function AdminOverviewPage() {
                     </h1>
                     <p className="text-sm text-slate-400 mt-1 max-w-xl">
                         High-level, read-only visibility into how data flows between Shopify
-                        stores, vendors and suppliers across JUNOHUB.
+                        stores, vendors and suppliers across JUNO.
                     </p>
                 </div>
             </div>

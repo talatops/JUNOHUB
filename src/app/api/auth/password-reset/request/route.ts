@@ -73,7 +73,7 @@ export async function POST(req: Request) {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Password Reset - JUNOHUB</title>
+    <title>Password Reset - JUNO</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #0a0e1a;">
     <table role="presentation" style="width: 100%; border-collapse: collapse;">
@@ -84,8 +84,8 @@ export async function POST(req: Request) {
                         <td style="padding: 40px 40px 30px; background: linear-gradient(135deg, rgba(79, 70, 229, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
                             <div style="text-align: center;">
                                 <div style="display: inline-flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 16px;">
-                                    <img src="${getEmailLogoUrl()}" alt="JUNOHUB" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
-                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNOHUB</h1>
+                                    <img src="${getEmailLogoUrl()}" alt="JUNO" width="48" height="48" style="display: block; border-radius: 12px; object-fit: contain;" />
+                                    <h1 style="margin: 0; font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">JUNO</h1>
                                 </div>
                             </div>
                         </td>
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
 
         await sendEmail({
             to: email,
-            subject: "Reset Your JUNOHUB Password",
+            subject: "Reset Your JUNO Password",
             html: emailHtml
         })
 

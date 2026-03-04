@@ -16,6 +16,8 @@ import {
     Store
 } from "lucide-react"
 import Image from "next/image"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 interface Supplier {
     id: string
@@ -44,6 +46,8 @@ export default function GlobalSuppliersPage() {
     const [showInviteModal, setShowInviteModal] = useState(false)
     const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null)
     const [connectToAllStores, setConnectToAllStores] = useState(false)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     useEffect(() => {
         fetchSuppliers()
@@ -277,7 +281,14 @@ export default function GlobalSuppliersPage() {
             {/* Invite Modal */}
             {showInviteModal && selectedSupplierId && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                    <div className="bg-slate-800 rounded-xl border border-white/10 p-6 max-w-md w-full">
+                    <div
+                        className={cn(
+                            "rounded-xl p-6 max-w-md w-full border transition-colors",
+                            isLight
+                                ? "bg-white border-slate-200 shadow-xl"
+                                : "bg-slate-800 border-white/10"
+                        )}
+                    >
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-lg font-bold text-white">Send Invitation</h3>
                             <button
@@ -297,7 +308,14 @@ export default function GlobalSuppliersPage() {
                         </p>
 
                         <div className="space-y-4">
-                            <label className="flex items-start gap-3 p-4 bg-white/5 rounded-lg border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+                            <label
+                                className={cn(
+                                    "flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors",
+                                    isLight
+                                        ? "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                                        : "bg-white/5 border-white/10 hover:bg-white/10"
+                                )}
+                            >
                                 <input
                                     type="radio"
                                     name="connectOption"
@@ -311,7 +329,14 @@ export default function GlobalSuppliersPage() {
                                 </div>
                             </label>
 
-                            <label className="flex items-start gap-3 p-4 bg-white/5 rounded-lg border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+                            <label
+                                className={cn(
+                                    "flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors",
+                                    isLight
+                                        ? "bg-slate-50 border-slate-200 hover:bg-slate-100"
+                                        : "bg-white/5 border-white/10 hover:bg-white/10"
+                                )}
+                            >
                                 <input
                                     type="radio"
                                     name="connectOption"

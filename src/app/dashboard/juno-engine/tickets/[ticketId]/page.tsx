@@ -203,7 +203,7 @@ export default function TicketDetailPage() {
                               ? (isLight ? "text-indigo-600" : "text-indigo-400")
                               : "text-indigo-100"
                           )}>
-                            {isIncoming ? "Customer" : "JUNOHUB"}
+                            {isIncoming ? "Customer" : "JUNO"}
                           </span>
                           <span
                             className={cn(

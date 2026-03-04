@@ -107,13 +107,13 @@ export function Sidebar({ showLogo = true, className }: SidebarProps) {
                     )}>
                         <Image
                             src="/logo.png"
-                            alt="JUNOHUB Logo"
+                            alt="JUNO Logo"
                             width={40}
                             height={40}
                             className="object-cover"
                         />
                     </div>
-                    <h1 className={cn("text-xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>JUNOHUB</h1>
+                    <h1 className={cn("text-xl font-bold tracking-tight", isLight ? "text-slate-900" : "text-white")}>JUNO</h1>
                 </div>
             )}
             <div className="flex-1 px-3 space-y-1 overflow-y-auto">

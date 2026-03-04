@@ -56,6 +56,11 @@ export async function GET() {
         // Transform synced products to match product format
         const syncedProductsFormatted = syncedProducts.map((sync: any) => {
             const productData = sync.shopifyProductData || {}
+            const supplierQuantity =
+                typeof productData.supplier_quantity === "number"
+                    ? productData.supplier_quantity
+                    : undefined
+
             return {
                 id: `synced-${sync.id}`, // Unique ID for synced products
                 syncId: sync.id,
@@ -72,6 +77,7 @@ export async function GET() {
                     businessName: sync.store.businessName
                 },
                 isSynced: true, // Flag to indicate this is a synced product from vendor
+                availableQuantity: supplierQuantity,
                 // Include full Shopify product data for reference
                 shopifyData: productData
             }

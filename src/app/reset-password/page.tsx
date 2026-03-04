@@ -149,7 +149,7 @@ export default function ResetPasswordPage() {
                             <div className="w-12 h-12 rounded-2xl bg-indigo-500/40 border border-white/20 flex items-center justify-center backdrop-blur-sm">
                                 <Zap className="w-6 h-6 text-white fill-white" />
                             </div>
-                            <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
+                            <h1 className="text-2xl font-bold tracking-tight text-white">JUNO</h1>
                         </div>
                         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
                             Reset <span className="text-indigo-400">Password</span>

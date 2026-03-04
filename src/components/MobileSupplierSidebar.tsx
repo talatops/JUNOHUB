@@ -74,13 +74,13 @@ export function MobileSupplierSidebar() {
                                         <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center shadow-md border border-white/10">
                                             <Image
                                                 src="/logo.png"
-                                                alt="JUNOHUB Logo"
+                                                alt="JUNO Logo"
                                                 width={36}
                                                 height={36}
                                                 className="object-cover"
                                             />
                                         </div>
-                                        <h1 className="text-xl font-bold tracking-tight text-white">JUNOHUB</h1>
+                                        <h1 className="text-xl font-bold tracking-tight text-white">JUNO</h1>
                                     </div>
                                     <button
                                         onClick={() => setIsOpen(false)}

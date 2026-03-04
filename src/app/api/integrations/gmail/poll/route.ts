@@ -58,7 +58,7 @@ export async function POST(_req: Request) {
                         <p>Thank you for your email. This is an automated reply.</p>
                         <p>We have received your message and will get back to you soon.</p>
                         <br/>
-                        <p>Best regards,<br/>JUNOHUB Support Team</p>
+                        <p>Best regards,<br/>JUNO Support Team</p>
                     </div>
                 `
 

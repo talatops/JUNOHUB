@@ -111,13 +111,13 @@ export default function LoginPage() {
                             <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20">
                                 <Image
                                     src="/logo.png"
-                                    alt="JUNOHUB Logo"
+                                    alt="JUNO Logo"
                                     width={56}
                                     height={56}
                                     className="object-cover"
                                 />
                             </div>
-                            <h1 className="text-2xl font-bold tracking-tight text-white">JUNOHUB</h1>
+                            <h1 className="text-2xl font-bold tracking-tight text-white">JUNO</h1>
                         </div>
                         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
                             Welcome <span className="text-indigo-400">Back</span>
@@ -263,7 +263,7 @@ export default function LoginPage() {
 
                 <div className="mt-8 space-y-2 text-center text-slate-500 text-[10px] uppercase tracking-widest font-bold">
                     <div>
-                        JUNOHUB Systems &copy; 2026
+                        JUNO Systems &copy; 2026
                     </div>
                     <div className="flex items-center justify-center gap-4 text-[9px] font-semibold normal-case text-slate-400">
                         <Link

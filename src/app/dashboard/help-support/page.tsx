@@ -86,7 +86,7 @@ export default function HelpSupportPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-shrink-0">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Help & Support</h1>
-                    <p className="text-sm md:text-base text-slate-400 mt-1">Find answers and get help with JUNOHUB.</p>
+                    <p className="text-sm md:text-base text-slate-400 mt-1">Find answers and get help with JUNO.</p>
                 </div>
             </div>
 
