@@ -1,22 +1,30 @@
-## JUNO
-
 <p align="center">
-  <img src="./public/icon.png" alt="JUNO logo" width="420" />
+  <img src="./public/icon.png" alt="JUNO logo" width="260" />
 </p>
 
-**Tech stack**
+<h1 align="center">JUNO</h1>
 
-![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
-![AWS Bedrock](https://img.shields.io/badge/AWS%20Bedrock-232F3E?logo=amazonaws&logoColor=white)
-![Gmail API](https://img.shields.io/badge/Gmail%20API-EA4335?logo=gmail&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![NextAuth](https://img.shields.io/badge/NextAuth-000000?logo=nextdotjs&logoColor=white)
-![Shopify API](https://img.shields.io/badge/Shopify%20API-7AB55C?logo=shopify&logoColor=white)
-![AES Encryption](https://img.shields.io/badge/AES%20Encryption-4B0082)
+<p align="center">
+  🚀 Modern commerce & AI‑powered support infrastructure for Shopify‑based dropshipping businesses.
+</p>
 
-Modern commerce and support infrastructure for Shopify‑based dropshipping businesses. 🚀
+<p align="center">
+  <strong>Tech stack</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white" alt="Next.js" />
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/AWS%20Bedrock-232F3E?logo=amazonaws&logoColor=white" alt="AWS Bedrock" />
+  <img src="https://img.shields.io/badge/Gmail%20API-EA4335?logo=gmail&logoColor=white" alt="Gmail API" />
+  <img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/NextAuth-000000?logo=nextdotjs&logoColor=white" alt="NextAuth" />
+  <img src="https://img.shields.io/badge/Shopify%20API-7AB55C?logo=shopify&logoColor=white" alt="Shopify API" />
+  <img src="https://img.shields.io/badge/AES%20Encryption-4B0082" alt="AES Encryption" />
+</p>
+
+---
 
 JUNO is a full‑stack Next.js application that powers:
 
@@ -25,11 +33,11 @@ JUNO is a full‑stack Next.js application that powers:
 - An **Admin view** for operations
 - An AI‑powered helpdesk and knowledge engine called **JUNOCHAT / Juno Engine**
 
-Everything runs inside a single Next.js App Router project (frontend + backend + background jobs).
+Everything runs inside a single Next.js App Router project (frontend + backend + background jobs). 💻
 
 ---
 
-## Table of Contents
+## 📚 Table of Contents
 
 1. [High‑Level Overview](#high-level-overview)
 2. [Core Features](#core-features)
@@ -49,7 +57,7 @@ Everything runs inside a single Next.js App Router project (frontend + backend +
 
 ---
 
-## High‑Level Overview
+## 🧭 High‑Level Overview
 
 JUNO centralizes communication and operations between **vendors** (Shopify stores) and **suppliers**:
 
@@ -71,9 +79,9 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
 
 ---
 
-## Core Features
+## ✨ Core Features
 
-### Vendor Portal
+### 🛍️ Vendor Portal
 
 - **Shopify connections**
   - Connect one or more Shopify stores to JUNO.
@@ -104,7 +112,7 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
     - A supplier provides a new product.
     - A supplier updates the price or quantity of an offered/synced product.
 
-### Supplier Portal
+### 🤝 Supplier Portal
 
 - **Vendor Connections**
   - Accept invitations using secure tokens.
@@ -142,7 +150,7 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
     - Synced products from vendors are **editable but not deletable**.
     - UI labels clarify when a product is “Synced” and where it came from.
 
-### Admin / Ops
+### 🛠️ Admin / Ops
 
 - Admin page with an overview of:
   - Stores
@@ -155,7 +163,7 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
   - Email logs and templates.
   - MFA setup, notifications, and account hygiene flows.
 
-### JUNOCHAT (AI Helpdesk)
+### 🤖 JUNOCHAT (AI Helpdesk)
 
 JUNOCHAT (a.k.a. Juno Engine chat) is the AI layer that:
 

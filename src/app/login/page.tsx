@@ -1,14 +1,14 @@
 "use client"
 
 import { signIn } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
 import { Mail, Lock, Loader2, Shield, ShoppingBag, Truck } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
-export default function LoginPage() {
+function LoginFormContent() {
     const router = useRouter()
     const searchParams = useSearchParams()
     const initialRoleFromQuery =
@@ -143,15 +143,8 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 md:p-6 relative overflow-hidden auth-glass-dark">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="w-full max-w-md relative z-10"
-            >
-                <div className="bg-white/5 backdrop-blur-xl rounded-2xl md:rounded-3xl p-6 md:p-8 border border-white/10">
-                    <div className="text-center mb-10">
+        <div className="bg-white/5 backdrop-blur-xl rounded-2xl md:rounded-3xl p-6 md:p-8 border border-white/10">
+            <div className="text-center mb-10">
                         <div className="inline-flex items-center justify-center gap-3 mb-4">
                             <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 border border-white/10 flex items-center justify-center backdrop-blur-sm overflow-hidden shadow-lg shadow-indigo-500/20">
                                 <Image
@@ -170,9 +163,9 @@ export default function LoginPage() {
                         <p className="text-slate-400 text-sm">
                             Access your dropshipping empire.
                         </p>
-                    </div>
+            </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-6">
                         <button
                             type="button"
                             onClick={() => setRole("VENDOR")}
@@ -220,9 +213,9 @@ export default function LoginPage() {
                                 Log in to your supplier portal
                             </div>
                         </button>
-                    </div>
+            </div>
 
-                    <form onSubmit={handleCredentialsLogin} className="space-y-4">
+            <form onSubmit={handleCredentialsLogin} className="space-y-4">
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1.5 ml-1">
@@ -309,11 +302,11 @@ export default function LoginPage() {
                             </p>
                         )}
 
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border border-indigo-400/20"
-                        >
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full h-12 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl transition-all duration-200 flex items-center justify-center gap-2 group cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed border border-indigo-400/20"
+                >
                             {loading ? (
                                 <Loader2 className="w-5 h-5 animate-spin" />
                             ) : (
@@ -322,44 +315,78 @@ export default function LoginPage() {
                                     <span className="group-hover:translate-x-1 transition-transform duration-200">→</span>
                                 </>
                             )}
-                        </button>
-                    </form>
+                </button>
+            </form>
 
-                    <div className="relative my-8">
-                        <div className="absolute inset-0 flex items-center">
-                            <div className="w-full border-t border-white/10"></div>
-                        </div>
-                        <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
-                            <span className="bg-transparent px-4 text-slate-500">Or continue with</span>
-                        </div>
-                    </div>
-
-                    <button
-                        onClick={handleGoogleSignIn}
-                        type="button"
-                        className="w-full h-12 flex items-center justify-center gap-3 bg-white/10 border border-white/10 text-white font-bold rounded-xl hover:bg-white/15 backdrop-blur-sm transition-all duration-200 cursor-pointer"
-                    >
-                        <svg className="w-5 h-5" viewBox="0 0 24 24">
-                            <path fill="#EA4335" d="M5.2662 9.76453C6.19903 6.93863 8.85469 4.90909 12 4.90909C13.6909 4.90909 15.2182 5.50909 16.4182 6.49091L19.9091 3C17.7818 1.14545 15.0545 0 12 0C7.27273 0 3.19091 2.69091 1.24545 6.65455L5.2662 9.76453Z" />
-                            <path fill="#4285F4" d="M23.4909 12.2727C23.4909 11.4909 23.4182 10.7455 23.2909 10H12V14.5091H18.4364C18.1455 16.0364 17.2909 17.3091 16 18.2182L19.9091 21.2727C22.1818 19.1818 23.4909 16.0364 23.4909 12.2727Z" />
-                            <path fill="#FBBC05" d="M5.26649 14.2355C5.02103 13.4909 4.88182 12.7091 4.88182 11.8909C4.88182 11.0727 5.02103 10.2909 5.26649 9.54545L1.24545 6.43636C0.454545 8.05455 0 9.87273 0 11.8909C0 13.9091 0.454545 15.7273 1.24545 17.3455L5.26649 14.2355Z" />
-                            <path fill="#34A853" d="M12 24C15.0545 24 17.7818 22.9091 19.9091 21.0545L16 18C14.8909 18.7273 13.5273 19.1818 12 19.1818C8.85469 19.1818 6.19903 17.1522 5.2662 14.3263L1.24545 17.4364C3.19091 21.3636 7.27273 24 12 24Z" />
-                        </svg>
-                        Google
-                    </button>
-
-                    <p className="text-center mt-8 text-sm text-slate-400 font-medium">
-                        Don&apos;t have an account?{" "}
-                        <Link href="/signup" className="text-indigo-400 hover:underline decoration-indigo-400/50 underline-offset-4 font-bold transition-all">
-                            Create an account
-                        </Link>
-                    </p>
+            <div className="relative my-8">
+                <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-white/10"></div>
                 </div>
+                <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-widest">
+                    <span className="bg-transparent px-4 text-slate-500">Or continue with</span>
+                </div>
+            </div>
+
+            <button
+                onClick={handleGoogleSignIn}
+                type="button"
+                className="w-full h-12 flex items-center justify-center gap-3 bg-white/10 border border-white/10 text-white font-bold rounded-xl hover:bg-white/15 backdrop-blur-sm transition-all duration-200 cursor-pointer"
+            >
+                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                    <path
+                        fill="#EA4335"
+                        d="M5.2662 9.76453C6.19903 6.93863 8.85469 4.90909 12 4.90909C13.6909 4.90909 15.2182 5.50909 16.4182 6.49091L19.9091 3C17.7818 1.14545 15.0545 0 12 0C7.27273 0 3.19091 2.69091 1.24545 6.65455L5.2662 9.76453Z"
+                    />
+                    <path
+                        fill="#4285F4"
+                        d="M23.4909 12.2727C23.4909 11.4909 23.4182 10.7455 23.2909 10H12V14.5091H18.4364C18.1455 16.0364 17.2909 17.3091 16 18.2182L19.9091 21.2727C22.1818 19.1818 23.4909 16.0364 23.4909 12.2727Z"
+                    />
+                    <path
+                        fill="#FBBC05"
+                        d="M5.26649 14.2355C5.02103 13.4909 4.88182 12.7091 4.88182 11.8909C4.88182 11.0727 5.02103 10.2909 5.26649 9.54545L1.24545 6.43636C0.454545 8.05455 0 9.87273 0 11.8909C0 13.9091 0.454545 15.7273 1.24545 17.3455L5.26649 14.2355Z"
+                    />
+                    <path
+                        fill="#34A853"
+                        d="M12 24C15.0545 24 17.7818 22.9091 19.9091 21.0545L16 18C14.8909 18.7273 13.5273 19.1818 12 19.1818C8.85469 19.1818 6.19903 17.1522 5.2662 14.3263L1.24545 17.4364C3.19091 21.3636 7.27273 24 12 24Z"
+                    />
+                </svg>
+                Google
+            </button>
+
+            <p className="text-center mt-8 text-sm text-slate-400 font-medium">
+                Don&apos;t have an account?{" "}
+                <Link
+                    href="/signup"
+                    className="text-indigo-400 hover:underline decoration-indigo-400/50 underline-offset-4 font-bold transition-all"
+                >
+                    Create an account
+                </Link>
+            </p>
+        </div>
+    )
+}
+
+export default function LoginPage() {
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 md:p-6 relative overflow-hidden auth-glass-dark">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="w-full max-w-md relative z-10"
+            >
+                <Suspense
+                    fallback={
+                        <div className="bg-white/5 backdrop-blur-xl rounded-2xl md:rounded-3xl p-6 md:p-8 border border-white/10 flex items-center justify-center min-h-[320px]">
+                            <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+                        </div>
+                    }
+                >
+                    <LoginFormContent />
+                </Suspense>
 
                 <div className="mt-8 space-y-2 text-center text-slate-500 text-[10px] uppercase tracking-widest font-bold">
-                    <div>
-                        JUNO Systems &copy; 2026
-                    </div>
+                    <div>JUNO Systems &copy; 2026</div>
                     <div className="flex items-center justify-center gap-4 text-[9px] font-semibold normal-case text-slate-400">
                         <Link
                             href="/privacy-policy"
