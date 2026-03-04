@@ -21,9 +21,9 @@ export default async function DashboardLayout({
 
     if (session.user.role !== "VENDOR") {
         if (session.user.role === "SUPPLIER") {
-            redirect("/supplier")
+            redirect("/login?error=WrongPortal&role=SUPPLIER")
         }
-        redirect("/login")
+        redirect("/login?error=WrongRole")
     }
 
     const { prisma } = await import("@/lib/prisma")

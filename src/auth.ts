@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import authConfig from "./auth.config"
 import bcrypt from "bcryptjs"
+import { cookies } from "next/headers"
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
@@ -13,6 +14,45 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     trustHost: true, // Trust all hosts (needed for ngrok/proxies)
     ...authConfig,
     callbacks: {
+        async signIn({ user, account }) {
+            // Allow non-email-based sign-in flows to proceed as usual
+            if (!user?.email) return true
+
+            // Never constrain the admin account via role toggle
+            if (user.email === ADMIN_EMAIL || user.role === "ADMIN") {
+                return true
+            }
+
+            // Read the desired role from the role toggle cookie set on the client
+            const cookieStore = await cookies()
+            const cookieRole = cookieStore.get("juno_login_role")?.value
+            const desiredRole =
+                cookieRole === "SUPPLIER" || cookieRole === "VENDOR" ? cookieRole : null
+
+            // If no role was explicitly chosen (e.g. legacy flows), fall back to existing behaviour
+            if (!desiredRole) {
+                return true
+            }
+
+            const existingUser = await prisma.user.findUnique({
+                where: { email: user.email },
+                select: { id: true, role: true },
+            })
+
+            // New user via OAuth: align their role with the chosen role on first sign-in
+            if (existingUser && existingUser.role !== desiredRole) {
+                // If the role already exists and differs, block sign-in with a clear error code
+                const url = new URL("/login", process.env.NEXTAUTH_URL || "http://localhost:3000")
+                url.searchParams.set("error", "SigninRoleMismatch")
+                url.searchParams.set("existingRole", existingUser.role || "VENDOR")
+                url.searchParams.set("desiredRole", desiredRole)
+                return url.toString()
+            }
+
+            // If the user record exists but has the default role and this is effectively a first login
+            // we keep the current behaviour and let onboarding/layouts route correctly.
+            return true
+        },
         async jwt({ token, user }) {
             if (user) {
                 token.id = user.id
@@ -89,6 +129,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
                 return user
             },
-        } as unknown as import("@auth/core/providers").Provider
-    ]
+        } as unknown as import("@auth/core/providers").Provider,
+    ],
 })

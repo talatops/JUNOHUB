@@ -1,21 +1,62 @@
 "use client"
 
 import { signIn } from "next-auth/react"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
-import { Mail, Lock, Loader2, Shield } from "lucide-react"
+import { Mail, Lock, Loader2, Shield, ShoppingBag, Truck } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 
 export default function LoginPage() {
     const router = useRouter()
+    const searchParams = useSearchParams()
+    const initialRoleFromQuery =
+        searchParams.get("role")?.toUpperCase() === "SUPPLIER" ? "SUPPLIER" : "VENDOR"
+
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState("")
     const [requiresMFA, setRequiresMFA] = useState(false)
     const [email, setEmail] = useState("")
     const [password, setPassword] = useState("")
     const [mfaCode, setMfaCode] = useState("")
+    const [role, setRole] = useState<"VENDOR" | "SUPPLIER">(initialRoleFromQuery)
+
+    const applyRoleCookie = (selectedRole: "VENDOR" | "SUPPLIER") => {
+        try {
+            document.cookie = `juno_login_role=${selectedRole}; path=/; max-age=600`
+        } catch {
+            // ignore cookie errors – server-side will just skip role enforcement
+        }
+    }
+
+    // Map Auth.js error codes from query string to friendly messages
+    useEffect(() => {
+        const errorCode = searchParams.get("error")
+        const existingRole = searchParams.get("existingRole")
+
+        if (errorCode === "SigninRoleMismatch") {
+            if (existingRole === "SUPPLIER") {
+                setError(
+                    "This email is registered as a Supplier. Please choose the Supplier option or use another email."
+                )
+                setRole("SUPPLIER")
+            } else if (existingRole === "VENDOR") {
+                setError(
+                    "This email is registered as a Vendor. Please choose the Vendor option or use another email."
+                )
+                setRole("VENDOR")
+            } else {
+                setError(
+                    "This email is already registered with a different role. Please select the correct role or use another email."
+                )
+            }
+        } else if (errorCode === "WrongRole" || errorCode === "WrongPortal") {
+            setError(
+                "You tried to open a different portal with this account. Please sign in with the correct role or use a separate account."
+            )
+        }
+    }, [searchParams])
 
     const handleCredentialsLogin = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -69,6 +110,9 @@ export default function LoginPage() {
                 return
             }
 
+            // Ensure the selected role is visible to the auth callbacks
+            applyRoleCookie(role)
+
             // If MFA was required and code provided, or MFA not required, proceed with NextAuth signIn
             const res = await signIn("credentials", {
                 email: emailValue,
@@ -94,6 +138,7 @@ export default function LoginPage() {
     }
 
     const handleGoogleSignIn = () => {
+        applyRoleCookie(role)
         signIn("google", { callbackUrl: "/onboarding" })
     }
 
@@ -125,6 +170,56 @@ export default function LoginPage() {
                         <p className="text-slate-400 text-sm">
                             Access your dropshipping empire.
                         </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-6">
+                        <button
+                            type="button"
+                            onClick={() => setRole("VENDOR")}
+                            className={`p-3 rounded-2xl border transition-all duration-200 text-left ${
+                                role === "VENDOR"
+                                    ? "border-indigo-500/50 bg-indigo-500/20"
+                                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                            }`}
+                        >
+                            <div
+                                className={`mb-2 w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                                    role === "VENDOR"
+                                        ? "bg-indigo-500/50 text-white border border-indigo-400/30"
+                                        : "bg-white/10 text-slate-400 border border-white/10"
+                                }`}
+                            >
+                                <ShoppingBag className="w-4 h-4" />
+                            </div>
+                            <div className="font-bold text-xs text-white">Vendor</div>
+                            <div className="text-[10px] text-slate-400 font-medium">
+                                Log in to your store dashboard
+                            </div>
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => setRole("SUPPLIER")}
+                            className={`p-3 rounded-2xl border transition-all duration-200 text-left ${
+                                role === "SUPPLIER"
+                                    ? "border-blue-500/50 bg-blue-500/20"
+                                    : "border-white/10 bg-white/5 hover:bg-white/10"
+                            }`}
+                        >
+                            <div
+                                className={`mb-2 w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${
+                                    role === "SUPPLIER"
+                                        ? "bg-blue-500/50 text-white border border-blue-400/30"
+                                        : "bg-white/10 text-slate-400 border border-white/10"
+                                }`}
+                            >
+                                <Truck className="w-4 h-4" />
+                            </div>
+                            <div className="font-bold text-xs text-white">Supplier</div>
+                            <div className="text-[10px] text-slate-400 font-medium">
+                                Log in to your supplier portal
+                            </div>
+                        </button>
                     </div>
 
                     <form onSubmit={handleCredentialsLogin} className="space-y-4">

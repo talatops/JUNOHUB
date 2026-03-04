@@ -1,8 +1,20 @@
 ## JUNO
 
-![JUNO logo](./public/icon.png)
+<p align="center">
+  <img src="./public/icon.png" alt="JUNO logo" width="420" />
+</p>
 
-**Tech stack:** ⚛️ Next.js · 💙 TypeScript · 🐘 PostgreSQL · ☁️ AWS Bedrock · 📬 Gmail API · 🐳 Docker · 🔐 NextAuth
+**Tech stack**
+
+![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![AWS Bedrock](https://img.shields.io/badge/AWS%20Bedrock-232F3E?logo=amazonaws&logoColor=white)
+![Gmail API](https://img.shields.io/badge/Gmail%20API-EA4335?logo=gmail&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![NextAuth](https://img.shields.io/badge/NextAuth-000000?logo=nextdotjs&logoColor=white)
+![Shopify API](https://img.shields.io/badge/Shopify%20API-7AB55C?logo=shopify&logoColor=white)
+![AES Encryption](https://img.shields.io/badge/AES%20Encryption-4B0082)
 
 Modern commerce and support infrastructure for Shopify‑based dropshipping businesses. 🚀
 

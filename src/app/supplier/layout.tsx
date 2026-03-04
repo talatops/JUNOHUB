@@ -20,7 +20,10 @@ export default async function SupplierLayout({
 
     // Only allow SUPPLIER role to access supplier dashboard
     if (session.user.role !== "SUPPLIER") {
-        redirect("/dashboard")
+        if (session.user.role === "VENDOR") {
+            redirect("/login?error=WrongPortal&role=VENDOR")
+        }
+        redirect("/login?error=WrongRole")
     }
 
     // Ensure supplier profile exists, create if not
