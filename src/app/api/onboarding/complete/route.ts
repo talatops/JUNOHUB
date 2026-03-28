@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 
@@ -8,6 +9,12 @@ export async function POST(req: NextRequest) {
         const session = await auth()
         if (!session?.user?.id) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+        if (!isVendorPortalRole(session.user.role)) {
+            return NextResponse.json(
+                { message: "Only vendor accounts can complete store onboarding." },
+                { status: 403 }
+            )
         }
 
         const body = await req.json()

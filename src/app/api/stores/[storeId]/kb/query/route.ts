@@ -12,6 +12,16 @@ type QueryBody = {
     includeDocuments?: boolean
 }
 
+type KnowledgeChunkRow = {
+    id: string
+    content: string
+    sourceType: "DOCUMENT" | "FAQ"
+    documentId: string | null
+    faqItemId: string | null
+    metadata: unknown
+    similarity: number
+}
+
 export async function POST(
     request: Request,
     { params }: { params: Promise<{ storeId: string }> },
@@ -73,17 +83,7 @@ export async function POST(
 
         const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : ""
 
-        const chunks = await prisma.$queryRawUnsafe<
-            {
-                id: string
-                content: string
-                sourceType: "DOCUMENT" | "FAQ"
-                documentId: string | null
-                faqItemId: string | null
-                metadata: unknown
-                similarity: number
-            }[]
-        >(
+        const chunks = await prisma.$queryRawUnsafe<KnowledgeChunkRow[]>(
             `
             SELECT 
                 "id",
@@ -109,7 +109,7 @@ export async function POST(
             })
         }
 
-        const contextPieces = chunks.map((chunk, index) => {
+        const contextPieces = chunks.map((chunk: KnowledgeChunkRow, index: number) => {
             const label =
                 chunk.sourceType === "FAQ"
                     ? `FAQ #${index + 1}`
@@ -145,7 +145,7 @@ export async function POST(
 
         return NextResponse.json({
             answer,
-            sources: chunks.map((chunk) => ({
+            sources: chunks.map((chunk: KnowledgeChunkRow) => ({
                 id: chunk.id,
                 type: chunk.sourceType,
                 documentId: chunk.documentId,

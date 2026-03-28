@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { getCachedOrders, isCacheFresh, updateOrderCache } from "@/lib/cache"
 
@@ -13,7 +14,7 @@ const PER_STORE_LIMIT = 25
 export async function GET() {
     try {
         const session = await auth()
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -30,6 +31,8 @@ export async function GET() {
         if (stores.length === 0) {
             return NextResponse.json({ orders: [] })
         }
+
+        type StoreRow = (typeof stores)[number]
 
         type OrderItem = {
             id: number
@@ -50,7 +53,8 @@ export async function GET() {
             const cacheFresh = await isCacheFresh(store.id, "orders")
             if (cacheFresh) {
                 const cached = await getCachedOrders(store.id)
-                return cached.slice(0, PER_STORE_LIMIT).map((order) => ({
+                type CachedOrderRow = (typeof cached)[number]
+                return cached.slice(0, PER_STORE_LIMIT).map((order: CachedOrderRow) => ({
                     id: parseInt(order.shopifyOrderId),
                     name: order.orderNumber,
                     total_price: order.totalPrice,
@@ -93,8 +97,12 @@ export async function GET() {
             }
         }
 
-        const results = await Promise.allSettled(stores.map((s) => fetchOrdersForStore(s)))
-        const allOrders: OrderItem[] = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+        const results = await Promise.allSettled(
+            stores.map((s: StoreRow) => fetchOrdersForStore(s))
+        )
+        const allOrders: OrderItem[] = results.flatMap((r: PromiseSettledResult<OrderItem[]>) =>
+            r.status === "fulfilled" ? r.value : []
+        )
         allOrders.sort((a, b) => (b.id > a.id ? 1 : -1))
         return NextResponse.json({ orders: allOrders.slice(0, 50) })
     } catch (error) {

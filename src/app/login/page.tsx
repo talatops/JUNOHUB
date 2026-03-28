@@ -1,6 +1,5 @@
 "use client"
 
-import { signIn } from "next-auth/react"
 import { Suspense, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { motion } from "framer-motion"
@@ -24,10 +23,20 @@ function LoginFormContent() {
 
     const applyRoleCookie = (selectedRole: "VENDOR" | "SUPPLIER") => {
         try {
-            document.cookie = `juno_login_role=${selectedRole}; path=/; max-age=600`
+            document.cookie = `juno_login_role=${selectedRole}; path=/; max-age=600; samesite=lax`
         } catch {
             // ignore cookie errors – server-side will just skip role enforcement
         }
+    }
+
+    const roleBasePath = (selectedRole: "VENDOR" | "SUPPLIER") =>
+        selectedRole === "SUPPLIER" ? "/api/auth/supplier" : "/api/auth/vendor"
+
+    const getRoleCsrfToken = async (selectedRole: "VENDOR" | "SUPPLIER") => {
+        const res = await fetch(`${roleBasePath(selectedRole)}/csrf`, { method: "GET" })
+        if (!res.ok) return ""
+        const data = await res.json()
+        return data?.csrfToken ?? ""
     }
 
     // Map Auth.js error codes from query string to friendly messages
@@ -113,22 +122,41 @@ function LoginFormContent() {
             // Ensure the selected role is visible to the auth callbacks
             applyRoleCookie(role)
 
-            // If MFA was required and code provided, or MFA not required, proceed with NextAuth signIn
-            const res = await signIn("credentials", {
+            const callbackUrl = role === "SUPPLIER" ? "/supplier" : "/dashboard"
+            const csrfToken = await getRoleCsrfToken(role)
+            if (!csrfToken) {
+                setError("Unable to start login session. Please refresh and try again.")
+                setRequiresMFA(false)
+                return
+            }
+
+            // Use a real browser form POST for credentials callback.
+            // This is the most reliable way to ensure Auth.js sets cookies and performs redirect flow.
+            const form = document.createElement("form")
+            form.method = "POST"
+            form.action = `${roleBasePath(role)}/callback/credentials`
+            form.style.display = "none"
+
+            const fields: Record<string, string> = {
                 email: emailValue,
                 password: passwordValue,
-                redirect: false,
-                callbackUrl: "/onboarding",
-            })
-
-            if (res?.error) {
-                setError("Authentication failed. Please try again.")
-                setRequiresMFA(false)
-            } else {
-                // Redirect based on user role - middleware will handle the final routing
-                // For now, just refresh and let middleware redirect appropriately
-                router.refresh()
+                role,
+                csrfToken,
+                callbackUrl,
             }
+            if (mfaCodeValue) fields.mfaCode = mfaCodeValue
+
+            for (const [name, value] of Object.entries(fields)) {
+                const input = document.createElement("input")
+                input.type = "hidden"
+                input.name = name
+                input.value = value
+                form.appendChild(input)
+            }
+
+            document.body.appendChild(form)
+            form.submit()
+            return
         } catch {
             setError("An error occurred. Please try again.")
             setRequiresMFA(false)
@@ -137,9 +165,22 @@ function LoginFormContent() {
         }
     }
 
-    const handleGoogleSignIn = () => {
+    const handleGoogleSignIn = async () => {
         applyRoleCookie(role)
-        signIn("google", { callbackUrl: "/onboarding" })
+        const callbackUrl = role === "SUPPLIER" ? "/supplier" : "/dashboard"
+        const csrfToken = await getRoleCsrfToken(role)
+        const res = await fetch(`${roleBasePath(role)}/signin/google`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-Auth-Return-Redirect": "1",
+            },
+            body: new URLSearchParams({ csrfToken, callbackUrl }),
+        })
+
+        const data = await res.json()
+        const url = data?.url ?? callbackUrl
+        window.location.href = url
     }
 
     return (

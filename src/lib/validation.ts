@@ -22,7 +22,7 @@ export const authRegisterSchema = z.object({
         .max(100, "Name is too long"),
     email: emailSchema,
     password: passwordSchema,
-    role: z.enum(["VENDOR", "SUPPLIER"]).optional(),
+    role: z.enum(["VENDOR", "SUPPLIER"]),
 })
 
 export const authLoginSchema = z.object({

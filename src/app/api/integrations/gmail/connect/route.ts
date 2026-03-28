@@ -20,9 +20,6 @@ export async function POST() {
         // Generate state token for CSRF protection
         const state = crypto.randomBytes(32).toString("hex")
         
-        // Store state in a cookie or session (for simplicity, we'll include it in the callback URL)
-        // In production, use a proper session store or encrypted cookie
-        
         // Gmail API scopes
         // Adding 'email' and 'profile' scopes to get user email address
         const scopes = [
@@ -56,12 +53,19 @@ export async function POST() {
         authUrl.searchParams.set("prompt", "consent") // Force consent to get refresh token
         authUrl.searchParams.set("state", state)
         
-        return NextResponse.json({
+        const response = NextResponse.json({
             authUrl: authUrl.toString(),
-            state, // Return state so frontend can verify it on callback
             redirectUri, // Include redirect URI in response for debugging
             message: "Redirecting to Google OAuth"
         })
+        response.cookies.set("juno_gmail_oauth_state", state, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            maxAge: 60 * 10,
+            path: "/",
+        })
+        return response
     } catch (error) {
         console.error("Error initiating Gmail OAuth:", error)
         return NextResponse.json(

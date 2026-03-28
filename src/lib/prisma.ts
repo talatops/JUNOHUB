@@ -1,39 +1,38 @@
-import * as pg from "pg"
-import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "@prisma/client"
+import { PrismaPg } from "@prisma/adapter-pg"
 import { logger } from "@/lib/logger"
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL })
-const adapter = new PrismaPg(pool)
+const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient }
+/**
+ * Prisma ORM 7+ uses the driver adapter for PostgreSQL.
+ * Use `PoolConfig` (`connectionString`) so the adapter owns the pool — avoids
+ * brittle bundling around a shared `pg.Pool` instance.
+ */
+const connectionString =
+    process.env.DATABASE_URL ??
+    "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
 
-// Initialize Prisma Client with proper error handling
-let prismaClient: PrismaClient
+const adapter = new PrismaPg({ connectionString })
 
-if (globalForPrisma.prisma) {
-    prismaClient = globalForPrisma.prisma
-} else {
-    try {
-        prismaClient = new PrismaClient({ adapter: adapter as never })
-        if (process.env.NODE_ENV !== "production") {
-            globalForPrisma.prisma = prismaClient
-        }
-    } catch (error) {
-        logger.error("Failed to initialize Prisma Client", error)
-        throw error
-    }
+export const prisma =
+    globalForPrisma.prisma ??
+    new PrismaClient({
+        adapter,
+        log:
+            process.env.NODE_ENV === "development"
+                ? ["error", "warn"]
+                : ["error"],
+    })
+
+if (process.env.NODE_ENV !== "production") {
+    globalForPrisma.prisma = prisma
 }
 
-// Ensure Prisma client is up to date
 if (typeof window === "undefined") {
-    // Server-side only
-    prismaClient.$connect().catch((error) => {
-        // Ignore connection errors in development, but log them
+    void prisma.$connect().catch((error: unknown) => {
         if (process.env.NODE_ENV === "development") {
             logger.warn("Prisma connection warning", error)
         }
     })
 }
-
-export const prisma = prismaClient

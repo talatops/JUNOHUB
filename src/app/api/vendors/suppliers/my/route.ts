@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -10,7 +11,7 @@ export async function GET() {
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -27,7 +28,8 @@ export async function GET() {
         }
 
         // Get all connections for this vendor's stores
-        const vendorStoreIds = vendorStores.map(s => s.id)
+        type VendorStoreRow = (typeof vendorStores)[number]
+        const vendorStoreIds = vendorStores.map((s: VendorStoreRow) => s.id)
         const connections = await prisma.connection.findMany({
             where: {
                 storeId: { in: vendorStoreIds }
@@ -65,7 +67,7 @@ export async function GET() {
         })
 
         // Get pending invitations (not yet accepted - no connection created)
-        const pendingInvitations = await (prisma as any).invitation.findMany({
+        const pendingInvitations = await prisma.invitation.findMany({
             where: {
                 storeId: { in: vendorStoreIds },
                 used: false,
@@ -98,28 +100,39 @@ export async function GET() {
             }
         })
 
+        type PendingInvitationRow = (typeof pendingInvitations)[number]
+        type ConnectionRow = (typeof connections)[number]
+
         // Convert invitations to connection-like objects with PENDING status
-        const pendingConnections = pendingInvitations.map((invitation: any) => ({
+        const pendingConnections = pendingInvitations.map((invitation: PendingInvitationRow) => ({
             id: invitation.id, // Use invitation ID as temporary connection ID
             status: "PENDING" as const,
             createdAt: invitation.createdAt,
             supplier: invitation.supplier,
             store: {
                 id: invitation.storeId,
-                businessName: vendorStores.find(s => s.id === invitation.storeId)?.businessName || "Unknown Store",
-                isActive: vendorStores.find(s => s.id === invitation.storeId)?.isActive || false
-            }
+                businessName:
+                    vendorStores.find((s: VendorStoreRow) => s.id === invitation.storeId)?.businessName ||
+                    "Unknown Store",
+                isActive:
+                    vendorStores.find((s: VendorStoreRow) => s.id === invitation.storeId)?.isActive || false,
+            },
         }))
+
+        type PendingConnectionRow = (typeof pendingConnections)[number]
 
         // Combine connections and pending invitations, removing duplicates
         // (if a connection exists, don't include the invitation)
-        const connectionSupplierIds = new Set(connections.map(c => c.supplier.id))
+        const connectionSupplierIds = new Set(
+            connections.map((c: ConnectionRow) => c.supplier.id)
+        )
         const uniquePendingConnections = pendingConnections.filter(
-            (pc: any) => !connectionSupplierIds.has(pc.supplier.id)
+            (pc: PendingConnectionRow) => !connectionSupplierIds.has(pc.supplier.id)
         )
 
         const allConnections = [...connections, ...uniquePendingConnections].sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            (a: ConnectionRow | PendingConnectionRow, b: ConnectionRow | PendingConnectionRow) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         )
 
         return NextResponse.json({ connections: allConnections })

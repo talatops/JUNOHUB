@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 
@@ -41,7 +42,7 @@ export async function GET(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 
@@ -104,7 +105,7 @@ export async function PUT(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 
@@ -204,7 +205,7 @@ export async function DELETE(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 

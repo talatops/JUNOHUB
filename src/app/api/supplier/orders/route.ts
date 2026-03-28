@@ -49,8 +49,7 @@ export async function GET() {
         }
 
         // Get all accepted product syncs for this supplier
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const acceptedSyncs = await (prisma as any).productSync.findMany({
+        const acceptedSyncs = await prisma.productSync.findMany({
             where: {
                 supplierId: supplierProfile.id,
                 status: "ACCEPTED"
@@ -71,10 +70,11 @@ export async function GET() {
             })
         }
 
+        type AcceptedSyncRow = (typeof acceptedSyncs)[number]
+
         // Group syncs by storeId
         const syncsByStore = new Map<string, Set<string>>()
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        acceptedSyncs.forEach((sync: any) => {
+        acceptedSyncs.forEach((sync: AcceptedSyncRow) => {
             if (!syncsByStore.has(sync.storeId)) {
                 syncsByStore.set(sync.storeId, new Set())
             }
@@ -101,8 +101,11 @@ export async function GET() {
             }
         })
 
+        type ShopifyLineItem = { product_id?: number }
+        type CachedOrderWithStore = (typeof cachedOrders)[number]
+
         // Filter orders that contain synced products
-        const relevantOrders = cachedOrders.filter((order) => {
+        const relevantOrders = cachedOrders.filter((order: CachedOrderWithStore) => {
             const syncedProductIds = syncsByStore.get(order.storeId)
             if (!syncedProductIds || syncedProductIds.size === 0) return false
 
@@ -115,8 +118,7 @@ export async function GET() {
                 if (!Array.isArray(lineItems)) return false
 
                 // Check if any line item's product_id matches a synced product
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                return lineItems.some((item: any) => {
+                return lineItems.some((item: ShopifyLineItem) => {
                     const productId = item.product_id?.toString()
                     return productId && syncedProductIds.has(productId)
                 })
@@ -126,22 +128,20 @@ export async function GET() {
         })
 
             // Transform orders to include supplier-relevant information
-            const transformedOrders = relevantOrders.map((order) => {
+            const transformedOrders = relevantOrders.map((order: CachedOrderWithStore) => {
                 const syncedProductIds = syncsByStore.get(order.storeId) || new Set()
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                let lineItems: any[] = []
+                let lineItems: ShopifyLineItem[] = []
             
             try {
-                lineItems = typeof order.lineItems === "string" 
-                    ? JSON.parse(order.lineItems) 
-                    : order.lineItems
+                const parsed =
+                    typeof order.lineItems === "string" ? JSON.parse(order.lineItems) : order.lineItems
+                lineItems = Array.isArray(parsed) ? (parsed as ShopifyLineItem[]) : []
             } catch {
                 lineItems = []
             }
 
             // Filter line items to only show synced products
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const syncedLineItems = lineItems.filter((item: any) => {
+            const syncedLineItems = lineItems.filter((item: ShopifyLineItem) => {
                 const productId = item.product_id?.toString()
                 return productId && syncedProductIds.has(productId)
             })
@@ -158,8 +158,7 @@ export async function GET() {
                 store: order.store,
                 lineItems: syncedLineItems,
                 // Include all line items for reference, but mark synced ones
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                allLineItems: lineItems.map((item: any) => ({
+                allLineItems: lineItems.map((item: ShopifyLineItem) => ({
                     ...item,
                     isSynced: syncedProductIds.has(item.product_id?.toString() || "")
                 }))

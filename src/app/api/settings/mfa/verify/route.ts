@@ -31,10 +31,7 @@ export async function POST(req: Request) {
         }
 
         // Use raw query to access mfaSecret until Prisma client is fully regenerated
-        const userResult = await prisma.$queryRawUnsafe<Array<{ mfaSecret: string | null }>>(
-            `SELECT "mfaSecret" FROM "User" WHERE id = $1`,
-            session.user.id
-        )
+        const userResult = await prisma.$queryRaw<Array<{ mfaSecret: string | null }>>`SELECT "mfaSecret" FROM "User" WHERE id = ${session.user.id}`
 
         if (!userResult || userResult.length === 0) {
             return NextResponse.json(
@@ -64,10 +61,7 @@ export async function POST(req: Request) {
         }
 
         // Enable MFA
-        await prisma.$executeRawUnsafe(
-            `UPDATE "User" SET "mfaEnabled" = true WHERE id = $1`,
-            session.user.id
-        )
+        await prisma.$executeRaw`UPDATE "User" SET "mfaEnabled" = true WHERE id = ${session.user.id}`
 
         return NextResponse.json({
             message: "MFA enabled successfully",

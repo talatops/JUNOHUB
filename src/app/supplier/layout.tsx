@@ -4,7 +4,7 @@ import UserAccountMenu from "@/components/UserAccountMenu"
 import NotificationBell from "@/components/NotificationBell"
 import PageTransition from "@/components/PageTransition"
 import ThemeToggle from "@/components/ThemeToggle"
-import { auth } from "@/auth"
+import { auth } from "@/auth.supplier"
 import { redirect } from "next/navigation"
 
 export default async function SupplierLayout({
@@ -14,14 +14,19 @@ export default async function SupplierLayout({
 }) {
     const session = await auth()
 
-    if (!session) {
+    if (!session?.user) {
         redirect("/login")
     }
 
     // Only allow SUPPLIER role to access supplier dashboard
-    if (session.user.role !== "SUPPLIER") {
-        if (session.user.role === "VENDOR") {
-            redirect("/login?error=WrongPortal&role=VENDOR")
+    const role = session.user.role
+    if (!role) {
+        redirect("/login")
+    }
+
+    if (role !== "SUPPLIER") {
+        if (role === "VENDOR") {
+            redirect("/dashboard")
         }
         redirect("/login?error=WrongRole")
     }

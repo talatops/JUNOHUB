@@ -25,10 +25,9 @@ export async function POST(req: Request) {
         }
 
         // Use raw query to access MFA fields until Prisma client is fully regenerated
-        const userResult = await prisma.$queryRawUnsafe<Array<{ mfaEnabled: boolean | null; mfaSecret: string | null }>>(
-            `SELECT "mfaEnabled", "mfaSecret" FROM "User" WHERE email = $1`,
-            email
-        )
+        const userResult = await prisma.$queryRaw<
+            Array<{ mfaEnabled: boolean | null; mfaSecret: string | null }>
+        >`SELECT "mfaEnabled", "mfaSecret" FROM "User" WHERE email = ${email}`
 
         if (!userResult || userResult.length === 0) {
             return NextResponse.json(

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -10,7 +11,7 @@ export async function GET() {
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 

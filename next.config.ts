@@ -2,6 +2,16 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // Keep Prisma + pg as Node externals so Turbopack does not bundle the
+  // generated client (fixes "Cannot read properties of undefined (reading 'graph')"
+  // during `next build` in some Docker/Linux environments).
+  serverExternalPackages: [
+    "@prisma/client",
+    "prisma",
+    "@prisma/adapter-pg",
+    "@prisma/driver-adapter-utils",
+    "pg",
+  ],
   images: {
     remotePatterns: [
       {

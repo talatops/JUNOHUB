@@ -571,19 +571,19 @@ export default function InventoryPage() {
 
                 {/* Supplier Selection Modal */}
                 {showSupplierModal && selectedProduct && (
-                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <div className="bg-slate-900 border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-                            <div className="p-6 border-b border-white/10 flex items-center justify-between">
+                    <div className={`fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4 ${isLight ? "bg-black/40" : "bg-black/60"}`}>
+                        <div className={`rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col ${isLight ? "bg-white border border-slate-200" : "bg-slate-900 border border-white/10"}`}>
+                            <div className={`p-6 flex items-center justify-between ${isLight ? "border-b border-slate-200" : "border-b border-white/10"}`}>
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white">Select Supplier</h2>
-                                    <p className="text-sm text-slate-400 mt-1">Choose a supplier to sync &quot;{selectedProduct.title}&quot;</p>
+                                    <h2 className={`text-2xl font-bold ${isLight ? "text-slate-900" : "text-white"}`}>Select Supplier</h2>
+                                    <p className={`text-sm mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>Choose a supplier to sync &quot;{selectedProduct.title}&quot;</p>
                                 </div>
                                 <button
                                     onClick={() => {
                                         setShowSupplierModal(false)
                                         setSelectedProduct(null)
                                     }}
-                                    className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+                                    className={`p-2 rounded-lg transition-colors ${isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-slate-400 hover:text-white hover:bg-white/10"}`}
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
@@ -591,9 +591,9 @@ export default function InventoryPage() {
                             <div className="flex-1 overflow-y-auto p-6">
                                 {connectedSuppliers.length === 0 ? (
                                     <div className="text-center py-12">
-                                        <AlertCircle className="w-12 h-12 text-slate-500 mx-auto mb-4" />
-                                        <p className="text-slate-400 font-medium">No connected suppliers</p>
-                                        <p className="text-sm text-slate-500 mt-2">Please connect with suppliers first from the Suppliers page.</p>
+                                        <AlertCircle className={`w-12 h-12 mx-auto mb-4 ${isLight ? "text-slate-400" : "text-slate-500"}`} />
+                                        <p className={`font-medium ${isLight ? "text-slate-700" : "text-slate-400"}`}>No connected suppliers</p>
+                                        <p className={`text-sm mt-2 ${isLight ? "text-slate-500" : "text-slate-500"}`}>Please connect with suppliers first from the Suppliers page.</p>
                                     </div>
                                 ) : (
                                     <div className="grid gap-3">
@@ -602,15 +602,18 @@ export default function InventoryPage() {
                                                 key={supplier.id}
                                                 onClick={() => handleSelectSupplier(supplier.id)}
                                                 disabled={syncingProduct}
-                                                className="p-4 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 hover:border-indigo-500/50 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed group"
+                                                className={`p-4 rounded-xl transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed group ${isLight
+                                                    ? "bg-slate-50 border border-slate-200 hover:bg-slate-100 hover:border-indigo-300"
+                                                    : "bg-white/5 border border-white/10 hover:bg-white/10 hover:border-indigo-500/50"
+                                                    }`}
                                             >
                                                 <div className="flex items-start justify-between">
                                                     <div className="flex-1">
-                                                        <h3 className="font-bold text-white">{supplier.companyName}</h3>
+                                                        <h3 className={`font-bold ${isLight ? "text-slate-900" : "text-white"}`}>{supplier.companyName}</h3>
                                                         {supplier.description && (
-                                                            <p className="text-sm text-slate-400 mt-1 line-clamp-2">{supplier.description}</p>
+                                                            <p className={`text-sm mt-1 line-clamp-2 ${isLight ? "text-slate-600" : "text-slate-400"}`}>{supplier.description}</p>
                                                         )}
-                                                        <p className="text-xs text-slate-500 mt-2">{supplier.user.email}</p>
+                                                        <p className={`text-xs mt-2 ${isLight ? "text-slate-500" : "text-slate-500"}`}>{supplier.user.email}</p>
                                                     </div>
                                                     {syncingProduct ? (
                                                         <Loader2 className="w-5 h-5 animate-spin text-indigo-400 ml-4" />

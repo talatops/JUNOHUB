@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useRouter } from "next/navigation"
-import { signOut, useSession } from "next-auth/react"
+import { usePathname, useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { Settings, LogOut, ChevronDown } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
@@ -10,6 +10,7 @@ import { useTheme } from "@/components/ThemeProvider"
 export default function UserAccountMenu() {
     const { data: session } = useSession()
     const router = useRouter()
+    const pathname = usePathname()
     const [isOpen, setIsOpen] = useState(false)
     const menuRef = useRef<HTMLDivElement>(null)
     const { theme } = useTheme()
@@ -37,7 +38,40 @@ export default function UserAccountMenu() {
 
     const handleLogout = async () => {
         setIsOpen(false)
-        await signOut({ callbackUrl: "/login" })
+        const role = pathname?.startsWith("/supplier") ? "SUPPLIER" : "VENDOR"
+        const basePath = role === "SUPPLIER" ? "/api/auth/supplier" : "/api/auth/vendor"
+        const callbackUrl = `/login?role=${role}&loggedOut=1`
+
+        try {
+            const csrfRes = await fetch(`${basePath}/csrf`, { method: "GET" })
+            const csrfData = await csrfRes.json().catch(() => ({}))
+            const csrfToken = csrfData?.csrfToken ?? ""
+
+            const signoutRes = await fetch(`${basePath}/signout`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Auth-Return-Redirect": "1",
+                },
+                body: new URLSearchParams({ csrfToken, callbackUrl }),
+            })
+            const data = await signoutRes.json().catch(() => ({}))
+            window.location.href = data?.url ?? callbackUrl
+        } catch {
+            // Fallback: best-effort local cookie clear (role-scoped cookie names)
+            const cookieNames =
+                role === "SUPPLIER"
+                    ? ["authjs.session-token-supplier", "__Secure-authjs.session-token-supplier"]
+                    : ["authjs.session-token-vendor", "__Secure-authjs.session-token-vendor"]
+            for (const cookieName of cookieNames) {
+                try {
+                    document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax`
+                } catch {
+                    // ignore
+                }
+            }
+            window.location.href = callbackUrl
+        }
     }
 
     const userInitial = session?.user?.name?.[0] || session?.user?.email?.[0] || "V"

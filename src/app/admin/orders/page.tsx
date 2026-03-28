@@ -25,8 +25,9 @@ async function getOrders(): Promise<AdminOrder[]> {
     })
     if (acceptedSyncs.length === 0) return []
 
+    type AcceptedSyncPick = (typeof acceptedSyncs)[number]
     const syncsByStore = new Map<string, Set<string>>()
-    acceptedSyncs.forEach((sync) => {
+    acceptedSyncs.forEach((sync: AcceptedSyncPick) => {
         if (!syncsByStore.has(sync.storeId)) syncsByStore.set(sync.storeId, new Set())
         syncsByStore.get(sync.storeId)!.add(sync.shopifyProductId)
     })
@@ -40,7 +41,9 @@ async function getOrders(): Promise<AdminOrder[]> {
         orderBy: { shopifyCreatedAt: "desc" },
     })
 
-    const relevantOrders = cachedOrders.filter((order) => {
+    type CachedOrderRow = (typeof cachedOrders)[number]
+
+    const relevantOrders = cachedOrders.filter((order: CachedOrderRow) => {
         const syncedProductIds = syncsByStore.get(order.storeId)
         if (!syncedProductIds?.size) return false
         try {
@@ -56,7 +59,7 @@ async function getOrders(): Promise<AdminOrder[]> {
         }
     })
 
-    return relevantOrders.map((order) => {
+    return relevantOrders.map((order: CachedOrderRow) => {
         const store = order.store as { id: string; businessName: string; shopifyStoreName: string }
         return {
             id: order.shopifyOrderId,

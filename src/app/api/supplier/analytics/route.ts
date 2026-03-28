@@ -49,7 +49,7 @@ export async function GET() {
         })
 
         const averagePrice = products.length > 0
-            ? products.reduce((sum, p) => sum + p.price, 0) / products.length
+            ? products.reduce((sum: number, p: { price: number }) => sum + p.price, 0) / products.length
             : 0
 
         // Get recent activity (last 7 days)

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { getCachedProducts, isCacheFresh, updateProductCache } from "@/lib/cache"
 
@@ -13,7 +14,7 @@ const PER_STORE_LIMIT = 25
 export async function GET() {
     try {
         const session = await auth()
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -31,6 +32,8 @@ export async function GET() {
             return NextResponse.json({ products: [] })
         }
 
+        type StoreRow = (typeof stores)[number]
+
         type ProductItem = { id: number; title: string; storeId: string; storeName: string }
 
         const fetchProductsForStore = async (
@@ -43,7 +46,8 @@ export async function GET() {
             const cacheFresh = await isCacheFresh(store.id, "products")
             if (cacheFresh) {
                 const cached = await getCachedProducts(store.id)
-                return cached.slice(0, PER_STORE_LIMIT).map((product) => ({
+                type CachedProductRow = (typeof cached)[number]
+                return cached.slice(0, PER_STORE_LIMIT).map((product: CachedProductRow) => ({
                     id: parseInt(product.shopifyProductId),
                     title: product.title || "Product",
                     storeId: store.id,
@@ -82,8 +86,12 @@ export async function GET() {
             }
         }
 
-        const results = await Promise.allSettled(stores.map((s) => fetchProductsForStore(s)))
-        const allProducts: ProductItem[] = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+        const results = await Promise.allSettled(
+            stores.map((s: StoreRow) => fetchProductsForStore(s))
+        )
+        const allProducts: ProductItem[] = results.flatMap((r: PromiseSettledResult<ProductItem[]>) =>
+            r.status === "fulfilled" ? r.value : []
+        )
         return NextResponse.json({ products: allProducts.slice(0, 50) })
     } catch (error) {
         console.error("Chat attach products error:", error)

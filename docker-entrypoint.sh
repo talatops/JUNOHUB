@@ -18,6 +18,9 @@ done
 echo "Syncing database schema with Prisma (db push)..."
 npx prisma db push --accept-data-loss
 
+echo "Regenerating Prisma Client..."
+npx prisma generate
+
 if [ "$RUN_TEMPLATE_SEED_ON_START" = "true" ]; then
   echo "Seeding predefined email templates..."
   # Run seed script; if it fails, log the error but continue starting the app

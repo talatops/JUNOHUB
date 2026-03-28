@@ -5,7 +5,7 @@ import UserAccountMenu from "@/components/UserAccountMenu"
 import NotificationBell from "@/components/NotificationBell"
 import PageTransition from "@/components/PageTransition"
 import ThemeToggle from "@/components/ThemeToggle"
-import { auth } from "@/auth"
+import { auth } from "@/auth.vendor"
 import { redirect } from "next/navigation"
 
 export default async function DashboardLayout({
@@ -15,13 +15,18 @@ export default async function DashboardLayout({
 }) {
     const session = await auth()
 
-    if (!session) {
+    if (!session?.user) {
         redirect("/login")
     }
 
-    if (session.user.role !== "VENDOR") {
-        if (session.user.role === "SUPPLIER") {
-            redirect("/login?error=WrongPortal&role=SUPPLIER")
+    const role = session.user.role
+    if (!role) {
+        redirect("/login")
+    }
+
+    if (role !== "VENDOR") {
+        if (role === "SUPPLIER") {
+            redirect("/supplier")
         }
         redirect("/login?error=WrongRole")
     }

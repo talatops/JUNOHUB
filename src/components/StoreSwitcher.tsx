@@ -89,7 +89,27 @@ export default function StoreSwitcher() {
         }
     }
 
-    if (stores.length === 0) return null
+    if (stores.length === 0) {
+        return (
+            <button
+                type="button"
+                onClick={() => router.push("/dashboard/stores")}
+                className={`flex max-w-full items-center gap-1.5 rounded-xl border px-2 py-2 text-left backdrop-blur-sm transition-all duration-200 ease-out md:gap-2 md:px-4 ${isLight
+                    ? "bg-white border-slate-200 hover:bg-slate-50"
+                    : "bg-white/10 border-white/10 hover:bg-white/15"
+                    }`}
+            >
+                <Store
+                    className={`h-3.5 w-3.5 shrink-0 md:h-4 md:w-4 ${isLight ? "text-slate-600" : "text-slate-300"}`}
+                />
+                <span
+                    className={`truncate text-xs font-bold md:text-sm ${isLight ? "text-slate-900" : "text-white"}`}
+                >
+                    Stores
+                </span>
+            </button>
+        )
+    }
 
     return (
         <div className="relative" ref={dropdownRef}>

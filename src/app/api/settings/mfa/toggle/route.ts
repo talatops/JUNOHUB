@@ -13,10 +13,9 @@ export async function POST(req: Request) {
         const { enabled } = await req.json()
 
         // Use raw query to check mfaSecret until Prisma client is fully regenerated
-        const result = await prisma.$queryRawUnsafe<Array<{ mfaSecret: string | null }>>(
-            `SELECT "mfaSecret" FROM "User" WHERE id = $1`,
-            session.user.id
-        )
+        const result = await prisma.$queryRaw<
+            Array<{ mfaSecret: string | null }>
+        >`SELECT "mfaSecret" FROM "User" WHERE id = ${session.user.id}`
 
         if (!result || result.length === 0) {
             return NextResponse.json({ message: "User not found" }, { status: 404 })
@@ -33,10 +32,7 @@ export async function POST(req: Request) {
 
         // Disable MFA (can be done without verification)
         if (!enabled) {
-            await prisma.$executeRawUnsafe(
-                `UPDATE "User" SET "mfaEnabled" = false WHERE id = $1`,
-                session.user.id
-            )
+            await prisma.$executeRaw`UPDATE "User" SET "mfaEnabled" = false WHERE id = ${session.user.id}`
 
             return NextResponse.json({
                 message: "MFA disabled successfully",

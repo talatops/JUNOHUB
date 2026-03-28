@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { sendEmail, generateInvitationEmailHtml } from "@/lib/email"
 import { notifyInvitationReceived } from "@/lib/notifications"
@@ -17,7 +18,7 @@ export async function DELETE(
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -40,9 +41,10 @@ export async function DELETE(
             )
         }
 
+        type DeleteFlowStoreRow = (typeof vendorStores)[number]
         const storeIdsToCheck = storeId
             ? [storeId]
-            : vendorStores.map(s => s.id)
+            : vendorStores.map((s: DeleteFlowStoreRow) => s.id)
 
         // Find and delete pending invitations
         const pendingInvitations = await prisma.invitation.findMany({
@@ -64,9 +66,10 @@ export async function DELETE(
         }
 
         // Delete all pending invitations
+        type PendingInvRow = (typeof pendingInvitations)[number]
         await prisma.invitation.deleteMany({
             where: {
-                id: { in: pendingInvitations.map((inv) => inv.id) }
+                id: { in: pendingInvitations.map((inv: PendingInvRow) => inv.id) }
             }
         })
 
@@ -93,7 +96,7 @@ export async function POST(
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -122,10 +125,12 @@ export async function POST(
             )
         }
 
+        type PostFlowStoreRow = (typeof vendorStores)[number]
+
         // Determine which stores to connect
         const storesToConnect = connectToAllStores
             ? vendorStores
-            : vendorStores.filter(store => store.isActive)
+            : vendorStores.filter((store: PostFlowStoreRow) => store.isActive)
 
         if (storesToConnect.length === 0) {
             return NextResponse.json(
@@ -161,7 +166,7 @@ export async function POST(
         }
 
         // Check for existing connections and invitations for all stores
-        const storeIds = storesToConnect.map(s => s.id)
+        const storeIds = storesToConnect.map((s: PostFlowStoreRow) => s.id)
         const existingConnections = await prisma.connection.findMany({
             where: {
                 storeId: { in: storeIds },
@@ -180,13 +185,18 @@ export async function POST(
             }
         })
 
+        type ExistingConnectionRow = (typeof existingConnections)[number]
+        type ExistingInvitationRow = (typeof existingInvitations)[number]
+
         // Filter out stores that already have connections or pending invitations
         const connectedStoreIds = new Set([
-            ...existingConnections.map(c => c.storeId),
-            ...existingInvitations.map((i) => i.storeId)
+            ...existingConnections.map((c: ExistingConnectionRow) => c.storeId),
+            ...existingInvitations.map((i: ExistingInvitationRow) => i.storeId)
         ])
 
-        const storesToInvite = storesToConnect.filter(store => !connectedStoreIds.has(store.id))
+        const storesToInvite = storesToConnect.filter(
+            (store: PostFlowStoreRow) => !connectedStoreIds.has(store.id)
+        )
 
         if (storesToInvite.length === 0) {
             const allConnected = storesToConnect.length === existingConnections.length + existingInvitations.length
@@ -204,8 +214,8 @@ export async function POST(
         const expiresAt = new Date()
         expiresAt.setDate(expiresAt.getDate() + 7) // 7 days expiry
 
-        const invitations = []
-        const storeNames = storesToInvite.map(s => s.businessName).join(", ")
+        const invitations: Array<{ id: string; storeId: string; token: string }> = []
+        const storeNames = storesToInvite.map((s: PostFlowStoreRow) => s.businessName).join(", ")
 
         for (const store of storesToInvite) {
             const invitationToken = crypto.randomBytes(32).toString("hex").toUpperCase().slice(0, 16)
@@ -221,7 +231,7 @@ export async function POST(
                     }
                 })
                 invitations.push({ id: invitation.id, storeId: store.id, token: invitationToken })
-            } catch (dbError: any) {
+            } catch (dbError: unknown) {
                 console.error(`Database error creating invitation for store ${store.id}:`, dbError)
                 // Continue with other stores
             }
@@ -280,7 +290,7 @@ export async function POST(
             message: connectToAllStores && storesToInvite.length > 1
                 ? `Invitations sent successfully to ${invitations.length} store(s)`
                 : "Invitation sent successfully",
-            invitations: invitations.map(inv => ({
+            invitations: invitations.map((inv) => ({
                 id: inv.id,
                 storeId: inv.storeId,
                 token: inv.token,

@@ -12,10 +12,9 @@ export async function GET() {
         }
 
         // Use raw query to access MFA fields until Prisma client is fully regenerated
-        const result = await prisma.$queryRawUnsafe<Array<{ mfaEnabled: boolean | null; mfaSecret: string | null }>>(
-            `SELECT "mfaEnabled", "mfaSecret" FROM "User" WHERE id = $1`,
-            session.user.id
-        )
+        const result = await prisma.$queryRaw<
+            Array<{ mfaEnabled: boolean | null; mfaSecret: string | null }>
+        >`SELECT "mfaEnabled", "mfaSecret" FROM "User" WHERE id = ${session.user.id}`
 
         if (!result || result.length === 0) {
             return NextResponse.json({ message: "User not found" }, { status: 404 })

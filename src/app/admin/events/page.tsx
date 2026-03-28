@@ -36,8 +36,12 @@ async function getEvents(type?: AdminEventType): Promise<AdminEvent[]> {
         }),
     ])
 
+    type ConnectionEventRow = (typeof connectionEvents)[number]
+    type ProductSyncEventRow = (typeof productSyncEvents)[number]
+    type SyncHealthEventRow = (typeof syncHealthEvents)[number]
+
     const events: AdminEvent[] = [
-        ...connectionEvents.map((c) => ({
+        ...connectionEvents.map((c: ConnectionEventRow) => ({
             id: c.id,
             type: "CONNECTION" as AdminEventType,
             status: c.status,
@@ -46,7 +50,7 @@ async function getEvents(type?: AdminEventType): Promise<AdminEvent[]> {
             supplierName: c.supplier.companyName,
             metadata: {},
         })),
-        ...productSyncEvents.map((p) => ({
+        ...productSyncEvents.map((p: ProductSyncEventRow) => ({
             id: p.id,
             type: "PRODUCT_SYNC" as AdminEventType,
             status: p.status,
@@ -55,7 +59,7 @@ async function getEvents(type?: AdminEventType): Promise<AdminEvent[]> {
             supplierName: p.supplier.companyName,
             metadata: { productTitle: p.shopifyProductTitle, shopifyProductId: p.shopifyProductId },
         })),
-        ...syncHealthEvents.map((s) => ({
+        ...syncHealthEvents.map((s: SyncHealthEventRow) => ({
             id: s.id,
             type: "SYNC_HEALTH" as AdminEventType,
             status: s.syncStatus,

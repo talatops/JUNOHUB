@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getBaseUrl } from "@/lib/utils"
+import { cookies } from "next/headers"
+import crypto from "crypto"
 
 /**
  * GET /api/integrations/gmail/callback
@@ -9,30 +11,53 @@ import { getBaseUrl } from "@/lib/utils"
  */
 export async function GET(req: Request) {
     try {
+        const cookieStore = await cookies()
+        const stateCookie = cookieStore.get("juno_gmail_oauth_state")?.value
+        const redirectWithError = (errorCode: string, extra?: Record<string, string>) => {
+            const url = new URL(`/dashboard/juno-engine/gmail-connect?error=${errorCode}`, getBaseUrl())
+            if (extra) {
+                for (const [key, value] of Object.entries(extra)) {
+                    url.searchParams.set(key, value)
+                }
+            }
+            const response = NextResponse.redirect(url)
+            response.cookies.delete("juno_gmail_oauth_state")
+            return response
+        }
+
         const session = await auth()
         if (!session?.user?.id) {
-            return NextResponse.redirect(
-                new URL("/login?error=unauthorized", getBaseUrl())
-            )
+            const response = NextResponse.redirect(new URL("/login?error=unauthorized", getBaseUrl()))
+            response.cookies.delete("juno_gmail_oauth_state")
+            return response
         }
 
         const { searchParams } = new URL(req.url)
         const code = searchParams.get("code")
         const error = searchParams.get("error")
-        const _state = searchParams.get("state")
+        const state = searchParams.get("state")
 
         // Handle OAuth errors
         if (error) {
             console.error("Gmail OAuth error:", error)
-            return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=oauth_failed", getBaseUrl())
-            )
+            return redirectWithError("oauth_failed")
         }
 
         if (!code) {
-            return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=no_code", getBaseUrl())
-            )
+            return redirectWithError("no_code")
+        }
+
+        if (!state || !stateCookie) {
+            return redirectWithError("invalid_state")
+        }
+
+        const stateBuffer = Buffer.from(state)
+        const cookieBuffer = Buffer.from(stateCookie)
+        if (
+            stateBuffer.length !== cookieBuffer.length ||
+            !crypto.timingSafeEqual(stateBuffer, cookieBuffer)
+        ) {
+            return redirectWithError("invalid_state")
         }
 
         // Exchange authorization code for tokens
@@ -62,17 +87,12 @@ export async function GET(req: Request) {
 
             // Provide more specific error message if it's a redirect_uri_mismatch
             if (errorData.error === "redirect_uri_mismatch") {
-                return NextResponse.redirect(
-                    new URL(
-                        `/dashboard/juno-engine/gmail-connect?error=redirect_uri_mismatch&redirect_uri=${encodeURIComponent(redirectUri)}`,
-                        getBaseUrl()
-                    )
-                )
+                return redirectWithError("redirect_uri_mismatch", {
+                    redirect_uri: redirectUri,
+                })
             }
 
-            return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=token_exchange_failed", getBaseUrl())
-            )
+            return redirectWithError("token_exchange_failed")
         }
 
         const tokens = await tokenResponse.json()
@@ -113,24 +133,19 @@ export async function GET(req: Request) {
             }
         } catch (error) {
             console.error("Error fetching user info:", error)
-            return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", getBaseUrl())
-            )
+            return redirectWithError("user_info_failed")
         }
 
         if (!userInfo?.email) {
             console.error("No email found in user info")
-            return NextResponse.redirect(
-                new URL("/dashboard/juno-engine/gmail-connect?error=user_info_failed", getBaseUrl())
-            )
+            return redirectWithError("user_info_failed")
         }
 
         // Calculate token expiration
         const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000))
 
         // Store or update Gmail integration
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (prisma as any).gmailIntegration.upsert({
+        await prisma.gmailIntegration.upsert({
             where: {
                 userId: session.user.id
             },
@@ -151,13 +166,17 @@ export async function GET(req: Request) {
             }
         })
 
-        return NextResponse.redirect(
+        const successResponse = NextResponse.redirect(
             new URL("/dashboard/juno-engine/gmail-connect?connected=true", getBaseUrl())
         )
+        successResponse.cookies.delete("juno_gmail_oauth_state")
+        return successResponse
     } catch (error) {
         console.error("Gmail callback error:", error)
-        return NextResponse.redirect(
+        const response = NextResponse.redirect(
             new URL("/dashboard/juno-engine/gmail-connect?error=callback_failed", getBaseUrl())
         )
+        response.cookies.delete("juno_gmail_oauth_state")
+        return response
     }
 }

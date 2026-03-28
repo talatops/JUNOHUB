@@ -1,4 +1,5 @@
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
@@ -8,6 +9,12 @@ export async function POST(req: Request) {
         const session = await auth()
         if (!session?.user?.id) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+        if (!isVendorPortalRole(session.user.role)) {
+            return NextResponse.json(
+                { message: "Only vendor accounts can connect Shopify stores." },
+                { status: 403 }
+            )
         }
 
         const {

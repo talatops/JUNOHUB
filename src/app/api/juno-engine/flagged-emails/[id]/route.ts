@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 
 async function getActiveStoreId(userId: string): Promise<string | null> {
@@ -25,7 +26,7 @@ export async function DELETE(
         if (!session?.user?.id) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 

@@ -5,7 +5,6 @@ import { motion } from "framer-motion"
 import { Mail, Lock, Loader2, User, ShoppingBag, Truck } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { signIn } from "next-auth/react"
 import Image from "next/image"
 
 function SignupFormContent() {
@@ -15,6 +14,24 @@ function SignupFormContent() {
     const searchParams = useSearchParams()
     const initialRole = searchParams.get("role")?.toUpperCase() === "SUPPLIER" ? "SUPPLIER" : "VENDOR"
     const [role, setRole] = useState<"VENDOR" | "SUPPLIER">(initialRole)
+
+    const applyRoleCookie = (selectedRole: "VENDOR" | "SUPPLIER") => {
+        try {
+            document.cookie = `juno_login_role=${selectedRole}; path=/; max-age=600; samesite=lax`
+        } catch {
+            // ignore cookie errors – server-side will just skip role enforcement
+        }
+    }
+
+    const roleBasePath = (selectedRole: "VENDOR" | "SUPPLIER") =>
+        selectedRole === "SUPPLIER" ? "/api/auth/supplier" : "/api/auth/vendor"
+
+    const getRoleCsrfToken = async (selectedRole: "VENDOR" | "SUPPLIER") => {
+        const res = await fetch(`${roleBasePath(selectedRole)}/csrf`, { method: "GET" })
+        if (!res.ok) return ""
+        const data = await res.json()
+        return data?.csrfToken ?? ""
+    }
 
     const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault()
@@ -47,7 +64,24 @@ function SignupFormContent() {
     }
 
     const handleGoogleSignIn = () => {
-        signIn("google", { callbackUrl: "/onboarding" })
+        void (async () => {
+            applyRoleCookie(role)
+            const callbackUrl = role === "SUPPLIER" ? "/supplier" : "/dashboard"
+
+            const csrfToken = await getRoleCsrfToken(role)
+            const res = await fetch(`${roleBasePath(role)}/signin/google`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Auth-Return-Redirect": "1",
+                },
+                body: new URLSearchParams({ csrfToken, callbackUrl }),
+            })
+
+            const data = await res.json()
+            const url = data?.url ?? callbackUrl
+            window.location.href = url
+        })()
     }
 
     return (

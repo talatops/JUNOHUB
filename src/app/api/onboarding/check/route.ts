@@ -9,7 +9,8 @@ export async function GET() {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        if (session.user.role !== "VENDOR") {
+        // Suppliers use a different portal; treat them as "onboarding N/A"
+        if (session.user.role === "SUPPLIER") {
             return NextResponse.json({ complete: true })
         }
 

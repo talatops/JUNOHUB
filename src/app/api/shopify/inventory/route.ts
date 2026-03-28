@@ -31,7 +31,8 @@ export async function GET() {
         if (cacheFresh) {
             // Return cached data transformed to match Shopify format
             const cachedProducts = await getCachedProducts(store.id)
-            const transformedProducts = cachedProducts.map(product => {
+            type CachedProductRow = (typeof cachedProducts)[number]
+            const transformedProducts = cachedProducts.map((product: CachedProductRow) => {
                 const images = (product.images as { src: string }[]) || []
                 return {
                     id: parseInt(product.shopifyProductId),

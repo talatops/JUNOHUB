@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 
 async function getActiveStoreId(userId: string): Promise<string | null> {
@@ -22,7 +23,7 @@ export async function GET() {
         if (!session?.user?.id) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 
@@ -36,8 +37,9 @@ export async function GET() {
             orderBy: { flaggedAt: "desc" },
         })
 
+        type FlaggedEmailRow = (typeof flaggedEmails)[number]
         return NextResponse.json({
-            flaggedEmails: flaggedEmails.map((e) => ({
+            flaggedEmails: flaggedEmails.map((e: FlaggedEmailRow) => ({
                 id: e.id,
                 subject: e.subject,
                 from: e.from,
@@ -61,7 +63,7 @@ export async function POST(req: Request) {
         if (!session?.user?.id) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
-        if (session.user.role !== "VENDOR") {
+        if (!isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Forbidden" }, { status: 403 })
         }
 

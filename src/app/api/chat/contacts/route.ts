@@ -53,7 +53,8 @@ export async function GET() {
                     }
                 }
             })
-            contacts = connections.map(c => ({
+            type VendorSideConnection = (typeof connections)[number]
+            contacts = connections.map((c: VendorSideConnection) => ({
                 id: c.supplier.user.id,
                 name: c.supplier.companyName || c.supplier.user.name,
                 email: c.supplier.user.email,
@@ -84,7 +85,8 @@ export async function GET() {
                     }
                 }
             })
-            contacts = connections.map(c => ({
+            type SupplierSideConnection = (typeof connections)[number]
+            contacts = connections.map((c: SupplierSideConnection) => ({
                 id: c.store.user.id,
                 name: c.store.businessName || c.store.user.name,
                 email: c.store.user.email,

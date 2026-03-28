@@ -58,7 +58,7 @@ async function reEmbedKnowledgeBase() {
 
             try {
                 // Generate embeddings for this batch
-                const texts = batch.map((chunk) => chunk.content)
+                const texts = batch.map((chunk: KnowledgeChunk) => chunk.content)
                 const embeddings = await embedBatch(texts)
 
                 if (embeddings.length !== batch.length) {
@@ -70,7 +70,7 @@ async function reEmbedKnowledgeBase() {
                 }
 
                 // Update each chunk with its new embedding
-                const updatePromises = batch.map(async (chunk, index) => {
+                const updatePromises = batch.map(async (chunk: KnowledgeChunk, index: number) => {
                     const embedding = embeddings[index]
 
                     if (!embedding || embedding.length === 0) {

@@ -15,7 +15,8 @@ import {
     Flag,
     Mail,
     FileText,
-    HelpCircle
+    HelpCircle,
+    Store
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/ThemeProvider"
@@ -51,6 +52,12 @@ const routes = [
         icon: Zap,
         href: "/dashboard/new-products",
         color: "text-yellow-500",
+    },
+    {
+        label: "Stores",
+        icon: Store,
+        href: "/dashboard/stores",
+        color: "text-teal-500",
     },
     {
         label: "Suppliers",

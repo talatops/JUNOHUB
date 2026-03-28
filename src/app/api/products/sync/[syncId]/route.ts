@@ -163,9 +163,16 @@ export async function DELETE(
 
         // Verify user owns the sync (vendor who requested or supplier who received)
         const isVendor = productSync.store.userId === session.user.id
-        const isSupplier = session.user.role === "SUPPLIER"
-        
-        if (!isVendor && !isSupplier) {
+        let isSupplierOwner = false
+        if (session.user.role === "SUPPLIER") {
+            const supplierProfile = await prisma.supplierProfile.findUnique({
+                where: { userId: session.user.id },
+                select: { id: true },
+            })
+            isSupplierOwner = supplierProfile?.id === productSync.supplierId
+        }
+
+        if (!isVendor && !isSupplierOwner) {
             return NextResponse.json(
                 { message: "Unauthorized" },
                 { status: 403 }
@@ -173,7 +180,7 @@ export async function DELETE(
         }
 
         // Only vendor can delete pending requests, supplier should reject instead
-        if (isSupplier && productSync.status === "PENDING") {
+        if (isSupplierOwner && productSync.status === "PENDING") {
             return NextResponse.json(
                 { message: "Please reject the request instead of deleting it" },
                 { status: 400 }

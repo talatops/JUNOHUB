@@ -31,7 +31,8 @@ export async function GET() {
         if (cacheFresh) {
             // Return cached data transformed to match Shopify format
             const cachedCustomers = await getCachedCustomers(store.id)
-            const transformedCustomers = cachedCustomers.map(customer => ({
+            type CachedCustomerRow = (typeof cachedCustomers)[number]
+            const transformedCustomers = cachedCustomers.map((customer: CachedCustomerRow) => ({
                 id: parseInt(customer.shopifyCustomerId),
                 email: customer.email,
                 first_name: customer.firstName,

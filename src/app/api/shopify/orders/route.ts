@@ -31,7 +31,8 @@ export async function GET() {
         if (cacheFresh) {
             // Return cached data transformed to match Shopify format
             const cachedOrders = await getCachedOrders(store.id)
-            const transformedOrders = cachedOrders.map(order => ({
+            type CachedOrderRow = (typeof cachedOrders)[number]
+            const transformedOrders = cachedOrders.map((order: CachedOrderRow) => ({
                 id: parseInt(order.shopifyOrderId),
                 name: order.orderNumber,
                 email: order.email,

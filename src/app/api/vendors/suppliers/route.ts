@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
+import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 
 /**
@@ -10,7 +11,7 @@ export async function GET() {
     try {
         const session = await auth()
 
-        if (!session?.user?.id || session.user.role !== "VENDOR") {
+        if (!session?.user?.id || !isVendorPortalRole(session.user.role)) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
@@ -48,9 +49,11 @@ export async function GET() {
             }
         })
 
+        type SupplierListRow = (typeof suppliers)[number]
+
         // Mark which suppliers are already connected/pending
         const suppliersWithStatus = await Promise.all(
-            suppliers.map(async (supplier) => {
+            suppliers.map(async (supplier: SupplierListRow) => {
                 let connectionStatus: "NONE" | "PENDING" | "CONNECTED" | "REJECTED" = "NONE"
                 
                 if (vendorStore) {
@@ -71,7 +74,7 @@ export async function GET() {
                         connectionStatus = connection.status as "PENDING" | "CONNECTED" | "REJECTED"
                     } else {
                         // Check for pending invitation (not yet accepted)
-                        const pendingInvitation = await (prisma as any).invitation.findFirst({
+                        const pendingInvitation = await prisma.invitation.findFirst({
                             where: {
                                 storeId: vendorStore.id,
                                 supplierId: supplier.id,

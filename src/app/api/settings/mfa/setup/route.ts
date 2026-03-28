@@ -47,11 +47,7 @@ export async function POST() {
         // Store the secret temporarily (not enabled yet - will be enabled after verification)
         // Encrypt the secret at rest
         const encryptedSecret = encryptString(secret)
-        await prisma.$executeRawUnsafe(
-            `UPDATE "User" SET "mfaSecret" = $1 WHERE id = $2`,
-            encryptedSecret,
-            session.user.id
-        )
+        await prisma.$executeRaw`UPDATE "User" SET "mfaSecret" = ${encryptedSecret} WHERE id = ${session.user.id}`
 
         return NextResponse.json({
             secret,

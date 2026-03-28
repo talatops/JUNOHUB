@@ -37,8 +37,9 @@ export async function sendPushNotification(userId: string, payload: PushPayload)
             return { success: false, reason: 'No subscriptions found' }
         }
 
+        type PushSubscriptionRow = (typeof subscriptions)[number]
         const results = await Promise.all(
-            subscriptions.map(async (sub) => {
+            subscriptions.map(async (sub: PushSubscriptionRow) => {
                 try {
                     await webpush.sendNotification(
                         {

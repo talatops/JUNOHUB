@@ -15,7 +15,6 @@ import {
     ChevronRight,
     Layout
 } from "lucide-react"
-import { signOut } from "next-auth/react"
 
 const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
@@ -31,6 +30,40 @@ export default function DashboardSidebar({
     children: React.ReactNode
 }) {
     const pathname = usePathname()
+
+    const handleSignOut = async () => {
+        const callbackUrl = "/login?role=VENDOR&loggedOut=1"
+        const basePath = "/api/auth/vendor"
+
+        try {
+            const csrfRes = await fetch(`${basePath}/csrf`, { method: "GET" })
+            const csrfData = await csrfRes.json().catch(() => ({}))
+            const csrfToken = csrfData?.csrfToken ?? ""
+
+            const signoutRes = await fetch(`${basePath}/signout`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "X-Auth-Return-Redirect": "1",
+                },
+                body: new URLSearchParams({ csrfToken, callbackUrl }),
+            })
+
+            const data = await signoutRes.json().catch(() => ({}))
+            window.location.href = data?.url ?? callbackUrl
+        } catch {
+            // Fallback: best-effort local cookie clear (role-scoped cookie names)
+            const cookieNames = ["authjs.session-token-vendor", "__Secure-authjs.session-token-vendor"]
+            for (const cookieName of cookieNames) {
+                try {
+                    document.cookie = `${cookieName}=; path=/; max-age=0; samesite=lax`
+                } catch {
+                    // ignore
+                }
+            }
+            window.location.href = callbackUrl
+        }
+    }
 
     return (
         <div className="flex h-screen bg-slate-50 font-sans text-slate-900">
@@ -75,7 +108,7 @@ export default function DashboardSidebar({
                         <span>Settings</span>
                     </Link>
                     <button
-                        onClick={() => signOut({ callbackUrl: "/" })}
+                        onClick={() => void handleSignOut()}
                         className="w-full flex items-center gap-4 px-4 h-12 rounded-xl font-bold text-red-500 hover:bg-red-50 transition-all cursor-pointer"
                     >
                         <LogOut className="w-5 h-5" />

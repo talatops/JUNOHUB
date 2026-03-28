@@ -72,17 +72,14 @@ export async function POST(req: Request) {
         }
 
         // Regular user login flow
-        const userResult = await prisma.$queryRawUnsafe<
-            Array<{
-                id: string
-                password: string | null
-                mfaEnabled: boolean | null
-                mfaSecret: string | null
-            }>
-        >(
-            `SELECT id, password, "mfaEnabled", "mfaSecret" FROM "User" WHERE email = $1`,
-            email,
-        )
+        const userResult = await prisma.$queryRaw`
+            SELECT id, password, "mfaEnabled", "mfaSecret" FROM "User" WHERE email = ${email}
+        ` as Array<{
+            id: string
+            password: string | null
+            mfaEnabled: boolean | null
+            mfaSecret: string | null
+        }>
 
         if (!userResult || userResult.length === 0) {
             return NextResponse.json(
@@ -125,7 +122,7 @@ export async function POST(req: Request) {
             }
 
             // Verify MFA code
-            const mfaSecret = decryptString(user.mfaSecret)
+                const mfaSecret = decryptString(user.mfaSecret)
             if (!mfaSecret) {
                 return NextResponse.json(
                     { message: "MFA is enabled but no secret found. Please contact support." },
