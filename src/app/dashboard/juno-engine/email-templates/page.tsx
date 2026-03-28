@@ -7,7 +7,13 @@ import { FileText, Search, Plus, Loader2, Edit, Trash2 } from "lucide-react"
 import { renderTemplate } from "@/lib/templates/simpleRenderer"
 import { useTheme } from "@/components/ThemeProvider"
 
-type TemplateIntent = "general" | "shipping_delay" | "refund_request" | "question"
+type TemplateIntent =
+    | "general"
+    | "shipping_delay"
+    | "refund_request"
+    | "question"
+    | "account_billing"
+    | "off_topic"
 type TemplateMood = "neutral" | "angry" | "confused" | "happy"
 
 interface Template {
@@ -28,6 +34,8 @@ const INTENT_OPTIONS: { value: TemplateIntent; label: string }[] = [
     { value: "shipping_delay", label: "Shipping delay" },
     { value: "refund_request", label: "Refund request" },
     { value: "question", label: "General question" },
+    { value: "account_billing", label: "Account / billing" },
+    { value: "off_topic", label: "Off-topic (not store-related)" },
 ]
 
 const MOOD_OPTIONS: { value: TemplateMood; label: string }[] = [
@@ -44,6 +52,13 @@ const exampleContext = {
     store_email: "support@junovendor.com",
     subject: "Where is my order?",
     ticket_summary: "Customer is asking about a shipping delay on order #1234.",
+    order_summary:
+        "Order #1001 (2025-03-01) | financial: paid | fulfillment: fulfilled | total: 49.99 USD | items: Tee ×1",
+}
+
+function isAiGeneratedTemplate(variables: unknown): boolean {
+    if (!variables || typeof variables !== "object") return false
+    return (variables as Record<string, unknown>).source === "ai-generated"
 }
 
 export default function EmailTemplatesPage() {
@@ -249,12 +264,22 @@ export default function EmailTemplatesPage() {
                                             : "bg-white/5 border-white/10 hover:bg-white/[0.07] hover:border-indigo-500/30"
                                             }`}
                                     >
-                                        <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-start justify-between mb-4 gap-2">
                                             <div className="flex-1 min-w-0">
-                                                <h3 className={`font-bold text-base md:text-lg truncate group-hover:text-indigo-500 transition-colors ${isLight ? "text-slate-900" : "text-white"
-                                                    }`}>
-                                                    {template.name}
-                                                </h3>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <h3 className={`font-bold text-base md:text-lg truncate group-hover:text-indigo-500 transition-colors ${isLight ? "text-slate-900" : "text-white"
+                                                        }`}>
+                                                        {template.name}
+                                                    </h3>
+                                                    {isAiGeneratedTemplate(template.variables) && (
+                                                        <span
+                                                            className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30"
+                                                            title="Created automatically from a Gmail auto-reply"
+                                                        >
+                                                            AI-generated
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className={`text-xs mt-1 truncate ${isLight ? "text-slate-500" : "text-slate-400"}`}>
                                                     Intent: {template.intent} • Mood:{" "}
                                                     {template.mood}
@@ -331,14 +356,22 @@ export default function EmailTemplatesPage() {
                                         }`}
                                 >
                                     <div>
-                                        <h2 className="text-xl font-bold">
-                                            {editing.id ? "Edit template" : "New template"}
-                                        </h2>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h2 className="text-xl font-bold">
+                                                {editing.id ? "Edit template" : "New template"}
+                                            </h2>
+                                            {editing.id && isAiGeneratedTemplate(editing.variables) && (
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                                    AI-generated
+                                                </span>
+                                            )}
+                                        </div>
                                         <p
                                             className={`mt-1 text-sm ${isLight ? "text-slate-500" : "text-slate-400"
                                                 }`}
                                         >
-                                            Use {"{{variable}}"} placeholders to personalize replies.
+                                            Use {"{{variable}}"} placeholders (e.g. {"{{order_summary}}"},{" "}
+                                            {"{{ticket_summary}}"}) to personalize replies.
                                         </p>
                                     </div>
                                     <button
@@ -475,10 +508,13 @@ export default function EmailTemplatesPage() {
                                             </p>
                                             <div className="grid grid-cols-1 gap-2">
                                                 {[
-                                                    { key: "{{customer_name}}", label: "Customer's name" },
+                                                    { key: "{{customer_name}}", label: "Greeting name (from sender email, title-cased)" },
                                                     { key: "{{customer_email}}", label: "Customer's email" },
                                                     { key: "{{store_name}}", label: "Store name" },
-                                                    { key: "{{ticket_summary}}", label: "Email summary" }
+                                                    { key: "{{store_email}}", label: "Store contact email" },
+                                                    { key: "{{order_summary}}", label: "Cached orders for sender (or fallback text)" },
+                                                    { key: "{{ticket_summary}}", label: "AI summary of the message" },
+                                                    { key: "{{subject}}", label: "Email subject" },
                                                 ].map((v) => (
                                                     <div key={v.key} className="flex items-center justify-between text-[11px]">
                                                         <code className={`px-2 py-0.5 rounded font-mono font-bold ${isLight ? "bg-white border border-indigo-200 text-indigo-700" : "bg-white/10 text-indigo-300"

@@ -100,14 +100,20 @@ export async function POST(req: NextRequest) {
             historyId,
             success: result.success,
             error: result.error,
+            flagged: result.flagged,
+            replied: result.replied,
         })
 
         return NextResponse.json({
             success: result.success,
             error: result.error,
-            message: result.success
-                ? "Email processed successfully"
-                : "Email processing completed with errors (see logs)"
+            flagged: result.flagged ?? false,
+            replied: result.replied ?? false,
+            message: result.flagged
+                ? "Email flagged — no auto-reply sent"
+                : result.success
+                  ? "Email processed successfully"
+                  : "Email processing completed with errors (see logs)",
         })
     } catch (error) {
         logger.error("Gmail webhook error", error)

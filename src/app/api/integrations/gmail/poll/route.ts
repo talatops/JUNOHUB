@@ -2,12 +2,13 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { getUnreadEmails, sendGmailReply, markEmailAsRead } from "@/lib/gmail/emailService"
+import { processIncomingEmail } from "@/lib/gmail/emailProcessor"
+
+const MAX_ITERATIONS = 10
 
 /**
  * POST /api/integrations/gmail/poll
- * Manually trigger email polling and automated replies
- * This can be called periodically via cron job or manually
+ * Manually trigger email polling and automated replies (same pipeline as Gmail webhook).
  */
 export async function POST(_req: Request) {
     try {
@@ -16,100 +17,54 @@ export async function POST(_req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        // Get user's active store
         const user = await prisma.user.findUnique({
             where: { id: session.user.id },
             include: {
                 stores: {
                     where: { isActive: true },
-                    take: 1
-                }
-            }
+                    take: 1,
+                },
+            },
         })
 
-        const storeId = user?.stores[0]?.id
+        const storeId = user?.stores[0]?.id ?? null
 
-        // Process incoming emails
-        const unreadEmails = await getUnreadEmails(session.user.id, 10)
-        const processed: string[] = []
-        const failed: string[] = []
+        let iterations = 0
+        let repliesAttempted = 0
+        let flaggedCount = 0
+        let lastSuccess = true
+        let lastError: string | undefined
 
-        for (const email of unreadEmails) {
-            try {
-                // Extract email domain from sender
-                const emailMatch = email.from.match(/<(.+)>/)
-                const senderEmail = emailMatch ? emailMatch[1] : email.from.split(" ").pop() || email.from
-                const senderDomain = senderEmail.split("@")[1]?.toLowerCase()
-
-                // Only reply to gmail.com addresses
-                if (senderDomain !== "gmail.com") {
-                    logger.info("Skipping email - not from gmail.com", {
-                        userId: session.user.id,
-                        from: email.from,
-                        domain: senderDomain
-                    })
-                    continue
-                }
-
-                // Send automated reply (dummy response for testing)
-                const replySubject = email.subject.startsWith("Re:") ? email.subject : `Re: ${email.subject}`
-                const replyBody = `
-                    <div style="font-family: Arial, sans-serif; padding: 20px;">
-                        <p>Thank you for your email. This is an automated reply.</p>
-                        <p>We have received your message and will get back to you soon.</p>
-                        <br/>
-                        <p>Best regards,<br/>JUNO Support Team</p>
-                    </div>
-                `
-
-                const result = await sendGmailReply(
-                    session.user.id,
-                    senderEmail,
-                    replySubject,
-                    replyBody,
-                    email.threadId,
-                    {
-                        storeId,
-                        isAutomated: true,
-                        trigger: "GMAIL_AUTO_REPLY",
-                        originalMessageId: email.messageId,
-                    }
-                )
-
-                if (result.success) {
-                    // Mark email as read after replying
-                    await markEmailAsRead(session.user.id, email.id)
-                    processed.push(email.id)
-                    logger.info("Automated reply sent", {
-                        userId: session.user.id,
-                        to: senderEmail,
-                        subject: email.subject
-                    })
-                } else {
-                    failed.push(email.id)
-                    logger.error("Failed to send automated reply", {
-                        userId: session.user.id,
-                        to: senderEmail,
-                        error: result.error
-                    })
-                }
-            } catch (error) {
-                failed.push(email.id)
-                logger.error("Error processing email", { emailId: email.id, error })
+        for (let i = 0; i < MAX_ITERATIONS; i++) {
+            const result = await processIncomingEmail(session.user.id, storeId, undefined, {
+                replyTrigger: "GMAIL_POLL",
+            })
+            iterations++
+            lastSuccess = result.success
+            lastError = result.error
+            if (!result.success) {
+                break
+            }
+            if (result.flagged) {
+                flaggedCount++
+            }
+            if (result.replied) {
+                repliesAttempted++
+            }
+            if (!result.replied) {
+                break
             }
         }
 
         return NextResponse.json({
-            success: true,
-            processed: processed.length,
-            failed: failed.length,
-            total: unreadEmails.length
+            success: lastSuccess,
+            iterations,
+            repliesAttempted,
+            flaggedCount,
+            error: lastError,
         })
     } catch (error) {
         logger.error("Email polling error", error)
-        return NextResponse.json(
-            { message: "Failed to poll emails" },
-            { status: 500 }
-        )
+        return NextResponse.json({ message: "Failed to poll emails" }, { status: 500 })
     }
 }

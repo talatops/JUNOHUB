@@ -17,7 +17,7 @@ interface OrderDetails {
     id: number
     name: string
     order_number?: number
-    email: string
+    email?: string | null
     created_at: string
     updated_at?: string
     total_price: string
@@ -29,9 +29,9 @@ interface OrderDetails {
     fulfillment_status: string | null
     customer: {
         id?: number
-        first_name: string
-        last_name: string
-        email: string
+        first_name?: string | null
+        last_name?: string | null
+        email?: string | null
         phone?: string
     } | null
     shipping_address?: {
@@ -129,6 +129,19 @@ export default function OrderDetailsPage() {
         )
     }
 
+    const contactEmail =
+        [order.email, order.customer?.email]
+            .map((e) => (typeof e === "string" ? e.trim() : ""))
+            .find(Boolean) || ""
+
+    const customerDisplayName = [order.customer?.first_name, order.customer?.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim()
+    const hasCustomerData = Boolean(
+        customerDisplayName || contactEmail || order.customer?.phone
+    )
+
     return (
         <div className="h-full flex flex-col overflow-y-auto">
             {/* Header */}
@@ -154,7 +167,7 @@ export default function OrderDetailsPage() {
             <div className="flex-1 overflow-y-auto min-h-0">
                 <div className="space-y-6">
                     {/* Order Summary & Status - Symmetric Top Grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         {/* Order Date */}
                         <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col justify-between">
                             <div className="flex items-center gap-2 text-slate-400 mb-3">
@@ -224,30 +237,36 @@ export default function OrderDetailsPage() {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Left Column - Customer & Shipping */}
                         <div className="lg:col-span-1 space-y-6">
-                            {/* Customer Info */}
-                            {order.customer && (
-                                <div className="bg-white/5 rounded-xl p-5 border border-white/10">
-                                    <div className="flex items-center gap-2 text-slate-400 mb-4">
-                                        <User className="w-4 h-4" />
-                                        <span className="text-xs font-bold uppercase tracking-wider">Customer</span>
-                                    </div>
+                            {/* Customer — always shown; placeholder when nothing is linked */}
+                            <div className="bg-white/5 rounded-xl p-5 border border-white/10">
+                                <div className="flex items-center gap-2 text-slate-400 mb-4">
+                                    <User className="w-4 h-4" />
+                                    <span className="text-xs font-bold uppercase tracking-wider">Customer</span>
+                                </div>
+                                {!hasCustomerData ? (
+                                    <p className="text-slate-400 text-sm font-medium tracking-wide">
+                                        Customer: --
+                                    </p>
+                                ) : (
                                     <div className="space-y-3">
                                         <p className="text-white font-bold text-base">
-                                            {order.customer.first_name} {order.customer.last_name}
+                                            {customerDisplayName || "—"}
                                         </p>
                                         <div className="flex items-center gap-2 text-slate-300 text-sm">
                                             <Mail className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                                            <span className="break-all">{order.customer.email}</span>
+                                            <span className="break-all">
+                                                {contactEmail ? contactEmail : "Email: --"}
+                                            </span>
                                         </div>
-                                        {order.customer.phone && (
+                                        {order.customer?.phone ? (
                                             <div className="flex items-center gap-2 text-slate-300 text-sm">
                                                 <Phone className="w-3.5 h-3.5 text-slate-500" />
                                                 <span>{order.customer.phone}</span>
                                             </div>
-                                        )}
+                                        ) : null}
                                     </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
 
                             {/* Shipping Address */}
                             {order.shipping_address && (

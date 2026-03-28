@@ -24,6 +24,18 @@ interface ShopifyOrderRecord {
     line_items?: unknown[]
     created_at?: string
 }
+
+/** Shopify often leaves `order.email` empty but sets `customer.email`. */
+function extractOrderEmail(order: ShopifyOrderRecord): string | null {
+    const direct = order.email?.trim()
+    if (direct) return direct
+    const c = order.customer
+    if (c && typeof c === "object" && c !== null && "email" in c) {
+        const fromCustomer = String((c as { email?: string }).email ?? "").trim()
+        if (fromCustomer) return fromCustomer
+    }
+    return null
+}
 interface ShopifyCustomerRecord {
     id: number
     email?: string
@@ -192,7 +204,7 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
                     shopifyOrderId: order.id.toString(),
                     storeId,
                     orderNumber: order.order_number?.toString() || order.name || "",
-                    email: order.email || null,
+                    email: extractOrderEmail(order),
                     totalPrice: order.total_price || "0",
                     currency: order.currency || null,
                     financialStatus: order.financial_status || null,
@@ -203,7 +215,7 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
                 },
                 update: {
                     orderNumber: order.order_number?.toString() || order.name || "",
-                    email: order.email || null,
+                    email: extractOrderEmail(order),
                     totalPrice: order.total_price || "0",
                     currency: order.currency || null,
                     financialStatus: order.financial_status || null,
@@ -396,7 +408,7 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             shopifyOrderId: order.id.toString(),
             storeId,
             orderNumber: order.order_number?.toString() || order.name || "",
-            email: order.email || null,
+            email: extractOrderEmail(order),
             totalPrice: order.total_price || "0",
             currency: order.currency || null,
             financialStatus: order.financial_status || null,
@@ -408,7 +420,7 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
         },
         update: {
             orderNumber: order.order_number?.toString() || order.name || "",
-            email: order.email || null,
+            email: extractOrderEmail(order),
             totalPrice: order.total_price || "0",
             currency: order.currency || null,
             financialStatus: order.financial_status || null,

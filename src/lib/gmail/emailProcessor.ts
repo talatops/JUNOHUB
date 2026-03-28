@@ -3,56 +3,181 @@ import { logger } from "../logger"
 import { sendGmailReply } from "./emailService"
 import { prisma } from "../prisma"
 import { renderTemplate } from "@/lib/templates/simpleRenderer"
+import { classifyCustomerEmail } from "@/lib/ai/gmailGroq"
+import { screenInboundEmailForAbuse } from "@/lib/ai/gmailSafety"
+import { buildOrderSummaryForEmail, extractOrderNumberHints } from "@/lib/ai/gmailContext"
+import { findTemplateWithFallback, type TemplateRecord } from "@/lib/juno/templatesRepo"
+
+export type ProcessIncomingEmailResult = {
+    success: boolean
+    error?: string
+    /** True when the pipeline attempted an auto-reply to a qualifying unread customer message */
+    replied?: boolean
+    /** True when the message was recorded as abusive/suspicious and no auto-reply was sent */
+    flagged?: boolean
+}
+
+/** Normalize Gmail / RFC5322 From header to a lowercase email address. */
+function parseSenderAddress(fromHeader: string): string {
+    const raw = fromHeader.trim()
+    const inAngles = raw.match(/<([^>]+)>/)
+    if (inAngles) {
+        return inAngles[1].trim().replace(/^mailto:/i, "").toLowerCase()
+    }
+    const lone = raw.replace(/^mailto:/i, "").trim()
+    if (/^[^\s<>"']+@[^\s<>"']+$/.test(lone)) {
+        return lone.toLowerCase()
+    }
+    const tokens = raw.split(/\s+/)
+    for (let i = tokens.length - 1; i >= 0; i--) {
+        const t = tokens[i].replace(/[<>",]/g, "").trim()
+        if (t.includes("@") && !t.includes("..")) {
+            return t.replace(/^mailto:/i, "").toLowerCase()
+        }
+    }
+    return lone.toLowerCase()
+}
+
+/** Local-part of email, title-cased for greetings (templates use {{customer_name}}). */
+function greetingNameFromEmail(email: string): string {
+    const local = email.split("@")[0]?.trim() || ""
+    if (!local) return "there"
+    return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase()
+}
+
+function buildMinimalFallbackHtml(emailBody: string, storeName: string): string {
+    const safeSnippet = emailBody.replace(/<[^>]+>/g, "").slice(0, 400)
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <h1 style="margin: 0 0 12px; font-size: 20px; color: #e5e7eb;">Thanks for reaching out</h1>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        We have received your message and our team will review it shortly.
+                    </p>
+                    <p style="margin: 0 0 16px; color: #9ca3af;">Summary of what you sent:</p>
+                    <blockquote style="margin: 0 0 20px; padding: 12px 16px; border-left: 3px solid #6366f1; background: #020617;">
+                        <p style="margin: 0; white-space: pre-wrap; color: #d1d5db; font-size: 14px;">
+${safeSnippet || "No additional message content was detected."}
+                        </p>
+                    </blockquote>
+                    <p style="margin: 0 0 8px; color: #9ca3af;">
+                        You can reply to this email if you have more details to share.
+                    </p>
+                    <p style="margin: 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+/** When no template exists but we need an order # before sharing order rows. */
+function buildNeedOrderIdFallbackHtml(storeName: string, storeEmail: string): string {
+    const contact = storeEmail.trim()
+        ? `Reply with your order number, or email ${storeEmail}.`
+        : `Reply with your order number from your confirmation email.`
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        We didn&apos;t see an order number in your message. To look up the right order for <strong style="color:#e5e7eb;">${storeName}</strong>,
+                        please reply with your order number (for example <strong style="color:#e5e7eb;">#1002</strong> or <strong style="color:#e5e7eb;">1002</strong>) from your order confirmation.
+                    </p>
+                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
+                    <p style="margin: 16px 0 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+/** When no off_topic template exists — polite boundary, no order data. */
+function buildOffTopicFallbackHtml(storeName: string, storeEmail: string): string {
+    const contact = storeEmail.trim()
+        ? `If you have a question about an order from ${storeName}, reply with details or email us at ${storeEmail}.`
+        : `If you have a question about an order from ${storeName}, reply with your question and order number if you have one.`
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        This inbox only handles orders, products, shipping, returns, and billing for <strong style="color:#e5e7eb;">${storeName}</strong>.
+                        We can&apos;t answer unrelated requests (news, weather, other websites, or general topics).
+                    </p>
+                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
+                    <p style="margin: 16px 0 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+function renderFromTemplate(
+    template: TemplateRecord,
+    context: Record<string, string | number | boolean | null | undefined>
+): string {
+    return template.isHtml
+        ? renderTemplate(template.body, context)
+        : `
+                        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a;">
+                            <pre style="white-space: pre-wrap; margin: 0;">${renderTemplate(
+                                template.body,
+                                context,
+                            )}</pre>
+                        </div>
+                    `
+}
 
 /**
- * Process an incoming email and generate an AI-powered reply
+ * Process an incoming email and generate an AI-assisted reply (Groq classification + templates).
  */
 export async function processIncomingEmail(
     userId: string,
     storeId: string | null,
-    historyId?: string
-): Promise<{ success: boolean; error?: string }> {
+    _historyId?: string,
+    options?: { replyTrigger?: string }
+): Promise<ProcessIncomingEmailResult> {
+    let replied = false
     try {
         const accessToken = await getGmailAccessToken(userId)
         if (!accessToken) {
             logger.warn("Cannot process email - Gmail not connected", { userId })
-            return { success: false, error: "Gmail not connected" }
+            return { success: false, error: "Gmail not connected", replied: false }
         }
 
-        // If no store is associated, skip processing
         if (!storeId) {
             logger.info("No active store found for user, skipping email processing", { userId })
-            return { success: false, error: "No active store" }
+            return { success: false, error: "No active store", replied: false }
         }
 
-        // Get the most recent unread email
         const unreadEmails = await getUnreadEmails(accessToken, 1)
-        
+
         if (unreadEmails.length === 0) {
             logger.info("No unread emails found", { userId })
-            return { success: true }
+            return { success: true, replied: false }
         }
 
         const email = unreadEmails[0]
 
-        // Extract sender email
-        const emailMatch = email.from.match(/<(.+)>/)
-        const senderEmail = emailMatch ? emailMatch[1] : email.from.split(" ").pop() || email.from
+        const senderEmail = parseSenderAddress(email.from)
 
-        // Only process emails from Gmail addresses (ending with @gmail.com)
-        if (!senderEmail.toLowerCase().endsWith("@gmail.com")) {
+        if (!senderEmail.endsWith("@gmail.com")) {
             logger.info("Skipping non-Gmail email", { userId, senderEmail })
-            return { success: true }
+            return { success: true, replied: false }
         }
 
-        // Get full email content
         const fullEmail = await getEmailContent(accessToken, email.id)
         if (!fullEmail) {
             logger.error("Failed to fetch email content", { emailId: email.id })
-            return { success: false, error: "Failed to fetch email content" }
+            return { success: false, error: "Failed to fetch email content", replied: false }
         }
 
-        // Extract email body (plain text or HTML), cleaned of quoted history
         const emailBody = extractEmailBody(fullEmail)
         const emailSubject = email.subject || "No Subject"
 
@@ -61,10 +186,47 @@ export async function processIncomingEmail(
             storeId,
             from: senderEmail,
             subject: emailSubject,
-            emailId: email.id
+            emailId: email.id,
         })
 
-        // Log the incoming customer email into EmailLog so tickets show both sides
+        const plainForAi = emailBody.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+
+        const safety = await screenInboundEmailForAbuse(emailSubject, plainForAi)
+        if (safety?.flagged) {
+            try {
+                const existing = await prisma.flaggedEmail.findFirst({
+                    where: { storeId, messageId: email.id },
+                })
+                if (!existing) {
+                    await prisma.flaggedEmail.create({
+                        data: {
+                            storeId,
+                            subject: emailSubject.slice(0, 5000),
+                            from: senderEmail,
+                            reason: safety.reason,
+                            priority: safety.priority,
+                            messageId: email.id,
+                        },
+                    })
+                }
+                logger.warn("Inbound email flagged — no auto-reply", {
+                    userId,
+                    storeId,
+                    from: senderEmail,
+                    priority: safety.priority,
+                })
+            } catch (flagErr) {
+                logger.error("Failed to persist flagged email", flagErr)
+            }
+
+            const markedRead = await markEmailAsRead(accessToken, email.id)
+            if (!markedRead) {
+                logger.warn("Failed to mark flagged email as read", { userId, emailId: email.id })
+            }
+
+            return { success: true, replied: false, flagged: true }
+        }
+
         try {
             const incomingPreview = emailBody
                 .replace(/<[^>]+>/g, "")
@@ -76,7 +238,7 @@ export async function processIncomingEmail(
                 data: {
                     userId,
                     storeId,
-                    to: senderEmail, // "to" is the customer email we converse with
+                    to: senderEmail,
                     subject: emailSubject,
                     bodyPreview: incomingPreview,
                     isAutomated: false,
@@ -91,112 +253,102 @@ export async function processIncomingEmail(
             logger.error("Failed to log incoming email to EmailLog", logError)
         }
 
-        // Try to load a store-scoped template for this intent/mood combination
+        const classification = await classifyCustomerEmail(emailSubject, plainForAi)
+        const hintSource = `${emailSubject}\n${plainForAi}`
+        const isOffTopic = classification.intent === "off_topic"
+        const orderHints = isOffTopic ? [] : extractOrderNumberHints(hintSource)
+
+        /** Don’t load CachedOrder until the customer names an order (avoids guessing #1002 when they only say “where’s my package?”). */
+        const intentsNeedingOrderIdWhenAmbiguous = new Set([
+            "shipping_delay",
+            "refund_request",
+            "account_billing",
+        ])
+        const needsOrderNumberFirst =
+            !isOffTopic &&
+            intentsNeedingOrderIdWhenAmbiguous.has(classification.intent) &&
+            orderHints.length === 0
+
+        let orderSummary = ""
+        if (!isOffTopic && !needsOrderNumberFirst) {
+            orderSummary = await buildOrderSummaryForEmail(storeId, senderEmail, hintSource)
+        }
+
+        logger.info("Gmail classification", {
+            userId,
+            storeId,
+            intent: classification.intent,
+            mood: classification.mood,
+            confidence: classification.confidence,
+        })
+        logger.info("Gmail order context for reply", {
+            storeId,
+            orderSummaryChars: orderSummary.trim().length,
+            orderHints,
+            offTopic: isOffTopic,
+            needsOrderNumberFirst,
+        })
+
+        const store = await prisma.store.findUnique({
+            where: { id: storeId },
+            select: {
+                businessName: true,
+                email: true,
+            },
+        })
+
+        const storeName = store?.businessName || "Your store"
+        const ticketSummary =
+            classification.short_summary?.trim() ||
+            plainForAi.slice(0, 500) ||
+            emailBody.slice(0, 500)
+
+        const offTopicOrderLine = `We don't include order or purchase history for unrelated topics. For help with ${storeName}, reply with a store-related question and your order number if you have one.`
+
+        const counterOrderIdLine = `No order details are shown yet — we did not see an order number in your message. Please reply with your order number (e.g. #1002 or 1002) from your ${storeName} confirmation email so we can look up the correct order.`
+
+        const context: Record<string, string | number | boolean | null | undefined> = {
+            customer_name: greetingNameFromEmail(senderEmail),
+            customer_email: senderEmail,
+            subject: emailSubject,
+            store_name: storeName,
+            store_email: store?.email || "",
+            ticket_summary: ticketSummary,
+            order_summary: isOffTopic
+                ? offTopicOrderLine
+                : needsOrderNumberFirst
+                  ? counterOrderIdLine
+                  : orderSummary || "No matching recent orders on file for this email.",
+        }
+
         let finalReply: string | null = null
+
         try {
-            const templateRows = await prisma.$queryRaw<
-                {
-                    id: string
-                    storeId: string
-                    name: string
-                    intent: string
-                    mood: string
-                    description: string | null
-                    body: string
-                    variables: unknown | null
-                    isHtml: boolean
-                    updatedAt: Date
-                }[]
-            >`
-                SELECT
-                    "id",
-                    "storeId",
-                    "name",
-                    "intent",
-                    "mood",
-                    "description",
-                    "body",
-                    "variables",
-                    "isHtml",
-                    "updatedAt"
-                FROM "Template"
-                WHERE "storeId" = ${storeId}
-                  AND "intent" = 'general'
-                  AND "mood" = 'neutral'
-                ORDER BY "updatedAt" DESC
-                LIMIT 1
-            `
-
-            const template = templateRows[0]
-
+            const template = await findTemplateWithFallback(
+                storeId,
+                classification.intent,
+                classification.mood,
+            )
             if (template) {
-                const store = await prisma.store.findUnique({
-                    where: { id: storeId },
-                    select: {
-                        businessName: true,
-                        email: true,
-                    },
-                })
-
-                const context = {
-                    customer_name: senderEmail.split("@")[0],
-                    customer_email: senderEmail,
-                    subject: emailSubject,
-                    store_name: store?.businessName || "Your store",
-                    store_email: store?.email || "",
-                    ticket_summary: emailBody.slice(0, 500),
-                }
-
-                finalReply = template.isHtml
-                    ? renderTemplate(template.body, context)
-                    : `
-                        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a;">
-                            <pre style="white-space: pre-wrap; margin: 0;">${renderTemplate(
-                                template.body,
-                                context,
-                            )}</pre>
-                        </div>
-                    `
+                finalReply = renderFromTemplate(template, context)
             }
-        } catch (templateError) {
-            logger.error("Failed to render template for auto-reply", templateError)
+        } catch (replyBuildError) {
+            logger.error("Failed to load/render template for auto-reply", replyBuildError)
         }
 
-        // Fallback: simple hardcoded automated reply if no template is available
         if (!finalReply) {
-            const safeSnippet = emailBody.replace(/<[^>]+>/g, "").slice(0, 400)
-            finalReply = `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
-                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
-                    <h1 style="margin: 0 0 12px; font-size: 20px; color: #e5e7eb;">Thanks for reaching out 👋</h1>
-                    <p style="margin: 0 0 12px; color: #9ca3af;">
-                        We’ve received your message and our team will review it shortly.
-                    </p>
-                    <p style="margin: 0 0 16px; color: #9ca3af;">
-                        Here’s a quick summary of what you sent:
-                    </p>
-                    <blockquote style="margin: 0 0 20px; padding: 12px 16px; border-left: 3px solid #6366f1; background: #020617;">
-                        <p style="margin: 0; white-space: pre-wrap; color: #d1d5db; font-size: 14px;">
-${safeSnippet || "No additional message content was detected."}
-                        </p>
-                    </blockquote>
-                    <p style="margin: 0 0 8px; color: #9ca3af;">
-                        You don’t need to reply to this email unless you have more details to share.
-                    </p>
-                    <p style="margin: 0; color: #e5e7eb;">
-                        Best regards,<br/>
-                        <span style="color: #a5b4fc;">JUNO Support Team</span>
-                    </p>
-                </div>
-            </div>
-        `
+            if (isOffTopic) {
+                finalReply = buildOffTopicFallbackHtml(storeName, store?.email || "")
+            } else if (needsOrderNumberFirst) {
+                finalReply = buildNeedOrderIdFallbackHtml(storeName, store?.email || "")
+            } else {
+                finalReply = buildMinimalFallbackHtml(emailBody, storeName)
+            }
         }
 
-        // Send the reply
-        const replySubject = emailSubject.startsWith("Re:")
-            ? emailSubject 
-            : `Re: ${emailSubject}`
+        const replySubject = emailSubject.startsWith("Re:") ? emailSubject : `Re: ${emailSubject}`
 
+        replied = true
         const result = await sendGmailReply(
             userId,
             senderEmail,
@@ -206,12 +358,11 @@ ${safeSnippet || "No additional message content was detected."}
             {
                 storeId,
                 isAutomated: true,
-                trigger: "GMAIL_WEBHOOK",
+                trigger: options?.replyTrigger ?? "GMAIL_WEBHOOK",
                 originalMessageId: email.messageId,
             }
         )
 
-        // Always attempt to mark the email as read so it isn't processed again
         const markedRead = await markEmailAsRead(accessToken, email.id)
         if (!markedRead) {
             logger.warn("Failed to mark email as read after processing", {
@@ -238,10 +389,14 @@ ${safeSnippet || "No additional message content was detected."}
             })
         }
 
-        return { success: result.success, error: result.error }
+        return { success: result.success, error: result.error, replied }
     } catch (error) {
         logger.error("Error processing incoming email", error)
-        return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+            replied,
+        }
     }
 }
 
@@ -251,22 +406,23 @@ ${safeSnippet || "No additional message content was detected."}
 async function getUnreadEmails(
     accessToken: string,
     maxResults: number = 10
-): Promise<Array<{
-    id: string
-    threadId: string
-    from: string
-    subject: string
-    snippet: string
-    messageId: string
-}>> {
+): Promise<
+    Array<{
+        id: string
+        threadId: string
+        from: string
+        subject: string
+        snippet: string
+        messageId: string
+    }>
+> {
     try {
         const searchResponse = await fetch(
-            // Only consider unread emails from the last 10 minutes
             `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread newer_than:10m&maxResults=${maxResults}`,
             {
                 headers: {
-                    Authorization: `Bearer ${accessToken}`
-                }
+                    Authorization: `Bearer ${accessToken}`,
+                },
             }
         )
 
@@ -285,8 +441,8 @@ async function getUnreadEmails(
                         `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=Message-ID`,
                         {
                             headers: {
-                                Authorization: `Bearer ${accessToken}`
-                            }
+                                Authorization: `Bearer ${accessToken}`,
+                            },
                         }
                     )
 
@@ -298,7 +454,9 @@ async function getUnreadEmails(
                     const headers = messageData.payload?.headers || []
                     const fromHeader = headers.find((h: { name: string }) => h.name.toLowerCase() === "from")
                     const subjectHeader = headers.find((h: { name: string }) => h.name.toLowerCase() === "subject")
-                    const messageIdHeader = headers.find((h: { name: string }) => h.name.toLowerCase() === "message-id")
+                    const messageIdHeader = headers.find(
+                        (h: { name: string }) => h.name.toLowerCase() === "message-id"
+                    )
 
                     return {
                         id: msg.id,
@@ -306,7 +464,7 @@ async function getUnreadEmails(
                         from: fromHeader?.value || "",
                         subject: subjectHeader?.value || "",
                         snippet: messageData.snippet || "",
-                        messageId: messageIdHeader?.value || ""
+                        messageId: messageIdHeader?.value || "",
                     }
                 } catch (error) {
                     logger.error("Error fetching message details", { error, messageId: msg.id })
@@ -315,7 +473,7 @@ async function getUnreadEmails(
             })
         )
 
-        return emailDetails.filter((email) => email !== null) as Array<{
+        return emailDetails.filter((e) => e !== null) as Array<{
             id: string
             threadId: string
             from: string
@@ -329,17 +487,14 @@ async function getUnreadEmails(
     }
 }
 
-/**
- * Get full email content
- */
-async function getEmailContent(accessToken: string, messageId: string): Promise<any | null> {
+async function getEmailContent(accessToken: string, messageId: string): Promise<unknown | null> {
     try {
         const response = await fetch(
             `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
             {
                 headers: {
-                    Authorization: `Bearer ${accessToken}`
-                }
+                    Authorization: `Bearer ${accessToken}`,
+                },
             }
         )
 
@@ -354,49 +509,52 @@ async function getEmailContent(accessToken: string, messageId: string): Promise<
     }
 }
 
-/**
- * Extract email body from Gmail message
- */
-function extractEmailBody(message: any): string {
+function extractEmailBody(message: {
+    payload?: unknown
+    snippet?: string
+}): string {
     try {
-        const payload = message.payload
+        const payload = message.payload as
+            | {
+                  mimeType?: string
+                  body?: { data?: string }
+                  parts?: unknown[]
+              }
+            | undefined
         if (!payload) {
             return ""
         }
 
-        // Prefer text/plain, fall back to text/html, then snippet
-        const decodePart = (part: any): string => {
+        const decodePart = (part: { body?: { data?: string } }): string => {
             if (part.body?.data) {
                 return Buffer.from(part.body.data, "base64url").toString("utf-8")
             }
             return ""
         }
 
-        const collectParts = (part: any, mimeType: string): string[] => {
+        const collectParts = (part: Record<string, unknown>, mimeType: string): string[] => {
             const results: string[] = []
-            if (part.mimeType === mimeType && part.body?.data) {
-                results.push(decodePart(part))
+            if (part.mimeType === mimeType && (part.body as { data?: string } | undefined)?.data) {
+                results.push(decodePart(part as { body?: { data?: string } }))
             }
             if (Array.isArray(part.parts)) {
                 for (const p of part.parts) {
-                    results.push(...collectParts(p, mimeType))
+                    results.push(...collectParts(p as Record<string, unknown>, mimeType))
                 }
             }
             return results
         }
 
         let body =
-            collectParts(payload, "text/plain").join("\n").trim() ||
-            collectParts(payload, "text/html").join("\n").trim() ||
+            collectParts(payload as Record<string, unknown>, "text/plain").join("\n").trim() ||
+            collectParts(payload as Record<string, unknown>, "text/html").join("\n").trim() ||
             message.snippet ||
             ""
 
-        // Strip common Gmail quotation patterns so tickets only show the latest reply
         const lines = body.split(/\r?\n/)
         const cleanedLines: string[] = []
         for (const line of lines) {
             const trimmed = line.trim()
-            // Skip quoted lines and stop when we hit the typical "On ... wrote:" header
             if (trimmed.startsWith(">")) continue
             if (/^on .+wrote:$/i.test(trimmed)) break
             cleanedLines.push(line)
@@ -411,9 +569,6 @@ function extractEmailBody(message: any): string {
     }
 }
 
-/**
- * Mark email as read
- */
 async function markEmailAsRead(accessToken: string, messageId: string): Promise<boolean> {
     try {
         const response = await fetch(
@@ -422,11 +577,11 @@ async function markEmailAsRead(accessToken: string, messageId: string): Promise<
                 method: "POST",
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    removeLabelIds: ["UNREAD"]
-                })
+                    removeLabelIds: ["UNREAD"],
+                }),
             }
         )
 
@@ -434,22 +589,5 @@ async function markEmailAsRead(accessToken: string, messageId: string): Promise<
     } catch (error) {
         logger.error("Error marking email as read", error)
         return false
-    }
-}
-
-/**
- * Get user's email address from Gmail integration
- */
-async function getUserEmail(userId: string): Promise<string | null> {
-    try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const integration = await (prisma as any).gmailIntegration.findUnique({
-            where: { userId },
-            select: { email: true }
-        })
-        return integration?.email || null
-    } catch (error) {
-        logger.error("Error getting user email", error)
-        return null
     }
 }

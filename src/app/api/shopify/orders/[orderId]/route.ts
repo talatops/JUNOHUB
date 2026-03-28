@@ -55,8 +55,50 @@ export async function GET(
                 }, { status: response.status })
             }
 
-            const data = await response.json()
-            return NextResponse.json({ order: data.order })
+            const data = (await response.json()) as { order?: Record<string, unknown> }
+            const order = data.order
+            if (!order) {
+                return NextResponse.json({ message: "Invalid order payload from Shopify." }, { status: 502 })
+            }
+
+            // Shopify sometimes omits email/customer; overlay CachedOrder when present (same as Gmail cache).
+            const cached = await prisma.cachedOrder.findUnique({
+                where: {
+                    shopifyOrderId_storeId: {
+                        shopifyOrderId: String(orderId),
+                        storeId: store.id,
+                    },
+                },
+                select: { email: true, customer: true },
+            })
+
+            if (cached) {
+                const cachedEmail = cached.email?.trim() || ""
+                const shopifyEmail = typeof order.email === "string" ? order.email.trim() : ""
+                if (!shopifyEmail && cachedEmail) {
+                    order.email = cachedEmail
+                }
+
+                const cust = order.customer as Record<string, unknown> | null | undefined
+                const cachedCust =
+                    cached.customer &&
+                    typeof cached.customer === "object" &&
+                    cached.customer !== null &&
+                    !Array.isArray(cached.customer)
+                        ? (cached.customer as Record<string, unknown>)
+                        : null
+
+                if (!cust && cachedCust) {
+                    order.customer = cachedCust
+                } else if (cust && cachedEmail) {
+                    const nested = typeof cust.email === "string" ? cust.email.trim() : ""
+                    if (!nested) {
+                        order.customer = { ...cust, email: cachedEmail }
+                    }
+                }
+            }
+
+            return NextResponse.json({ order })
         } catch (fetchError: unknown) {
             clearTimeout(timeoutId)
             if (fetchError instanceof Error && fetchError.name === "AbortError") {

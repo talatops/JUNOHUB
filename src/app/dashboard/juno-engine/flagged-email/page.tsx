@@ -61,8 +61,15 @@ export default function FlaggedEmailPage() {
         (e) =>
             e.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
             e.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            e.reason.toLowerCase().includes(searchTerm.toLowerCase())
+            e.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            e.priority.toLowerCase().includes(searchTerm.toLowerCase())
     )
+
+    const priorityClass = (p: FlaggedEmail["priority"]) => {
+        if (p === "high") return "bg-red-500/15 text-red-300 border-red-500/30"
+        if (p === "low") return "bg-slate-500/15 text-slate-300 border-slate-500/30"
+        return "bg-amber-500/15 text-amber-200 border-amber-500/30"
+    }
 
     return (
         <div className="h-full flex flex-col space-y-4 md:space-y-6">
@@ -96,7 +103,10 @@ export default function FlaggedEmailPage() {
                             <div className="h-64 flex flex-col items-center justify-center text-slate-400 gap-3">
                                 <Flag className="w-10 h-10 opacity-20" />
                                 <p className="font-medium">No flagged emails found.</p>
-                                <p className="text-xs text-slate-500">Emails flagged for review will appear here.</p>
+                                <p className="text-xs text-slate-500 max-w-md text-center">
+                                    Messages classified as phishing, abuse, or policy bypass are stored here. No auto-reply
+                                    is sent for those.
+                                </p>
                             </div>
                         ) : (
                             <table className="w-full text-left border-collapse">
@@ -104,6 +114,9 @@ export default function FlaggedEmailPage() {
                                     <tr className="bg-white/5 border-b border-white/10">
                                         <th className="px-4 md:px-8 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest min-w-[200px] text-left">Subject</th>
                                         <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-left">From</th>
+                                        <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden sm:table-cell text-left">
+                                            Priority
+                                        </th>
                                         <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-left">Reason</th>
                                         <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden md:table-cell text-left">Flagged</th>
                                         <th className="px-4 md:px-8 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
@@ -121,8 +134,17 @@ export default function FlaggedEmailPage() {
                                             <td className="px-3 md:px-6 py-3 md:py-4">
                                                 <span className="text-sm font-medium text-slate-300">{email.from}</span>
                                             </td>
+                                            <td className="px-3 md:px-6 py-3 md:py-4 hidden sm:table-cell">
+                                                <span
+                                                    className={`inline-flex text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded-md border ${priorityClass(email.priority)}`}
+                                                >
+                                                    {email.priority}
+                                                </span>
+                                            </td>
                                             <td className="px-3 md:px-6 py-3 md:py-4">
-                                                <span className="text-xs text-slate-400 font-medium">{email.reason}</span>
+                                                <span className="text-xs text-slate-400 font-medium line-clamp-3 max-w-md">
+                                                    {email.reason}
+                                                </span>
                                             </td>
                                             <td className="px-3 md:px-6 py-3 md:py-4 hidden md:table-cell">
                                                 <span className="text-xs text-slate-500 font-medium">{new Date(email.flaggedAt).toLocaleDateString()}</span>
