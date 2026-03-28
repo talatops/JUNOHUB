@@ -1,5 +1,39 @@
 import { logger } from "@/lib/logger"
 
+/** Escape string values injected into HTML email bodies (inbound-derived text). */
+export function escapeHtmlForEmail(s: string): string {
+    return s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+}
+
+const HTML_ESCAPED_CONTEXT_KEYS = new Set([
+    "customer_name",
+    "customer_email",
+    "subject",
+    "ticket_summary",
+    "store_name",
+    "store_email",
+    "order_summary",
+])
+
+/** Clone context with HTML-safe string values for isHtml templates. */
+export function escapeTemplateContextForHtml(
+    context: Record<string, string | number | boolean | null | undefined>
+): Record<string, string | number | boolean | null | undefined> {
+    const out: Record<string, string | number | boolean | null | undefined> = { ...context }
+    for (const key of HTML_ESCAPED_CONTEXT_KEYS) {
+        const v = out[key]
+        if (typeof v === "string") {
+            out[key] = escapeHtmlForEmail(v)
+        }
+    }
+    return out
+}
+
 /**
  * Very small, safe renderer for {{variable}} placeholders.
  * - No conditionals or loops

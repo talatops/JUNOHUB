@@ -40,6 +40,7 @@ model User {
   notifications Notification[]
   gmailIntegration GmailIntegration?
   emailLogs     EmailLog[]
+  gmailInboundAutoReplies GmailInboundAutoReply[]
   pushSubscriptions PushSubscription[]
   
   createdAt     DateTime  @default(now())
@@ -117,6 +118,7 @@ model Store {
   knowledgeChunks KnowledgeChunk[]
   emailLogs       EmailLog[]
   flaggedEmails   FlaggedEmail[]
+  gmailInboundAutoReplies GmailInboundAutoReply[]
   templates       Template[]
   
   createdAt        DateTime @default(now())
@@ -389,6 +391,20 @@ model Notification {
   @@index([userId])
   @@index([userId, read])
   @@index([createdAt])
+}
+
+/** One row per inbound Gmail message id that received an auto-reply (idempotency). */
+model GmailInboundAutoReply {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  gmailMessageId String
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, gmailMessageId])
+  @@index([storeId, createdAt])
 }
 
 model EmailLog {
