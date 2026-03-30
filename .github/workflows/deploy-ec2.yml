@@ -48,6 +48,11 @@ jobs:
           set -e
           cd ${{ env.REMOTE_DIR }}
 
+          # Repair bad state from previous deploys where this path became a directory.
+          if [ -d "./prisma/init-pgvector.sql" ]; then
+            rm -rf "./prisma/init-pgvector.sql"
+          fi
+
           # Unpack latest code snapshot over deploy directory
           unzip -oq deploy.zip -d .
           rm -f deploy.zip
