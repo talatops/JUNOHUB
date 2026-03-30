@@ -123,7 +123,7 @@ jobs:
 
           # Rolling update with docker compose (app + Postgres)
           echo "=== ROLLING UPDATE (docker compose up -d) ==="
-          if ! docker compose -f docker-compose.yml --env-file .env up -d --remove-orphans; then
+          if ! docker compose -f docker-compose.yml --env-file .env up -d --no-build --remove-orphans; then
             echo "ERROR: Deployment failed"
             docker compose -f docker-compose.yml down || true
             exit 1
