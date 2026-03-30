@@ -20,6 +20,8 @@ services:
       retries: 5
 
   app:
+    # Use pre-built image on deploy (EC2 loads tar only; no Dockerfile on server). Local: docker compose up --build
+    image: ${IMAGE_NAME:-junohub-app}:latest
     build:
       context: .
       dockerfile: Dockerfile

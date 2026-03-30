@@ -41,7 +41,7 @@ After these exist, **Gmail auto-replies use only saved templates** (plus a minim
 
 ## 3. Variables (filled by the app, not by the model)
 
-These keys are substituted by `renderTemplate` in `src/lib/templates/simpleRenderer.ts` using the `context` built in `src/lib/gmail/emailProcessor.ts`.
+These keys are substituted by `renderTemplate` in `src/lib/templates/simpleRenderer.ts` using the `context` built in `src/lib/gmail/emailProcessor.ts`. For **HTML** templates (`isHtml`), string values are passed through `escapeTemplateContextForHtml` so inbound-derived text cannot break out of the layout.
 
 
 | Variable             | Meaning                                                                               |
@@ -52,10 +52,21 @@ These keys are substituted by `renderTemplate` in `src/lib/templates/simpleRende
 | `{{store_email}}`    | `Store.email`                                                                         |
 | `{{subject}}`        | Incoming subject line                                                                 |
 | `{{ticket_summary}}` | Short summary (Groq classification `short_summary` or message excerpt)                |
-| `{{order_summary}}`  | Text built from **CachedOrder** for this sender + store, or fallback sentence if none |
+| `{{order_summary}}`  | See **Order summary routing** below                                                    |
 
 
-Do **not** hardcode customer names or order numbers in the body.
+**Order summary routing (`{{order_summary}}`):**
+
+- **Cached rows:** Plain-text lines from **CachedOrder** when the pipeline loads order context (sender email matches; order-number hints, when present, are taken from the message after quoted-reply stripping).
+- **`off_topic`:** Fixed boundary line (no order rows).
+- **Counter-question:** If the message looks like shipping / refund / billing (including via intent **or** keyword heuristic) and **no** order number was detected, a fixed line asks the customer to send an order number — **no** cache lookup.
+- **Hint mismatch:** If the customer named an order number that does **not** match their cached orders for that email, a fixed clarification line is used — **other** orders are **not** substituted.
+- **Low confidence:** If Groq returns `general` or `question` with confidence below `GMAIL_CLASSIFY_CONFIDENCE_MIN` (default `0.5`) and there are no hints, a conservative line is used instead of cache.
+- **Sparse body:** Very short messages without hints use a fixed “please add detail” line instead of cache.
+- **`question` intent, no hints:** Order history is omitted; a short line explains that replies without attaching order rows unless they send an order number.
+- **No cache match (otherwise):** Fallback sentence; if the topic looks order-related, copy may mention trying another checkout email.
+
+Do **not** hardcode customer names or order numbers in the body (example numbers like `#1002` in **instructions** to the customer are OK).
 
 ---
 
@@ -605,11 +616,14 @@ You can paste this into **variables** metadata in the UI if your editor supports
 
 ## 7. Reminder: routing in code
 
-- **Intent/mood:** Groq classifies the incoming message (`classifyCustomerEmail` in `src/lib/ai/gmailGroq.ts`).  
+- **Intent/mood:** Groq classifies the incoming message (`classifyCustomerEmail` in `src/lib/ai/gmailGroq.ts`). Returns `source: "groq" \| "fallback"` when the API or JSON parse fails (defaults to `general` + `neutral`).  
+- **Sensitive-topic heuristic:** `looksLikeSensitiveOrderTopic` in `src/lib/ai/gmailOrderDisclosure.ts` aligns disclosure with shipping/refund/billing wording when the classifier misses.  
+- **Hints:** `stripQuotedEmailTrailForHints` + `extractOrderNumberHints` in `src/lib/ai/gmailContext.ts` reduce false hints from quoted threads.  
 - **Reply body:** `processIncomingEmail` in `src/lib/gmail/emailProcessor.ts` loads a template with `findTemplateWithFallback` and renders `{{variables}}`. **No** `generateReplyAndTemplateFields` / **no** auto-`insertTemplate` from Gmail.  
 - Templates are keyed by `storeId` + `intent` + `mood` (see `src/lib/juno/templatesRepo.ts`).  
-- `{{order_summary}}` comes from `CachedOrder` for the sender and active store — keep cache in sync with Shopify.  
-- If no template matches after fallbacks, a **minimal generic HTML** reply is sent (`buildMinimalFallbackHtml`).
+- **Order context:** `buildOrderSummaryForEmail` reads **CachedOrder** only; keep cache in sync with Shopify.  
+- **Fallback HTML:** `buildOffTopicFallbackHtml`, `buildNeedOrderIdFallbackHtml`, `buildHintUnmatchedFallbackHtml`, or `buildMinimalFallbackHtml` if no template matches.  
+- **Abuse / idempotency:** Per-sender caps via `EmailLog` (`checkGmailAutoReplyGuards`); duplicate inbound Gmail `message` ids use `GmailInboundAutoReply` so the same message is not auto-replied twice. Env: `GMAIL_AUTO_REPLY_MAX_PER_SENDER_PER_HOUR` (default 15), `GMAIL_AUTO_REPLY_BURST_MAX_PER_10MIN` (default 6); set to `0` to disable that cap.
 
 ---
 

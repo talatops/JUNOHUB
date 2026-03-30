@@ -28,7 +28,16 @@ Moods (pick one):
 
 Respond with JSON only: {"intent":"...","mood":"...","confidence":0.0-1.0,"short_summary":"one sentence"}`
 
-export async function classifyCustomerEmail(subject: string, bodyExcerpt: string): Promise<GmailClassification> {
+export type ClassifyCustomerEmailResult = {
+    classification: GmailClassification
+    /** `fallback` when Groq was unavailable or returned unparseable JSON. */
+    source: "groq" | "fallback"
+}
+
+export async function classifyCustomerEmail(
+    subject: string,
+    bodyExcerpt: string
+): Promise<ClassifyCustomerEmailResult> {
     const user = `Subject: ${subject.slice(0, 500)}\n\nMessage (excerpt):\n${bodyExcerpt.slice(0, 3500)}`
 
     const { content, error } = await groqChatCompletion(
@@ -41,22 +50,25 @@ export async function classifyCustomerEmail(subject: string, bodyExcerpt: string
 
     if (!content) {
         logger.info("Gmail classification skipped (Groq unavailable)", { error })
-        return normalizeClassification({})
+        return { classification: normalizeClassification({}), source: "fallback" }
     }
 
     const parsed = parseJsonObject<Record<string, unknown>>(content)
     if (!parsed) {
         logger.warn("Gmail classification JSON parse failed")
-        return normalizeClassification({})
+        return { classification: normalizeClassification({}), source: "fallback" }
     }
 
-    return normalizeClassification({
-        intent: typeof parsed.intent === "string" ? parsed.intent : undefined,
-        mood: typeof parsed.mood === "string" ? parsed.mood : undefined,
-        confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
-        short_summary:
-            typeof parsed.short_summary === "string" ? parsed.short_summary : undefined,
-    })
+    return {
+        classification: normalizeClassification({
+            intent: typeof parsed.intent === "string" ? parsed.intent : undefined,
+            mood: typeof parsed.mood === "string" ? parsed.mood : undefined,
+            confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+            short_summary:
+                typeof parsed.short_summary === "string" ? parsed.short_summary : undefined,
+        }),
+        source: "groq",
+    }
 }
 
 export type GeneratedReplyPayload = {
