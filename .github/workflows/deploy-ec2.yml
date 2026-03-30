@@ -73,15 +73,31 @@ jobs:
           ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
           set -e
           cd ${{ env.REMOTE_DIR }}
+          echo "=== BEFORE DEPLOY ==="
+          docker compose -f docker-compose.ec2.yml --env-file .env ps || true
+          docker ps -a --filter "name=juno-app-1" --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}" || true
+
           docker load -i junohub-app_${{ env.IMAGE_TAG }}.tar
           rm -f junohub-app_${{ env.IMAGE_TAG }}.tar
+
+          echo "=== START DB / ENSURE EXTENSION ==="
           docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db
           docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
+
           # Stop and replace app container only (no volume removal)
+          echo "=== REPLACE APP CONTAINER ==="
           docker compose -f docker-compose.ec2.yml --env-file .env stop app || true
           docker compose -f docker-compose.ec2.yml --env-file .env rm -f app || true
+          # Fallback in case old container is detached from compose state but still running with the canonical name.
+          docker rm -f juno-app-1 2>/dev/null || true
           docker compose -f docker-compose.ec2.yml --env-file .env up -d --no-deps --remove-orphans app
+
+          echo "=== AFTER DEPLOY ==="
           docker compose -f docker-compose.ec2.yml --env-file .env ps
+          docker ps -a --filter "name=juno-app-1" --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"
+          APP_ID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q app)"
+          echo "App container details:"
+          docker inspect --format='id={{.Id}} startedAt={{.State.StartedAt}} image={{.Config.Image}}' "$APP_ID"
           ENDSSH
 
       - name: Cleanup local artifacts
