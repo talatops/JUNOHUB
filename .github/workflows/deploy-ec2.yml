@@ -4,7 +4,6 @@ env:
   IMAGE_NAME: junohub-app
   IMAGE_TAG: ${{ github.sha }}
   CONTAINER_NAME: junohub-app
-  # Absolute directory on the EC2 instance where app + compose live
   REMOTE_DIR: /home/JUNO
 
 on:
@@ -13,14 +12,14 @@ on:
     branches:
       - main
     paths-ignore:
-      - '*.md'
-      - '.gitignore'
-      - 'docs/**'
-      - 'README.md'
+      - "*.md"
+      - ".gitignore"
+      - "docs/**"
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -28,15 +27,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Next.js embeds NEXT_PUBLIC_* at build time. Create .env from EC2_ENV so the Docker build sees it.
-      - name: Create .env for build
+      - name: Prepare deployment env file
         run: |
-          cat > .env << 'ENVFILE'
+          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
+          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> .env
+          echo "CONTAINER_NAME=${{ env.CONTAINER_NAME }}" >> .env
+          echo "NODE_ENV=production" >> .env
+          cat <<'EOF' >> .env
           ${{ secrets.EC2_ENV }}
-          ENVFILE
-          echo "NEXT_PUBLIC_VAPID_PUBLIC_KEY is set: $(grep -q 'NEXT_PUBLIC_VAPID_PUBLIC_KEY=.' .env && echo yes || echo no)"
+          EOF
 
-      - name: Build application image
+      - name: Build Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -49,133 +50,40 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Save application image
+      - name: Save Docker image tar
         run: |
           mkdir -p docker
           docker save -o docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          echo "✅ Saved application image"
 
-      - name: Set up environment file
+      - name: Setup SSH key
         run: |
-          # Base env for production container
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
-          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> .env
-          echo "CONTAINER_NAME=${{ env.CONTAINER_NAME }}" >> .env
-          echo "NODE_ENV=production" >> .env
-
-          # Append project-specific environment from EC2_ENV secret
-          # EC2_ENV should contain additional KEY=VALUE lines. We use a here-doc
-          # so the secret content is treated as literal text and not executed.
-          cat <<'EOF' >> .env
-          ${{ secrets.EC2_ENV }}
-          EOF
-
-          echo "Environment file created with EC2_ENV contents appended."
-
-      - name: Setup SSH
-        run: |
-          # Set up the SSH key from GitHub Secrets
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ssh_key.pem
           chmod 400 ssh_key.pem
 
-      - name: Setup directories on server
+      - name: Copy deployment files to EC2
         run: |
-          ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
-          # Create directory for docker-compose file, .env and image tar
-          mkdir -p ${{ env.REMOTE_DIR }}
-          # Create directory for prisma init SQL used by pgvector
-          mkdir -p ${{ env.REMOTE_DIR }}/prisma
-          echo "✅ Remote directory ensured at ${{ env.REMOTE_DIR }}"
-          ENDSSH
-
-      - name: Copy deployment files to server
-        run: |
-          # Copy docker-compose (app + Postgres), and .env
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.ec2.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.ec2.yml
+          ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p '${{ env.REMOTE_DIR }}/prisma'"
           scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/.env
-          # Copy pgvector init SQL so Docker can mount it at startup
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.ec2.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.ec2.yml
           scp -i ssh_key.pem -o StrictHostKeyChecking=no prisma/init-pgvector.sql ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/prisma/init-pgvector.sql
-
-          # Copy application image tar
-          echo "Copying Docker image to server..."
           scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/junohub-app_${{ env.IMAGE_TAG }}.tar
-          echo "✅ Successfully copied Docker image to server"
 
-      - name: Deploy with rolling update
+      - name: Deploy on EC2 with docker compose
         run: |
           ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
           set -e
           cd ${{ env.REMOTE_DIR }}
-
-          # Basic disk space check (do not touch volumes)
-          echo "=== DISK SPACE CHECK ==="
-          df -h
-          AVAILABLE_SPACE=$(df -BG / | tail -1 | awk '{print $4}' | sed 's/G//')
-          if [ "$AVAILABLE_SPACE" -lt 5 ]; then
-            echo "⚠️  Low disk space: ${AVAILABLE_SPACE}GB available. Cleaning up dangling images..."
-            docker system prune -af --volumes=false || true
-            docker image prune -af || true
-            df -h
-          fi
-
-          # Verify Docker image tar exists
-          if [ ! -f junohub-app_${{ env.IMAGE_TAG }}.tar ]; then
-            echo "ERROR: No application image tar found. Cannot deploy without pre-built image."
-            exit 1
-          fi
-
-          echo "=== LOADING APPLICATION DOCKER IMAGE ==="
           docker load -i junohub-app_${{ env.IMAGE_TAG }}.tar
           rm -f junohub-app_${{ env.IMAGE_TAG }}.tar
-          echo "✅ Application image loaded"
-
-          # Ensure pgvector extension exists before app starts (Prisma db push requires `vector` type)
-          echo "=== START POSTGRES (pgvector extension) ==="
-          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db; then
-            echo "ERROR: Failed to start Postgres service"
-            exit 1
-          fi
-
-          echo "Waiting for Postgres health..."
-          DB_CID=""
-          DB_STATUS=""
-          DB_CID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q db)"
-          for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-            DB_STATUS="$(docker inspect --format='{{.State.Health.Status}}' "$DB_CID" 2>/dev/null || true)"
-            echo "Postgres health status: ${DB_STATUS:-unknown} (attempt ${i}/15)"
-            if [ "$DB_STATUS" = "healthy" ]; then
-              break
-            fi
-            sleep 2
-          done
-
-          echo "=== ENSURE pgvector extension (vector type) ==="
+          docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db
           docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
-
-          # Start/roll app after pgvector extension is available.
-          # Force recreate so deploy is visible even when image tag remains :latest.
-          echo "=== START APP (docker compose up -d --force-recreate) ==="
-          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --force-recreate --remove-orphans app; then
-            echo "ERROR: Deployment failed"
-            docker compose -f docker-compose.ec2.yml down || true
-            exit 1
-          fi
-
-          APP_CID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q app)"
-          echo "App container details:"
-          docker inspect --format='id={{.Id}} startedAt={{.State.StartedAt}} image={{.Image}}' "$APP_CID" || true
-
-          echo "✅ Deployment successful! Current services:"
+          docker compose -f docker-compose.ec2.yml --env-file .env up -d --force-recreate --remove-orphans app
           docker compose -f docker-compose.ec2.yml --env-file .env ps
-
-          # Final cleanup (preserve volumes; prune dangling images only)
-          docker system prune -f --volumes=false || true
           ENDSSH
 
-      - name: Local cleanup
+      - name: Cleanup local artifacts
         if: always()
         run: |
           rm -f ssh_key.pem
           rm -f .env
           rm -f docker/*.tar || true
-          docker system prune -f || true
