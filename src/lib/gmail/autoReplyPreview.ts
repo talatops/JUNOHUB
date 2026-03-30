@@ -1,0 +1,386 @@
+import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/logger"
+import { escapeHtmlForEmail, escapeTemplateContextForHtml, renderTemplate } from "@/lib/templates/simpleRenderer"
+import { classifyCustomerEmail, type ClassifyCustomerEmailResult } from "@/lib/ai/gmailGroq"
+import { screenInboundEmailForAbuse } from "@/lib/ai/gmailSafety"
+import {
+    buildOrderSummaryForEmail,
+    extractOrderNumberHints,
+    stripQuotedEmailTrailForHints,
+} from "@/lib/ai/gmailContext"
+import { looksLikeOffTopic, looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailOrderDisclosure"
+import { parseEnvFloat } from "@/lib/gmail/gmailAutoReplyGuards"
+import { findTemplateWithFallback, type TemplateRecord } from "@/lib/juno/templatesRepo"
+import type { GmailClassification } from "@/lib/ai/gmailTaxonomy"
+
+/** Local-part of email, title-cased for greetings (templates use {{customer_name}}). */
+function greetingNameFromEmail(email: string): string {
+    const local = email.split("@")[0]?.trim() || ""
+    if (!local) return "there"
+    return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase()
+}
+
+export function buildMinimalFallbackHtml(emailBody: string, storeName: string): string {
+    const safeSnippet = escapeHtmlForEmail(emailBody.replace(/<[^>]+>/g, "").slice(0, 400))
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <h1 style="margin: 0 0 12px; font-size: 20px; color: #e5e7eb;">Thanks for reaching out</h1>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        We have received your message and our team will review it shortly.
+                    </p>
+                    <p style="margin: 0 0 16px; color: #9ca3af;">Summary of what you sent:</p>
+                    <blockquote style="margin: 0 0 20px; padding: 12px 16px; border-left: 3px solid #6366f1; background: #020617;">
+                        <p style="margin: 0; white-space: pre-wrap; color: #d1d5db; font-size: 14px;">
+${safeSnippet || "No additional message content was detected."}
+                        </p>
+                    </blockquote>
+                    <p style="margin: 0 0 8px; color: #9ca3af;">
+                        You can reply to this email if you have more details to share.
+                    </p>
+                    <p style="margin: 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+/** When no template exists but we need an order # before sharing order rows. */
+export function buildNeedOrderIdFallbackHtml(storeName: string, storeEmail: string): string {
+    const contact = storeEmail.trim()
+        ? `Reply with your order number, or email ${storeEmail}.`
+        : `Reply with your order number from your confirmation email.`
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        We didn&apos;t see an order number in your message. To look up the right order for <strong style="color:#e5e7eb;">${storeName}</strong>,
+                        please reply with your order number (for example <strong style="color:#e5e7eb;">#1002</strong> or <strong style="color:#e5e7eb;">1002</strong>) from your order confirmation.
+                    </p>
+                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
+                    <p style="margin: 16px 0 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+/** When hints did not match cache — no unrelated order rows. */
+export function buildHintUnmatchedFallbackHtml(storeName: string, storeEmail: string): string {
+    const contact = storeEmail.trim()
+        ? `Reply with the correct order number or email us at ${storeEmail}.`
+        : `Reply with the order number from your confirmation email.`
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        We could not match the order number in your message to an order on file for <strong style="color:#e5e7eb;">${storeName}</strong> under this email address.
+                        Please double-check the number or confirm the email you used when placing the order.
+                    </p>
+                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
+                    <p style="margin: 16px 0 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+/** When no off_topic template exists — polite boundary, no order data. */
+export function buildOffTopicFallbackHtml(storeName: string, storeEmail: string): string {
+    const contact = storeEmail.trim()
+        ? `If you have a question about an order from ${storeName}, reply with details or email us at ${storeEmail}.`
+        : `If you have a question about an order from ${storeName}, reply with your question and order number if you have one.`
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
+                    <p style="margin: 0 0 12px; color: #9ca3af;">
+                        This inbox only handles orders, products, shipping, returns, and billing for <strong style="color:#e5e7eb;">${storeName}</strong>.
+                        We can&apos;t answer unrelated requests (news, weather, other websites, or general topics).
+                    </p>
+                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
+                    <p style="margin: 16px 0 0; color: #e5e7eb;">
+                        Best regards,<br/>
+                        <span style="color: #a5b4fc;">${storeName} Support</span>
+                    </p>
+                </div>
+            </div>
+        `
+}
+
+function renderFromTemplate(
+    template: TemplateRecord,
+    context: Record<string, string | number | boolean | null | undefined>,
+): string {
+    const safeContext = escapeTemplateContextForHtml(context)
+    return template.isHtml
+        ? renderTemplate(template.body, safeContext)
+        : `
+                        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a;">
+                            <pre style="white-space: pre-wrap; margin: 0;">${renderTemplate(
+                                template.body,
+                                safeContext,
+                            )}</pre>
+                        </div>
+                    `
+}
+
+export type AutoReplyPreviewInput = {
+    storeId: string
+    fromEmail: string
+    subject: string
+    body: string
+}
+
+export type AutoReplyPreviewOutput = {
+    classification: GmailClassification
+    classifySource: ClassifyCustomerEmailResult["source"]
+    orderHints: string[]
+    offTopicByHeuristic: boolean
+    suppressOrdersOnFallbackClassification: boolean
+    needsOrderNumberFirst: boolean
+    hintUnmatched: boolean
+    lowConfidenceSuppressOrders: boolean
+    messageTooSparse: boolean
+    skipOrderCacheForQuestion: boolean
+    shouldLoadOrderCache: boolean
+    sensitiveTopic: boolean
+    orderSummaryRaw: string
+    orderSummaryForContext: string
+    ticketSummary: string
+    chosenTemplateId: string | null
+    usedFallback: "none" | "off_topic" | "need_order_id" | "hint_unmatched" | "minimal"
+    html: string
+    flagged: boolean
+    flaggedReason?: string
+}
+
+export async function generateAutoReplyPreview(
+    input: AutoReplyPreviewInput,
+): Promise<AutoReplyPreviewOutput> {
+    const senderEmail = input.fromEmail.trim().toLowerCase()
+    const emailSubject = input.subject || "No Subject"
+    const emailBody = input.body || ""
+
+    const plainForAi = emailBody.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+
+    const safety = await screenInboundEmailForAbuse(emailSubject, plainForAi)
+    if (safety?.flagged) {
+        const store = await prisma.store.findUnique({
+            where: { id: input.storeId },
+            select: { businessName: true, email: true },
+        })
+        const storeName = store?.businessName || "Your store"
+        return {
+            classification: { intent: "general", mood: "neutral", confidence: 0.0, short_summary: "" },
+            classifySource: "fallback",
+            orderHints: [],
+            offTopicByHeuristic: false,
+            suppressOrdersOnFallbackClassification: false,
+            needsOrderNumberFirst: false,
+            hintUnmatched: false,
+            lowConfidenceSuppressOrders: false,
+            messageTooSparse: false,
+            skipOrderCacheForQuestion: false,
+            shouldLoadOrderCache: false,
+            sensitiveTopic: false,
+            orderSummaryRaw: "",
+            orderSummaryForContext: "",
+            ticketSummary: "",
+            chosenTemplateId: null,
+            usedFallback: "minimal",
+            html: buildMinimalFallbackHtml(emailBody, storeName),
+            flagged: true,
+            flaggedReason: safety.reason,
+        }
+    }
+
+    const classifyResult = await classifyCustomerEmail(emailSubject, plainForAi)
+    const classification = classifyResult.classification
+
+    const hintSourceFull = `${emailSubject}\n${plainForAi}`
+    const hintSourceForHints = stripQuotedEmailTrailForHints(hintSourceFull)
+
+    const extractedHints = extractOrderNumberHints(hintSourceForHints)
+    const offTopicByHeuristic = looksLikeOffTopic(hintSourceFull) && extractedHints.length === 0
+    const isOffTopic = classification.intent === "off_topic" || offTopicByHeuristic
+    const orderHints = isOffTopic ? [] : extractedHints
+
+    const intentsNeedingOrderIdWhenAmbiguous = new Set([
+        "shipping_delay",
+        "refund_request",
+        "account_billing",
+    ])
+    const sensitiveTopic = !isOffTopic && looksLikeSensitiveOrderTopic(hintSourceFull)
+    const needsOrderNumberFirst =
+        !isOffTopic &&
+        orderHints.length === 0 &&
+        (intentsNeedingOrderIdWhenAmbiguous.has(classification.intent) || sensitiveTopic)
+
+    const confidenceMin = parseEnvFloat("GMAIL_CLASSIFY_CONFIDENCE_MIN", 0.5)
+    const lowConfidenceSuppressOrders =
+        classifyResult.source === "groq" &&
+        classification.confidence < confidenceMin &&
+        orderHints.length === 0 &&
+        !isOffTopic &&
+        (classification.intent === "general" || classification.intent === "question")
+
+    const messageTooSparse = plainForAi.trim().length < 12 && orderHints.length === 0
+
+    const skipOrderCacheForQuestion =
+        classification.intent === "question" && orderHints.length === 0 && !isOffTopic
+
+    // Default-safe: if Groq classification failed, do not attach CachedOrder unless the customer provided an order number hint.
+    const suppressOrdersOnFallbackClassification =
+        classifyResult.source === "fallback" && extractedHints.length === 0 && !isOffTopic
+
+    const shouldLoadOrderCache =
+        !isOffTopic &&
+        !needsOrderNumberFirst &&
+        !lowConfidenceSuppressOrders &&
+        !messageTooSparse &&
+        !skipOrderCacheForQuestion &&
+        !suppressOrdersOnFallbackClassification
+
+    let orderSummaryRaw = ""
+    let hintUnmatched = false
+    if (shouldLoadOrderCache) {
+        const built = await buildOrderSummaryForEmail(input.storeId, senderEmail, hintSourceForHints)
+        orderSummaryRaw = built.summary
+        hintUnmatched = built.hintUnmatched
+    }
+
+    logger.info("Gmail auto-reply preview", {
+        storeId: input.storeId,
+        senderEmail,
+        intent: classification.intent,
+        mood: classification.mood,
+        confidence: classification.confidence,
+        classifySource: classifyResult.source,
+        orderHints,
+        offTopicByHeuristic,
+        needsOrderNumberFirst,
+        hintUnmatched,
+        lowConfidenceSuppressOrders,
+        messageTooSparse,
+        suppressOrdersOnFallbackClassification,
+    })
+
+    const store = await prisma.store.findUnique({
+        where: { id: input.storeId },
+        select: { businessName: true, email: true },
+    })
+
+    const storeName = store?.businessName || "Your store"
+    const ticketSummary = messageTooSparse
+        ? "We could not read enough text in your message to look up an order automatically. Please reply with a short description and your order number if you have one."
+        : classification.short_summary?.trim() || plainForAi.slice(0, 500) || emailBody.slice(0, 500)
+
+    const offTopicOrderLine = `We don't include order or purchase history for unrelated topics. For help with ${storeName}, reply with a store-related question and your order number if you have one.`
+
+    const counterOrderIdLine = `No order details are shown yet — we did not see an order number in your message. Please reply with your order number (e.g. #1002 or 1002) from your ${storeName} confirmation email so we can look up the correct order.`
+
+    const hintUnmatchedOrderLine = `We could not match the order number(s) in your message to an order on file for ${storeName} under this email. Please double-check the number or confirm the email address used at checkout.`
+
+    const lowConfidenceOrderLine = `We were not fully confident how to categorize your message. If this is about an order, reply with your order number from your ${storeName} confirmation email so we can pull up the right record.`
+
+    const sparseBodyOrderLine = `We could not read enough detail in your message to look anything up automatically. Please reply with a sentence or two and your order number if your question is about a ${storeName} order.`
+
+    const questionNoOrderLine = `We are replying without attaching order history. If your question relates to a specific purchase, reply with your order number (e.g. #1002).`
+
+    const noOrdersFallback = sensitiveTopic
+        ? `No matching recent orders on file for ${storeName} under this email. If you used a different email at checkout, reply from that address or send your order number.`
+        : "No matching recent orders on file for this email."
+
+    let orderSummaryForContext: string
+    if (isOffTopic) {
+        orderSummaryForContext = offTopicOrderLine
+    } else if (needsOrderNumberFirst) {
+        orderSummaryForContext = counterOrderIdLine
+    } else if (hintUnmatched) {
+        orderSummaryForContext = hintUnmatchedOrderLine
+    } else if (lowConfidenceSuppressOrders) {
+        orderSummaryForContext = lowConfidenceOrderLine
+    } else if (messageTooSparse) {
+        orderSummaryForContext = sparseBodyOrderLine
+    } else if (skipOrderCacheForQuestion) {
+        orderSummaryForContext = questionNoOrderLine
+    } else {
+        orderSummaryForContext = orderSummaryRaw || noOrdersFallback
+    }
+
+    const context: Record<string, string | number | boolean | null | undefined> = {
+        customer_name: greetingNameFromEmail(senderEmail),
+        customer_email: senderEmail,
+        subject: emailSubject,
+        store_name: storeName,
+        store_email: store?.email || "",
+        ticket_summary: ticketSummary,
+        order_summary: orderSummaryForContext,
+    }
+
+    let html: string | null = null
+    let chosenTemplateId: string | null = null
+
+    try {
+        const template = await findTemplateWithFallback(
+            input.storeId,
+            classification.intent,
+            classification.mood,
+        )
+        if (template) {
+            chosenTemplateId = template.id
+            html = renderFromTemplate(template, context)
+        }
+    } catch (e) {
+        logger.error("generateAutoReplyPreview: template load/render failed", e)
+    }
+
+    let usedFallback: AutoReplyPreviewOutput["usedFallback"] = "none"
+    if (!html) {
+        if (isOffTopic) {
+            usedFallback = "off_topic"
+            html = buildOffTopicFallbackHtml(storeName, store?.email || "")
+        } else if (needsOrderNumberFirst) {
+            usedFallback = "need_order_id"
+            html = buildNeedOrderIdFallbackHtml(storeName, store?.email || "")
+        } else if (hintUnmatched) {
+            usedFallback = "hint_unmatched"
+            html = buildHintUnmatchedFallbackHtml(storeName, store?.email || "")
+        } else {
+            usedFallback = "minimal"
+            html = buildMinimalFallbackHtml(emailBody, storeName)
+        }
+    }
+
+    return {
+        classification,
+        classifySource: classifyResult.source,
+        orderHints,
+        offTopicByHeuristic,
+        suppressOrdersOnFallbackClassification,
+        needsOrderNumberFirst,
+        hintUnmatched,
+        lowConfidenceSuppressOrders,
+        messageTooSparse,
+        skipOrderCacheForQuestion,
+        shouldLoadOrderCache,
+        sensitiveTopic,
+        orderSummaryRaw,
+        orderSummaryForContext,
+        ticketSummary,
+        chosenTemplateId,
+        usedFallback,
+        html,
+        flagged: false,
+    }
+}
+

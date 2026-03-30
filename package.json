@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:gmail-auto-reply": "set -e; docker compose -f tests/gmail-auto-reply/docker-compose.test.yml up -d; export $(cat tests/gmail-auto-reply/env.test | grep -v '^#' | xargs); docker compose -f tests/gmail-auto-reply/docker-compose.test.yml exec -T db sh -lc \"psql -U postgres -d dropshipping -c 'CREATE EXTENSION IF NOT EXISTS vector;'\"; npx prisma db push --accept-data-loss; npx tsx tests/gmail-auto-reply/seed.ts; vitest run tests/gmail-auto-reply/run.test.ts; docker compose -f tests/gmail-auto-reply/docker-compose.test.yml down -v",
     "re-embed-knowledge-base": "tsx scripts/re-embed-knowledge-base.ts",
     "db:reset": "prisma migrate reset",
     "db:studio": "prisma studio",

@@ -10,7 +10,8 @@ import {
     extractOrderNumberHints,
     stripQuotedEmailTrailForHints,
 } from "@/lib/ai/gmailContext"
-import { looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailOrderDisclosure"
+import { looksLikeOffTopic, looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailOrderDisclosure"
+import { generateAutoReplyPreview } from "@/lib/gmail/autoReplyPreview"
 import {
     checkGmailAutoReplyRateLimits,
     parseEnvFloat,
@@ -312,156 +313,35 @@ export async function processIncomingEmail(
         }
 
         try {
-            const classifyResult = await classifyCustomerEmail(emailSubject, plainForAi)
-            const classification = classifyResult.classification
-            const hintSourceFull = `${emailSubject}\n${plainForAi}`
-            const hintSourceForHints = stripQuotedEmailTrailForHints(hintSourceFull)
-
-            const isOffTopic = classification.intent === "off_topic"
-            const orderHints = isOffTopic ? [] : extractOrderNumberHints(hintSourceForHints)
-
-            const intentsNeedingOrderIdWhenAmbiguous = new Set([
-                "shipping_delay",
-                "refund_request",
-                "account_billing",
-            ])
-            const sensitiveTopic = !isOffTopic && looksLikeSensitiveOrderTopic(hintSourceFull)
-            const needsOrderNumberFirst =
-                !isOffTopic &&
-                orderHints.length === 0 &&
-                (intentsNeedingOrderIdWhenAmbiguous.has(classification.intent) || sensitiveTopic)
-
-            const confidenceMin = parseEnvFloat("GMAIL_CLASSIFY_CONFIDENCE_MIN", 0.5)
-            const lowConfidenceSuppressOrders =
-                classifyResult.source === "groq" &&
-                classification.confidence < confidenceMin &&
-                orderHints.length === 0 &&
-                !isOffTopic &&
-                (classification.intent === "general" || classification.intent === "question")
-
-            const messageTooSparse = plainForAi.trim().length < 12 && orderHints.length === 0
-
-            const skipOrderCacheForQuestion =
-                classification.intent === "question" && orderHints.length === 0 && !isOffTopic
-
-            const shouldLoadOrderCache =
-                !isOffTopic &&
-                !needsOrderNumberFirst &&
-                !lowConfidenceSuppressOrders &&
-                !messageTooSparse &&
-                !skipOrderCacheForQuestion
-
-            let orderSummary = ""
-            let hintUnmatched = false
-            if (shouldLoadOrderCache) {
-                const built = await buildOrderSummaryForEmail(storeId, senderEmail, hintSourceForHints)
-                orderSummary = built.summary
-                hintUnmatched = built.hintUnmatched
-            }
+            const preview = await generateAutoReplyPreview({
+                storeId,
+                fromEmail: senderEmail,
+                subject: emailSubject,
+                body: emailBody,
+            })
 
             logger.info("Gmail classification", {
                 userId,
                 storeId,
-                intent: classification.intent,
-                mood: classification.mood,
-                confidence: classification.confidence,
-                classifySource: classifyResult.source,
+                intent: preview.classification.intent,
+                mood: preview.classification.mood,
+                confidence: preview.classification.confidence,
+                classifySource: preview.classifySource,
             })
             logger.info("Gmail order context for reply", {
                 storeId,
-                orderSummaryChars: orderSummary.trim().length,
-                orderHints,
-                offTopic: isOffTopic,
-                needsOrderNumberFirst,
-                hintUnmatched,
-                lowConfidenceSuppressOrders,
-                messageTooSparse,
+                orderSummaryChars: preview.orderSummaryRaw.trim().length,
+                orderHints: preview.orderHints,
+                offTopic: preview.classification.intent === "off_topic" || preview.offTopicByHeuristic,
+                offTopicByHeuristic: preview.offTopicByHeuristic,
+                needsOrderNumberFirst: preview.needsOrderNumberFirst,
+                hintUnmatched: preview.hintUnmatched,
+                lowConfidenceSuppressOrders: preview.lowConfidenceSuppressOrders,
+                messageTooSparse: preview.messageTooSparse,
+                suppressOrdersOnFallbackClassification: preview.suppressOrdersOnFallbackClassification,
             })
 
-            const store = await prisma.store.findUnique({
-                where: { id: storeId },
-                select: {
-                    businessName: true,
-                    email: true,
-                },
-            })
-
-            const storeName = store?.businessName || "Your store"
-            const ticketSummary = messageTooSparse
-                ? "We could not read enough text in your message to look up an order automatically. Please reply with a short description and your order number if you have one."
-                : classification.short_summary?.trim() ||
-                  plainForAi.slice(0, 500) ||
-                  emailBody.slice(0, 500)
-
-            const offTopicOrderLine = `We don't include order or purchase history for unrelated topics. For help with ${storeName}, reply with a store-related question and your order number if you have one.`
-
-            const counterOrderIdLine = `No order details are shown yet — we did not see an order number in your message. Please reply with your order number (e.g. #1002 or 1002) from your ${storeName} confirmation email so we can look up the correct order.`
-
-            const hintUnmatchedOrderLine = `We could not match the order number(s) in your message to an order on file for ${storeName} under this email. Please double-check the number or confirm the email address used at checkout.`
-
-            const lowConfidenceOrderLine = `We were not fully confident how to categorize your message. If this is about an order, reply with your order number from your ${storeName} confirmation email so we can pull up the right record.`
-
-            const sparseBodyOrderLine = `We could not read enough detail in your message to look anything up automatically. Please reply with a sentence or two and your order number if your question is about a ${storeName} order.`
-
-            const questionNoOrderLine = `We are replying without attaching order history. If your question relates to a specific purchase, reply with your order number (e.g. #1002).`
-
-            const noOrdersFallback = sensitiveTopic
-                ? `No matching recent orders on file for ${storeName} under this email. If you used a different email at checkout, reply from that address or send your order number.`
-                : "No matching recent orders on file for this email."
-
-            let orderSummaryForContext: string
-            if (isOffTopic) {
-                orderSummaryForContext = offTopicOrderLine
-            } else if (needsOrderNumberFirst) {
-                orderSummaryForContext = counterOrderIdLine
-            } else if (hintUnmatched) {
-                orderSummaryForContext = hintUnmatchedOrderLine
-            } else if (lowConfidenceSuppressOrders) {
-                orderSummaryForContext = lowConfidenceOrderLine
-            } else if (messageTooSparse) {
-                orderSummaryForContext = sparseBodyOrderLine
-            } else if (skipOrderCacheForQuestion) {
-                orderSummaryForContext = questionNoOrderLine
-            } else {
-                orderSummaryForContext = orderSummary || noOrdersFallback
-            }
-
-            const context: Record<string, string | number | boolean | null | undefined> = {
-                customer_name: greetingNameFromEmail(senderEmail),
-                customer_email: senderEmail,
-                subject: emailSubject,
-                store_name: storeName,
-                store_email: store?.email || "",
-                ticket_summary: ticketSummary,
-                order_summary: orderSummaryForContext,
-            }
-
-            let finalReply: string | null = null
-
-            try {
-                const template = await findTemplateWithFallback(
-                    storeId,
-                    classification.intent,
-                    classification.mood,
-                )
-                if (template) {
-                    finalReply = renderFromTemplate(template, context)
-                }
-            } catch (replyBuildError) {
-                logger.error("Failed to load/render template for auto-reply", replyBuildError)
-            }
-
-            if (!finalReply) {
-                if (isOffTopic) {
-                    finalReply = buildOffTopicFallbackHtml(storeName, store?.email || "")
-                } else if (needsOrderNumberFirst) {
-                    finalReply = buildNeedOrderIdFallbackHtml(storeName, store?.email || "")
-                } else if (hintUnmatched) {
-                    finalReply = buildHintUnmatchedFallbackHtml(storeName, store?.email || "")
-                } else {
-                    finalReply = buildMinimalFallbackHtml(emailBody, storeName)
-                }
-            }
+            const finalReply = preview.html
 
             const replySubject = emailSubject.startsWith("Re:") ? emailSubject : `Re: ${emailSubject}`
 

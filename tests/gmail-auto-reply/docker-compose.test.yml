@@ -1,0 +1,22 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dropshipping
+    ports:
+      - "5544:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
+      - ../../prisma/init-pgvector.sql:/docker-entrypoint-initdb.d/init-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d dropshipping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  postgres_test_data:
+

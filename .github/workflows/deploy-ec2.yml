@@ -148,13 +148,18 @@ jobs:
           echo "=== ENSURE pgvector extension (vector type) ==="
           docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
 
-          # Start/roll app after pgvector extension is available
-          echo "=== START APP (docker compose up -d) ==="
-          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans app; then
+          # Start/roll app after pgvector extension is available.
+          # Force recreate so deploy is visible even when image tag remains :latest.
+          echo "=== START APP (docker compose up -d --force-recreate) ==="
+          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --force-recreate --remove-orphans app; then
             echo "ERROR: Deployment failed"
             docker compose -f docker-compose.ec2.yml down || true
             exit 1
           fi
+
+          APP_CID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q app)"
+          echo "App container details:"
+          docker inspect --format='id={{.Id}} startedAt={{.State.StartedAt}} image={{.Image}}' "$APP_CID" || true
 
           echo "✅ Deployment successful! Current services:"
           docker compose -f docker-compose.ec2.yml --env-file .env ps
