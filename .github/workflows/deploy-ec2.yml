@@ -77,7 +77,10 @@ jobs:
           rm -f junohub-app_${{ env.IMAGE_TAG }}.tar
           docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db
           docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
-          docker compose -f docker-compose.ec2.yml --env-file .env up -d --force-recreate --remove-orphans app
+          # Stop and replace app container only (no volume removal)
+          docker compose -f docker-compose.ec2.yml --env-file .env stop app || true
+          docker compose -f docker-compose.ec2.yml --env-file .env rm -f app || true
+          docker compose -f docker-compose.ec2.yml --env-file .env up -d --no-deps --remove-orphans app
           docker compose -f docker-compose.ec2.yml --env-file .env ps
           ENDSSH
 
