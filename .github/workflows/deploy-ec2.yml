@@ -79,6 +79,8 @@ jobs:
           ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
           # Create directory for docker-compose file, .env and image tar
           mkdir -p ${{ env.REMOTE_DIR }}
+          # Create directory for prisma init SQL used by pgvector
+          mkdir -p ${{ env.REMOTE_DIR }}/prisma
           echo "✅ Remote directory ensured at ${{ env.REMOTE_DIR }}"
           ENDSSH
 
@@ -87,6 +89,8 @@ jobs:
           # Copy docker-compose (app + Postgres), and .env
           scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.ec2.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.ec2.yml
           scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/.env
+          # Copy pgvector init SQL so Docker can mount it at startup
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no prisma/init-pgvector.sql ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/prisma/init-pgvector.sql
 
           # Copy application image tar
           echo "Copying Docker image to server..."
@@ -121,9 +125,32 @@ jobs:
           rm -f junohub-app_latest.tar
           echo "✅ Application image loaded"
 
-          # Rolling update with docker compose (app + Postgres)
-          echo "=== ROLLING UPDATE (docker compose up -d) ==="
-          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans; then
+          # Ensure pgvector extension exists before app starts (Prisma db push requires `vector` type)
+          echo "=== START POSTGRES (pgvector extension) ==="
+          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db; then
+            echo "ERROR: Failed to start Postgres service"
+            exit 1
+          fi
+
+          echo "Waiting for Postgres health..."
+          DB_CID=""
+          DB_STATUS=""
+          DB_CID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q db)"
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+            DB_STATUS="$(docker inspect --format='{{.State.Health.Status}}' "$DB_CID" 2>/dev/null || true)"
+            echo "Postgres health status: ${DB_STATUS:-unknown} (attempt ${i}/15)"
+            if [ "$DB_STATUS" = "healthy" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          echo "=== ENSURE pgvector extension (vector type) ==="
+          docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
+
+          # Start/roll app after pgvector extension is available
+          echo "=== START APP (docker compose up -d) ==="
+          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans app; then
             echo "ERROR: Deployment failed"
             docker compose -f docker-compose.ec2.yml down || true
             exit 1
