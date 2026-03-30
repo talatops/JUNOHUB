@@ -22,7 +22,7 @@ services:
   app:
     # IMPORTANT: EC2 deploy copies only the compose file + env + image tar.
     # Do not include `build:` here; otherwise Compose will look for a Dockerfile on EC2.
-    image: ${IMAGE_NAME:-junohub-app}:latest
+    image: ${IMAGE_NAME:-junohub-app}:${IMAGE_TAG:-latest}
     restart: always
     ports:
       - "3000:3000"

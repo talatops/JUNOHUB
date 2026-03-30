@@ -2,6 +2,7 @@ name: build-deploy-junohub-ec2
 
 env:
   IMAGE_NAME: junohub-app
+  IMAGE_TAG: ${{ github.sha }}
   CONTAINER_NAME: junohub-app
   # Absolute directory on the EC2 instance where app + compose live
   REMOTE_DIR: /home/JUNO
@@ -42,20 +43,23 @@ jobs:
           file: Dockerfile
           push: false
           load: true
-          tags: ${{ env.IMAGE_NAME }}:latest
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Save application image
         run: |
           mkdir -p docker
-          docker save -o docker/junohub-app_latest.tar ${{ env.IMAGE_NAME }}:latest
+          docker save -o docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           echo "✅ Saved application image"
 
       - name: Set up environment file
         run: |
           # Base env for production container
           echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
+          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> .env
           echo "CONTAINER_NAME=${{ env.CONTAINER_NAME }}" >> .env
           echo "NODE_ENV=production" >> .env
 
@@ -94,7 +98,7 @@ jobs:
 
           # Copy application image tar
           echo "Copying Docker image to server..."
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_latest.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/junohub-app_latest.tar
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/junohub-app_${{ env.IMAGE_TAG }}.tar
           echo "✅ Successfully copied Docker image to server"
 
       - name: Deploy with rolling update
@@ -115,14 +119,14 @@ jobs:
           fi
 
           # Verify Docker image tar exists
-          if [ ! -f junohub-app_latest.tar ]; then
+          if [ ! -f junohub-app_${{ env.IMAGE_TAG }}.tar ]; then
             echo "ERROR: No application image tar found. Cannot deploy without pre-built image."
             exit 1
           fi
 
           echo "=== LOADING APPLICATION DOCKER IMAGE ==="
-          docker load -i junohub-app_latest.tar
-          rm -f junohub-app_latest.tar
+          docker load -i junohub-app_${{ env.IMAGE_TAG }}.tar
+          rm -f junohub-app_${{ env.IMAGE_TAG }}.tar
           echo "✅ Application image loaded"
 
           # Ensure pgvector extension exists before app starts (Prisma db push requires `vector` type)
