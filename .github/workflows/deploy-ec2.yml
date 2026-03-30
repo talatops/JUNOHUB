@@ -85,7 +85,7 @@ jobs:
       - name: Copy deployment files to server
         run: |
           # Copy docker-compose (app + Postgres), and .env
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.yml
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.ec2.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.ec2.yml
           scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/.env
 
           # Copy application image tar
@@ -123,14 +123,14 @@ jobs:
 
           # Rolling update with docker compose (app + Postgres)
           echo "=== ROLLING UPDATE (docker compose up -d) ==="
-          if ! docker compose -f docker-compose.yml --env-file .env up -d --no-build --remove-orphans; then
+          if ! docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans; then
             echo "ERROR: Deployment failed"
-            docker compose -f docker-compose.yml down || true
+            docker compose -f docker-compose.ec2.yml down || true
             exit 1
           fi
 
           echo "✅ Deployment successful! Current services:"
-          docker compose -f docker-compose.yml --env-file .env ps
+          docker compose -f docker-compose.ec2.yml --env-file .env ps
 
           # Final cleanup (preserve volumes; prune dangling images only)
           docker system prune -f --volumes=false || true
