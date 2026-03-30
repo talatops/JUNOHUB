@@ -1,9 +1,6 @@
 name: build-deploy-junohub-ec2
 
 env:
-  IMAGE_NAME: junohub-app
-  IMAGE_TAG: ${{ github.sha }}
-  CONTAINER_NAME: junohub-app
   REMOTE_DIR: /home/JUNO
 
 on:
@@ -24,89 +21,53 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Prepare deployment env file
+      - name: Create deployment zip
         run: |
-          echo "IMAGE_NAME=${{ env.IMAGE_NAME }}" > .env
-          echo "IMAGE_TAG=${{ env.IMAGE_TAG }}" >> .env
-          echo "CONTAINER_NAME=${{ env.CONTAINER_NAME }}" >> .env
-          echo "NODE_ENV=production" >> .env
-          cat <<'EOF' >> .env
-          ${{ secrets.EC2_ENV }}
-          EOF
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          push: false
-          load: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Save Docker image tar
-        run: |
-          mkdir -p docker
-          docker save -o docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          zip -r deploy.zip . \
+            -x ".git/*" \
+               ".github/*" \
+               "node_modules/*" \
+               ".next/*" \
+               ".turbo/*" \
+               "coverage/*" \
+               "docker/*"
 
       - name: Setup SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" | tr -d '\r' > ssh_key.pem
           chmod 400 ssh_key.pem
 
-      - name: Copy deployment files to EC2
+      - name: Copy deployment zip to EC2
         run: |
-          ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p '${{ env.REMOTE_DIR }}/prisma'"
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/.env
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker-compose.ec2.yml ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/docker-compose.ec2.yml
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no prisma/init-pgvector.sql ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/prisma/init-pgvector.sql
-          scp -i ssh_key.pem -o StrictHostKeyChecking=no docker/junohub-app_${{ env.IMAGE_TAG }}.tar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/junohub-app_${{ env.IMAGE_TAG }}.tar
+          ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "mkdir -p '${{ env.REMOTE_DIR }}'"
+          scp -i ssh_key.pem -o StrictHostKeyChecking=no deploy.zip ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ env.REMOTE_DIR }}/deploy.zip
 
       - name: Deploy on EC2 with docker compose
         run: |
           ssh -i ssh_key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'ENDSSH'
-          set -euxo pipefail
+          set -e
           cd ${{ env.REMOTE_DIR }}
-          echo "=== BEFORE DEPLOY ==="
-          docker compose -f docker-compose.ec2.yml --env-file .env ps || true
-          docker ps -a --filter "name=juno-app-1" --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}" || true
 
-          docker load -i junohub-app_${{ env.IMAGE_TAG }}.tar
-          rm -f junohub-app_${{ env.IMAGE_TAG }}.tar
-          echo "Loaded new image tar successfully"
+          # Unpack latest code snapshot over deploy directory
+          unzip -oq deploy.zip -d .
+          rm -f deploy.zip
 
-          echo "=== START DB / ENSURE EXTENSION ==="
-          docker compose -f docker-compose.ec2.yml --env-file .env up -d --remove-orphans db
-          echo "DB up command completed"
-          docker compose -f docker-compose.ec2.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
-          echo "Vector extension check completed"
+          # Recreate .env from secret for runtime values
+          cat > .env << 'ENVFILE'
+          ${{ secrets.EC2_ENV }}
+          ENVFILE
 
-          # Stop and replace app container only (no volume removal)
-          echo "=== REPLACE APP CONTAINER ==="
-          docker compose -f docker-compose.ec2.yml --env-file .env stop app || true
-          docker compose -f docker-compose.ec2.yml --env-file .env rm -f app || true
-          # Fallback in case old container is detached from compose state but still running with the canonical name.
-          docker rm -f juno-app-1 2>/dev/null || true
-          docker compose -f docker-compose.ec2.yml --env-file .env up -d --no-deps --remove-orphans app
-          echo "App replace command completed"
+          # Build and run services from current source
+          docker compose -f docker-compose.yml --env-file .env up -d --build --force-recreate --remove-orphans
 
-          echo "=== AFTER DEPLOY ==="
-          docker compose -f docker-compose.ec2.yml --env-file .env ps
-          docker ps -a --filter "name=juno-app-1" --format "table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}"
-          APP_ID="$(docker compose -f docker-compose.ec2.yml --env-file .env ps -q app)"
-          echo "App container details:"
-          docker inspect --format='id={{.Id}} startedAt={{.State.StartedAt}} image={{.Config.Image}}' "$APP_ID"
+          # Ensure pgvector extension exists for Prisma vector type
+          docker compose -f docker-compose.yml --env-file .env exec -T db sh -lc "psql -U \"\${POSTGRES_USER:-postgres}\" -d \"\${POSTGRES_DB:-dropshipping}\" -c \"CREATE EXTENSION IF NOT EXISTS vector;\""
+
+          docker compose -f docker-compose.yml --env-file .env ps
           ENDSSH
 
       - name: Cleanup local artifacts
         if: always()
         run: |
           rm -f ssh_key.pem
-          rm -f .env
-          rm -f docker/*.tar || true
+          rm -f deploy.zip
