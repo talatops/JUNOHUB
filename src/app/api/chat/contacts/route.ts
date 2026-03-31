@@ -25,7 +25,6 @@ export async function GET() {
             name: string | null
             email: string | null
             image: string | null
-            publicKey: string | null
             role: string
         }
         let contacts: Contact[] = []
@@ -46,7 +45,6 @@ export async function GET() {
                                     name: true,
                                     email: true,
                                     image: true,
-                                    chatPublicKey: true,
                                 }
                             }
                         }
@@ -59,7 +57,6 @@ export async function GET() {
                 name: c.supplier.companyName || c.supplier.user.name,
                 email: c.supplier.user.email,
                 image: c.supplier.user.image,
-                publicKey: c.supplier.user.chatPublicKey,
                 role: "SUPPLIER"
             }))
         } else if (user.role === "SUPPLIER" && user.supplierProfile) {
@@ -78,7 +75,6 @@ export async function GET() {
                                     name: true,
                                     email: true,
                                     image: true,
-                                    chatPublicKey: true,
                                 }
                             }
                         }
@@ -91,7 +87,6 @@ export async function GET() {
                 name: c.store.businessName || c.store.user.name,
                 email: c.store.user.email,
                 image: c.store.user.image,
-                publicKey: c.store.user.chatPublicKey,
                 role: "VENDOR"
             }))
         }

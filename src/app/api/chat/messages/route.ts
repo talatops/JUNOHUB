@@ -10,9 +10,9 @@ export async function POST(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 })
         }
 
-        const { receiverId, encryptedContent, encryptedKeyForSender, encryptedKeyForReceiver, iv } = await req.json()
+        const { receiverId, content } = await req.json()
 
-        if (!receiverId || !encryptedContent || !encryptedKeyForSender || !encryptedKeyForReceiver || !iv) {
+        if (!receiverId || !content || typeof content !== "string") {
             return new NextResponse("Missing fields", { status: 400 })
         }
 
@@ -20,18 +20,15 @@ export async function POST(req: Request) {
             data: {
                 senderId: session.user.id,
                 receiverId,
-                encryptedContent,
-                encryptedKeyForSender,
-                encryptedKeyForReceiver,
-                iv,
+                content,
             }
         })
 
         // Send push notification to receiver
         try {
             await sendPushNotification(receiverId, {
-                title: "New Encrypted Message",
-                body: `${session.user.name || "A user"} sent you a secure message.`,
+                title: "New Message",
+                body: `${session.user.name || "A user"} sent you a message.`,
                 url: "/dashboard/chat" // Correct to your chat dashboard path
             })
         } catch (pushError) {
