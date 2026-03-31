@@ -65,10 +65,13 @@ function SupplierVendorsContent() {
     const [invitationToken, setInvitationToken] = useState("")
     const [acceptingToken, setAcceptingToken] = useState(false)
     const [showProductSyncs, setShowProductSyncs] = useState(false)
+    const [isInitialLoad, setIsInitialLoad] = useState(true)
 
     useEffect(() => {
-        fetchConnections()
-        fetchProductSyncs()
+        void (async () => {
+            await Promise.all([fetchConnections({ silent: false }), fetchProductSyncs()])
+            setIsInitialLoad(false)
+        })()
         
         // Check if token is in URL
         const token = searchParams.get("token")
@@ -78,19 +81,15 @@ function SupplierVendorsContent() {
         }
     }, [searchParams])
 
-    // Poll for updates every 5 seconds if there are pending connections or product syncs
+    // Poll for updates every 5 seconds so new invitations appear without manual refresh
     useEffect(() => {
-        const hasPending = connections.some(c => c.status === "PENDING")
-        const hasPendingSyncs = productSyncs.some(s => s.status === "PENDING")
-        if (!hasPending && !hasPendingSyncs) return // Don't poll if no pending items
-        
         const interval = setInterval(() => {
-            fetchConnections()
-            fetchProductSyncs()
+            void fetchConnections({ silent: true })
+            void fetchProductSyncs()
         }, 5000) // Poll every 5 seconds
         
         return () => clearInterval(interval)
-    }, [connections, productSyncs]) // Re-run when connections or syncs change
+    }, [])
 
     useEffect(() => {
         if (success) {
@@ -106,9 +105,9 @@ function SupplierVendorsContent() {
         }
     }, [error])
 
-    const fetchConnections = async () => {
+    const fetchConnections = async ({ silent = false }: { silent?: boolean } = {}) => {
         try {
-            setLoading(true)
+            if (!silent) setLoading(true)
             const res = await fetch("/api/supplier/vendors")
             if (!res.ok) throw new Error("Failed to fetch connections")
             const data = await res.json()
@@ -117,7 +116,7 @@ function SupplierVendorsContent() {
         } catch {
             setError("Failed to load vendor connections")
         } finally {
-            setLoading(false)
+            if (!silent) setLoading(false)
         }
     }
 
@@ -142,7 +141,7 @@ function SupplierVendorsContent() {
             })
             if (!res.ok) throw new Error("Failed to update connection")
             setSuccess(`Connection ${status.toLowerCase()} successfully`)
-            fetchConnections()
+            void fetchConnections({ silent: true })
         } catch {
             setError("Failed to update connection")
         }
@@ -157,7 +156,7 @@ function SupplierVendorsContent() {
             })
             if (!res.ok) throw new Error("Failed to delete connection")
             setSuccess("Connection removed successfully")
-            fetchConnections()
+            void fetchConnections({ silent: true })
         } catch {
             setError("Failed to remove connection")
         }
@@ -175,8 +174,8 @@ function SupplierVendorsContent() {
                 throw new Error(data.message || "Failed to update sync request")
             }
             setSuccess(`Product sync ${action === "accept" ? "accepted" : "rejected"} successfully`)
-            fetchProductSyncs()
-            fetchConnections()
+            void fetchProductSyncs()
+            void fetchConnections({ silent: true })
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to update sync request")
         }
@@ -201,7 +200,7 @@ function SupplierVendorsContent() {
             setSuccess(data.message || "Invitation accepted successfully! You are now connected.")
             setInvitationToken("")
             setShowTokenInput(false)
-            fetchConnections()
+            void fetchConnections({ silent: true })
             // Send supplier to JUNO CHAT so encryption keys auto-setup on first open
             setTimeout(() => router.push("/supplier/chat"), 1500)
         } catch (err) {
@@ -423,7 +422,7 @@ function SupplierVendorsContent() {
                 ))}
             </div>
 
-            {loading ? (
+            {loading && isInitialLoad ? (
                 <div className="flex items-center justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
                 </div>
@@ -437,15 +436,29 @@ function SupplierVendorsContent() {
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {filteredConnections.map((connection) => (
-                        <button
+                        <div
                             key={connection.id}
-                            type="button"
                             onClick={() => {
                                 if (connection.status === "CONNECTED") {
                                     router.push(`/supplier/vendors/${connection.id}`)
                                 }
                             }}
-                            className="bg-white/5 rounded-xl p-6 border border-white/10 hover:border-white/20 transition-colors text-left w-full"
+                            className={`bg-white/5 rounded-xl p-6 border border-white/10 transition-colors text-left w-full ${
+                                connection.status === "CONNECTED"
+                                    ? "hover:border-white/20 cursor-pointer"
+                                    : "cursor-default"
+                            }`}
+                            role={connection.status === "CONNECTED" ? "button" : undefined}
+                            tabIndex={connection.status === "CONNECTED" ? 0 : -1}
+                            onKeyDown={(e) => {
+                                if (
+                                    connection.status === "CONNECTED" &&
+                                    (e.key === "Enter" || e.key === " ")
+                                ) {
+                                    e.preventDefault()
+                                    router.push(`/supplier/vendors/${connection.id}`)
+                                }
+                            }}
                         >
                             <div className="flex items-start justify-between mb-4">
                                 <div className="flex items-center gap-2">
@@ -463,7 +476,7 @@ function SupplierVendorsContent() {
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            handleDelete(connection.id)
+                                            void handleDelete(connection.id)
                                         }}
                                         className="p-1 hover:bg-red-500/20 rounded text-slate-400 hover:text-red-400 transition-colors"
                                         title="Remove"
@@ -507,7 +520,7 @@ function SupplierVendorsContent() {
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            handleStatusChange(connection.id, "CONNECTED")
+                                            void handleStatusChange(connection.id, "CONNECTED")
                                         }}
                                         className="flex-1 px-3 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                     >
@@ -518,7 +531,7 @@ function SupplierVendorsContent() {
                                         type="button"
                                         onClick={(e) => {
                                             e.stopPropagation()
-                                            handleStatusChange(connection.id, "REJECTED")
+                                            void handleStatusChange(connection.id, "REJECTED")
                                         }}
                                         className="flex-1 px-3 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
                                     >
@@ -527,7 +540,7 @@ function SupplierVendorsContent() {
                                     </button>
                                 </div>
                             )}
-                        </button>
+                        </div>
                     ))}
                 </div>
             )}

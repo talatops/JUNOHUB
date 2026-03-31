@@ -99,7 +99,7 @@ export async function PUT(
             return NextResponse.json({ message: "Supplier profile not found" }, { status: 404 })
         }
 
-        // Verify connection belongs to supplier
+        // First try normal connection update flow
         const connection = await prisma.connection.findFirst({
             where: {
                 id: connectionId,
@@ -107,18 +107,80 @@ export async function PUT(
             }
         })
 
-        if (!connection) {
-            return NextResponse.json({ message: "Connection not found" }, { status: 404 })
+        if (connection) {
+            const updatedConnection = await prisma.connection.update({
+                where: { id: connectionId },
+                data: { status: status as "CONNECTED" | "REJECTED" }
+            })
+
+            return NextResponse.json({
+                message: `Connection ${status.toLowerCase()} successfully`,
+                connection: updatedConnection
+            })
         }
 
-        const updatedConnection = await prisma.connection.update({
-            where: { id: connectionId },
-            data: { status: status as "CONNECTED" | "REJECTED" }
+        // If not a connection, try treating `connectionId` as a pending invitation id.
+        const invitation = await prisma.invitation.findFirst({
+            where: {
+                id: connectionId,
+                supplierId: supplierProfile.id,
+                used: false,
+                expiresAt: {
+                    gt: new Date()
+                }
+            }
+        })
+
+        if (!invitation) {
+            return NextResponse.json({ message: "Connection or invitation not found" }, { status: 404 })
+        }
+
+        if (status === "CONNECTED") {
+            // Accept invitation: mark used and create connection in one transaction.
+            const createdConnection = await prisma.$transaction(async (tx) => {
+                await tx.invitation.update({
+                    where: { id: invitation.id },
+                    data: {
+                        used: true,
+                        usedAt: new Date()
+                    }
+                })
+
+                return tx.connection.upsert({
+                    where: {
+                        storeId_supplierId: {
+                            storeId: invitation.storeId,
+                            supplierId: invitation.supplierId
+                        }
+                    },
+                    update: {
+                        status: "CONNECTED"
+                    },
+                    create: {
+                        storeId: invitation.storeId,
+                        supplierId: invitation.supplierId,
+                        status: "CONNECTED"
+                    }
+                })
+            })
+
+            return NextResponse.json({
+                message: "Invitation accepted successfully",
+                connection: createdConnection
+            })
+        }
+
+        // Reject invitation: consume it so it disappears from pending list.
+        await prisma.invitation.update({
+            where: { id: invitation.id },
+            data: {
+                used: true,
+                usedAt: new Date()
+            }
         })
 
         return NextResponse.json({
-            message: `Connection ${status.toLowerCase()} successfully`,
-            connection: updatedConnection
+            message: "Invitation rejected successfully"
         })
     } catch (error) {
         console.error("Error updating connection:", error)
