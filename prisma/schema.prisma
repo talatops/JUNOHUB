@@ -27,9 +27,6 @@ model User {
   mfaEnabled    Boolean   @default(false)
   mfaSecret     String?   // Encrypted TOTP secret
   
-  chatPublicKey           String?
-  chatPrivateKeyEncrypted String?   @db.Text
-  
   // Relations
   sentMessages     ChatMessage[] @relation("SentMessages")
   receivedMessages ChatMessage[] @relation("ReceivedMessages")
@@ -157,6 +154,9 @@ model CachedOrder {
   currency            String?
   financialStatus     String?
   fulfillmentStatus   String?
+  trackingNumber      String?
+  trackingCompany     String?
+  trackingUrl         String?
   lineItems           Json     // Store line items as JSON
   customer            Json?    // Store customer info as JSON
   createdAt           DateTime @default(now())
@@ -559,10 +559,7 @@ model ChatMessage {
   id                      String   @id @default(cuid())
   senderId                String
   receiverId              String
-  encryptedContent        String   @db.Text
-  encryptedKeyForSender   String   @db.Text
-  encryptedKeyForReceiver String   @db.Text
-  iv                      String
+  content                 String   @db.Text
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])

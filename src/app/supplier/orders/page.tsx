@@ -1,18 +1,18 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
     ShoppingCart,
     Search,
     Loader2,
     AlertCircle,
     Package,
-    CheckCircle2,
-    Clock,
-    XCircle
+    ChevronRight
 } from "lucide-react"
 
 export default function SupplierOrdersPage() {
+    const router = useRouter()
     const [orders, setOrders] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
@@ -106,7 +106,7 @@ export default function SupplierOrdersPage() {
                     </p>
                 </div>
             ) : (
-                <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
+            <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
                     <div className="overflow-x-auto">
                         <table className="w-full">
                             <thead className="bg-white/5 border-b border-white/10">
@@ -116,11 +116,16 @@ export default function SupplierOrdersPage() {
                                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Status</th>
                                     <th className="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Total</th>
+                                    <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Action</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/10">
                                 {filteredOrders.map((order) => (
-                                    <tr key={order.id} className="hover:bg-white/5 transition-colors">
+                                    <tr
+                                        key={order.id}
+                                        className="hover:bg-white/5 transition-colors cursor-pointer"
+                                        onClick={() => router.push(`/supplier/orders/${order.id}`)}
+                                    >
                                         <td className="px-6 py-4 font-medium text-white">{order.orderNumber}</td>
                                         <td className="px-6 py-4 text-sm text-slate-300">{order.vendorName}</td>
                                         <td className="px-6 py-4 text-sm text-slate-300">
@@ -128,14 +133,20 @@ export default function SupplierOrdersPage() {
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                                order.status === "FULFILLED" ? "bg-emerald-500/20 text-emerald-400" :
-                                                order.status === "PENDING" ? "bg-yellow-500/20 text-yellow-400" :
-                                                "bg-red-500/20 text-red-400"
+                                                (order.status || "").toUpperCase() === "FULFILLED" ? "bg-emerald-500/20 text-emerald-400" :
+                                                (order.status || "").toUpperCase() === "SHIPPED" || (order.status || "").toUpperCase() === "IN_PROGRESS" ? "bg-yellow-500/20 text-yellow-400" :
+                                                (order.status || "").toUpperCase() === "CANCELLED" ? "bg-red-500/20 text-red-400" :
+                                                "bg-blue-500/20 text-blue-400"
                                             }`}>
-                                                {order.status}
+                                                {order.status || "UNFULFILLED"}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4 text-sm font-medium text-white">${order.total?.toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-white">${Number(order.total || 0).toFixed(2)}</td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="inline-flex items-center gap-1 text-indigo-300 text-sm font-semibold">
+                                                Manage <ChevronRight className="w-4 h-4" />
+                                            </span>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>

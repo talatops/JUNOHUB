@@ -2,9 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { usePathname } from "next/navigation"
-import { getSession, useSession } from "next-auth/react"
-import { useChatCrypto, PRIVATE_KEY_STORAGE_KEY, PUBLIC_KEY_STORAGE_KEY } from "@/hooks/useChatCrypto"
-import { ChatCrypto } from "@/lib/chat-crypto"
+import { useSession } from "next-auth/react"
 import { useTheme } from "@/components/ThemeProvider"
 import {
     Send,
@@ -12,7 +10,6 @@ import {
     ShieldCheck,
     Loader2,
     Plus,
-    Lock,
     MessageSquare,
     CheckCheck,
     Package,
@@ -28,7 +25,6 @@ interface Contact {
     name: string
     email: string
     image: string | null
-    publicKey: string | null
     role: string
 }
 
@@ -71,8 +67,6 @@ export function ChatView() {
     const isLight = theme === "light"
     const { data: session } = useSession()
     const userId = (session?.user as { id?: string })?.id
-    const { hasKeys, loading: cryptoLoading, setupKeys, privateKey, getStoredPublicKey } = useChatCrypto(userId)
-
     const [contacts, setContacts] = useState<Contact[]>([])
     const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
     const [messages, setMessages] = useState<Message[]>([])
@@ -92,57 +86,11 @@ export function ChatView() {
     const attachRef = useRef<HTMLDivElement>(null)
 
     const messagesEndRef = useRef<HTMLDivElement>(null)
-    const autoSetupAttemptedRef = useRef(false)
-
-    const handleSetup = async () => {
-        try {
-            setContactsError(null)
-            // Ensure we have a user id before trying to set up keys
-            if (!userId) {
-                setContactsError("Session not ready. Please refresh the page and try again.")
-                return
-            }
-            await setupKeys()
-            await getSession()
-            fetchContacts()
-        } catch (error) {
-            console.error("Setup failed", error)
-            setContactsError("Failed to set up encryption. Please try again.")
-        }
-    }
-
-    // Auto-setup chat keys when user has none (e.g. supplier who just accepted invitation)
-    useEffect(() => {
-        if (cryptoLoading || hasKeys || autoSetupAttemptedRef.current || !userId) return
-        autoSetupAttemptedRef.current = true
-        setContactsError(null)
-        setupKeys()
-            .then(() => getSession())
-            .then(() => fetchContacts())
-            .catch((err) => {
-                console.error("Auto setup failed", err)
-                autoSetupAttemptedRef.current = false
-                setContactsError("Encryption setup failed. Click below to try again.")
-            })
-    }, [cryptoLoading, hasKeys, setupKeys])
 
     const fetchContacts = async () => {
         try {
             setLoadingContacts(true)
             setContactsError(null)
-            // Sync current user's public key to DB so the other party always has our latest key (fixes decrypt when they send to us)
-            const storedPublic = getStoredPublicKey?.() ?? null
-            if (storedPublic) {
-                try {
-                    await fetch("/api/user/chat-setup", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ publicKey: storedPublic })
-                    })
-                } catch {
-                    // Non-blocking; contacts can still load
-                }
-            }
             const res = await fetch("/api/chat/contacts")
             if (res.ok) {
                 const data = await res.json()
@@ -159,7 +107,6 @@ export function ChatView() {
     }
 
     const fetchMessages = async (contact: Contact, silent = false) => {
-        if (!privateKey) return
         try {
             if (!silent) {
                 setLoadingMessages(true)
@@ -168,39 +115,14 @@ export function ChatView() {
             const res = await fetch(`/api/chat/messages?contactId=${contact.id}`)
             if (res.ok) {
                 const data = await res.json()
-                const decryptedMessages = await Promise.all(
-                    data.messages.map(async (m: { id: string; senderId: string; receiverId: string; encryptedContent: string; encryptedKeyForSender: string; encryptedKeyForReceiver: string; iv: string; createdAt: string }) => {
-                        const primaryKey = m.senderId === contact.id ? m.encryptedKeyForReceiver : m.encryptedKeyForSender
-                        const fallbackKey = m.senderId === contact.id ? m.encryptedKeyForSender : m.encryptedKeyForReceiver
-                        for (const keyBlob of [primaryKey, fallbackKey]) {
-                            try {
-                                const decrypted = await ChatCrypto.decryptMessage(
-                                    m.encryptedContent,
-                                    keyBlob,
-                                    m.iv,
-                                    privateKey
-                                )
-                                return {
-                                    id: m.id,
-                                    senderId: m.senderId,
-                                    receiverId: m.receiverId,
-                                    content: decrypted,
-                                    createdAt: m.createdAt
-                                }
-                            } catch {
-                                continue
-                            }
-                        }
-                        return {
-                            id: m.id,
-                            senderId: m.senderId,
-                            receiverId: m.receiverId,
-                            content: "[Encrypted Message - Error Decrypting]",
-                            createdAt: m.createdAt
-                        }
-                    })
-                )
-                setMessages(decryptedMessages)
+                const plainMessages = data.messages.map((m: { id: string; senderId: string; receiverId: string; content: string; createdAt: string }) => ({
+                    id: m.id,
+                    senderId: m.senderId,
+                    receiverId: m.receiverId,
+                    content: m.content,
+                    createdAt: m.createdAt
+                }))
+                setMessages(plainMessages)
             } else if (!silent) {
                 setMessagesError("Failed to load messages. Please try again.")
             }
@@ -213,8 +135,8 @@ export function ChatView() {
     }
 
     useEffect(() => {
-        if (hasKeys) fetchContacts()
-    }, [hasKeys])
+        fetchContacts()
+    }, [])
 
     useEffect(() => {
         if (selectedContact) {
@@ -222,17 +144,17 @@ export function ChatView() {
         } else {
             setMessages([])
         }
-    }, [selectedContact, privateKey])
+    }, [selectedContact])
 
     // Poll for new messages when a contact is selected
     const POLL_INTERVAL_MS = 8000
     useEffect(() => {
-        if (!selectedContact || !privateKey) return
+        if (!selectedContact) return
         const interval = setInterval(() => {
             fetchMessages(selectedContact, true)
         }, POLL_INTERVAL_MS)
         return () => clearInterval(interval)
-    }, [selectedContact?.id, privateKey])
+    }, [selectedContact?.id])
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -303,50 +225,17 @@ export function ChatView() {
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (!newMessage.trim() || !selectedContact || !selectedContact.publicKey || !privateKey) return
+        if (!newMessage.trim() || !selectedContact) return
 
         try {
             setSending(true)
             setSendError(null)
-            let meData: { user?: { chatPublicKey?: string } } = {}
-            try {
-                const session = await getSession()
-                meData = { user: session?.user ? { chatPublicKey: (session.user as { chatPublicKey?: string }).chatPublicKey } : {} }
-            } catch {
-                const res = await fetch("/api/auth/session")
-                meData = await res.json()
-            }
-            let myPublicKey = meData.user?.chatPublicKey
-
-            if (!myPublicKey && getStoredPublicKey) {
-                const storedPublic = getStoredPublicKey()
-                if (storedPublic) {
-                    const syncRes = await fetch("/api/user/chat-setup", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ publicKey: storedPublic })
-                    })
-                    if (syncRes.ok) myPublicKey = storedPublic
-                }
-            }
-
-            if (!myPublicKey) {
-                setSendError("Encryption key not ready. Please refresh the page and try again.")
-                return
-            }
-
-            const encrypted = await ChatCrypto.encryptMessage(
-                newMessage,
-                myPublicKey,
-                selectedContact.publicKey
-            )
-
             const res = await fetch("/api/chat/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     receiverId: selectedContact.id,
-                    ...encrypted
+                    content: newMessage
                 })
             })
 
@@ -370,44 +259,6 @@ export function ChatView() {
         } finally {
             setSending(false)
         }
-    }
-
-    if (cryptoLoading) {
-        return (
-            <div className={cn("h-full flex flex-col items-center justify-center gap-4", isLight ? "bg-slate-50" : "")}>
-                <Loader2 className="w-10 h-10 animate-spin text-indigo-500" />
-                <p className={cn("font-medium", isLight ? "text-slate-600" : "text-slate-400")}>Initializing JUNO CHAT...</p>
-            </div>
-        )
-    }
-
-    if (!hasKeys) {
-        return (
-            <div className={cn("h-full flex flex-col items-center justify-center p-6 text-center", isLight ? "bg-slate-50" : "")}>
-                <div className={cn(
-                    "w-20 h-20 rounded-3xl flex items-center justify-center mb-8 animate-pulse shadow-2xl",
-                    isLight ? "bg-indigo-100 border border-indigo-200 shadow-indigo-200" : "bg-indigo-500/20 border border-indigo-500/30 shadow-indigo-500/20"
-                )}>
-                    <ShieldCheck className={cn("w-10 h-10", isLight ? "text-indigo-600" : "text-indigo-400")} />
-                </div>
-                <h1 className={cn("text-3xl font-black mb-4 tracking-tight", isLight ? "text-slate-900" : "text-white")}>Enable JUNO CHAT</h1>
-                <p className={cn("max-w-sm mb-10 leading-relaxed font-medium", isLight ? "text-slate-600" : "text-slate-400")}>
-                    JUNO CHAT uses industry-standard <strong>AES-256 E2E Encryption</strong>.
-                    Set up your secure keys to start chatting with your connections.
-                </p>
-                <button
-                    onClick={handleSetup}
-                    disabled={sending}
-                    className="px-10 py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black transition-all shadow-xl shadow-indigo-500/30 flex items-center gap-3 active:scale-95 disabled:opacity-50"
-                >
-                    {sending && <Loader2 className="w-5 h-5 animate-spin" />}
-                    Initialize Encryption
-                </button>
-                <p className={cn("mt-8 text-[10px] uppercase tracking-widest font-black flex items-center gap-2", isLight ? "text-slate-500" : "text-slate-500")}>
-                    <Lock className="w-3 h-3" /> Private keys never leave your browser
-                </p>
-            </div>
-        )
     }
 
     const filteredContacts = contacts.filter(c =>
@@ -512,10 +363,7 @@ export function ChatView() {
                                             {contact.role}
                                         </p>
                                     </div>
-                                    <div className={cn(
-                                        "w-2 h-2 rounded-full",
-                                        contact.publicKey ? "bg-green-500/50" : "bg-red-500/50"
-                                    )} />
+                                    <div className="w-2 h-2 rounded-full bg-green-500/50" />
                                 </button>
                             ))}
                         </div>
@@ -533,7 +381,7 @@ export function ChatView() {
                         <div className="flex-1 min-w-0">
                             <p className={cn("text-xs font-black truncate", isLight ? "text-slate-900" : "text-white")}>YOU</p>
                             <p className={cn("text-[10px] font-bold flex items-center gap-1.5 uppercase tracking-tighter", isLight ? "text-emerald-600" : "text-green-400")}>
-                                <ShieldCheck className="w-3 h-3" /> Encrypted Ready
+                                <ShieldCheck className="w-3 h-3" /> Ready
                             </p>
                         </div>
                         <Settings className={cn("w-4 h-4 cursor-pointer transition-colors", isLight ? "text-slate-500 hover:text-slate-700" : "text-slate-600 hover:text-white")} />
@@ -575,7 +423,7 @@ export function ChatView() {
                                         <span className={cn("text-[10px] font-black uppercase tracking-widest", isLight ? "text-slate-500" : "text-slate-500")}>Active Now</span>
                                         <div className={cn("h-3 w-[1px] mx-1", isLight ? "bg-slate-200" : "bg-white/10")} />
                                         <span className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-1", isLight ? "text-indigo-600" : "text-indigo-400")}>
-                                            <Lock className="w-2.5 h-2.5" /> End-to-End
+                                            Chat
                                         </span>
                                     </div>
                                 </div>
@@ -597,8 +445,8 @@ export function ChatView() {
                             ) : messages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-center max-w-xs mx-auto opacity-80">
                                     <ShieldCheck className={cn("w-16 h-16 mb-4", isLight ? "text-indigo-500" : "text-indigo-500")} />
-                                    <h4 className={cn("text-lg font-black mb-2", isLight ? "text-slate-900" : "text-white")}>Secure Connection Started</h4>
-                                    <p className={cn("text-sm font-medium", isLight ? "text-slate-500" : "text-slate-400")}>Messages are encrypted before leaving your device.</p>
+                                    <h4 className={cn("text-lg font-black mb-2", isLight ? "text-slate-900" : "text-white")}>Conversation Started</h4>
+                                    <p className={cn("text-sm font-medium", isLight ? "text-slate-500" : "text-slate-400")}>Start chatting with your connection.</p>
                                 </div>
                             ) : (
                                 messages.map((msg, idx) => {
@@ -647,52 +495,19 @@ export function ChatView() {
                                 <div className="mb-4 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium flex flex-wrap items-center justify-between gap-2">
                                     <span>{sendError}</span>
                                     <div className="flex items-center gap-2 shrink-0">
-                                        {sendError.includes("Encryption key not ready") && (
-                                            <button
-                                                type="button"
-                                                onClick={async () => {
-                                                    setSendError(null)
-                                                    try {
-                                                        localStorage.removeItem(PRIVATE_KEY_STORAGE_KEY)
-                                                        localStorage.removeItem(PUBLIC_KEY_STORAGE_KEY)
-                                                        await setupKeys()
-                                                        await getSession()
-                                                        fetchContacts()
-                                                    } catch {
-                                                        setSendError("Re-setup failed. Please refresh the page.")
-                                                    }
-                                                }}
-                                                className="px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-bold uppercase tracking-wider"
-                                            >
-                                                Re-setup encryption
-                                            </button>
-                                        )}
                                         <button type="button" onClick={() => setSendError(null)} className="text-red-400 hover:text-red-300" aria-label="Dismiss">×</button>
                                     </div>
                                 </div>
                             )}
-                            {!selectedContact.publicKey ? (
-                                <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
-                                    <p className="text-sm text-red-400 font-black uppercase tracking-tighter flex items-center justify-center gap-2">
-                                        <AlertCircle className="w-4 h-4" /> Connection Not Ready
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-2 font-medium">
-                                        This contact hasn't set up their JUNO CHAT keys yet.
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-1 font-medium">
-                                        Ask them to open <strong>JUNO CHAT</strong> once; keys are set up automatically.
-                                    </p>
-                                </div>
-                            ) : (
-                                <form
-                                    onSubmit={handleSendMessage}
-                                    className={cn(
-                                        "relative flex items-end gap-3 p-3 rounded-2xl transition-all shadow-lg",
-                                        isLight
-                                            ? "bg-white border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20"
-                                            : "glass-panel bg-white/5 border border-white/10 focus-within:border-indigo-500/50 focus-within:bg-white/10"
-                                    )}
-                                >
+                            <form
+                                onSubmit={handleSendMessage}
+                                className={cn(
+                                    "relative flex items-end gap-3 p-3 rounded-2xl transition-all shadow-lg",
+                                    isLight
+                                        ? "bg-white border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-500/20"
+                                        : "glass-panel bg-white/5 border border-white/10 focus-within:border-indigo-500/50 focus-within:bg-white/10"
+                                )}
+                            >
                                     <div className="relative" ref={attachRef}>
                                         <button
                                             type="button"
@@ -778,7 +593,7 @@ export function ChatView() {
                                     </div>
                                     <textarea
                                         rows={1}
-                                        placeholder="Type encrypted message..."
+                                        placeholder="Type a message..."
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         onKeyDown={(e) => {
@@ -804,10 +619,9 @@ export function ChatView() {
                                     >
                                         {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                                     </button>
-                                </form>
-                            )}
+                            </form>
                             <p className={cn("mt-3 text-[9px] font-black uppercase tracking-[0.2em] text-center", isLight ? "text-slate-500" : "text-slate-600")}>
-                                <Lock className="inline w-2.5 h-2.5 mr-1 mb-0.5" /> Military-Grade AES-256 Protocol
+                                Real-time chat enabled
                             </p>
                         </div>
                     </>
@@ -819,8 +633,8 @@ export function ChatView() {
                         </div>
                         <h3 className={cn("text-2xl font-black mb-3 tracking-tight", isLight ? "text-slate-900" : "text-white")}>Your Direct Line</h3>
                         <p className={cn("text-sm font-medium leading-relaxed", isLight ? "text-slate-500" : "text-slate-500")}>
-                            Encrypted workspace for vendors and suppliers.
-                            Select a contact to start a secure session.
+                            Messaging workspace for vendors and suppliers.
+                            Select a contact to start a session.
                         </p>
                     </div>
                 )}

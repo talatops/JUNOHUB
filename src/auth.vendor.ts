@@ -95,19 +95,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             const user = userId
                 ? await prisma.user.findUnique({
                       where: { id: userId },
-                      select: { id: true, role: true, chatPublicKey: true },
+                      select: { id: true, role: true },
                   })
                 : sessionEmail
                     ? await prisma.user.findUnique({
                           where: { email: sessionEmail },
-                          select: { id: true, role: true, chatPublicKey: true },
+                          select: { id: true, role: true },
                       })
                     : null
 
             if (user) {
                 session.user.id = user.id
                 session.user.role = user.role
-                session.user.chatPublicKey = user.chatPublicKey ?? undefined
             }
 
             return session
