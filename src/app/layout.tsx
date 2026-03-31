@@ -17,9 +17,13 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "JUNO | Modern Commerce Infrastructure",
   description: "The world's most advanced encrypted ecosystem for vendors and suppliers.",
+  manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/icon.png",
-    apple: "/logo.png",
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-icon.png",
   },
   appleWebApp: {
     capable: true,
