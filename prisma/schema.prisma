@@ -559,7 +559,7 @@ model ChatMessage {
   id                      String   @id @default(cuid())
   senderId                String
   receiverId              String
-  content                 String   @db.Text
+  content                 String   @map("encryptedContent") @db.Text
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
