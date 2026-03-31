@@ -26,9 +26,10 @@ html[data-theme="light"] {
   --background: #f8fafc;
   --foreground: #020617;
   --primary: var(--color-indigo-accent);
-  --glass-bg: rgba(255, 255, 255, 0.9);
-  --glass-border: rgba(148, 163, 184, 0.35);
-  --glass-card: rgba(255, 255, 255, 0.95);
+  /* Slightly darker glass so containers/text contrast stays crisp in light mode */
+  --glass-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(148, 163, 184, 0.55);
+  --glass-card: rgba(255, 255, 255, 0.88);
   --dashboard-bg: #f9fafb;
   --dashboard-mesh: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(191, 219, 254, 0.6), transparent),
     radial-gradient(ellipse 60% 40% at 100% 50%, rgba(221, 214, 254, 0.5), transparent),
@@ -99,6 +100,14 @@ html[data-theme="light"] .text-slate-200 {
   color: #374151 !important;
 }
 
+html[data-theme="light"] .text-slate-500 {
+  color: #475569 !important;
+}
+
+html[data-theme="light"] .text-slate-600 {
+  color: #334155 !important;
+}
+
 /* Sidebar & header backgrounds in light mode */
 html[data-theme="light"] .bg-slate-900\/70 {
   background-color: rgba(255, 255, 255, 0.98) !important;
@@ -112,11 +121,57 @@ html[data-theme="light"] .bg-slate-900\/50 {
 
 /* Small chips / badges that were pure white text */
 html[data-theme="light"] .bg-white\/10 {
-  background-color: rgba(15, 23, 42, 0.04);
+  /* Darken a bit for better legibility on glass */
+  background-color: rgba(15, 23, 42, 0.065) !important;
+}
+
+html[data-theme="light"] .border-white\/10 {
+  border-color: rgba(148, 163, 184, 0.45) !important;
 }
 
 html[data-theme="light"] .bg-white\/5 {
-  background-color: rgba(15, 23, 42, 0.03);
+  background-color: rgba(15, 23, 42, 0.045) !important;
+}
+
+html[data-theme="light"] .border-white\/5 {
+  border-color: rgba(148, 163, 184, 0.25) !important;
+}
+
+/* ------------------------------ */
+/* Dark mode contrast improvements */
+/* ------------------------------ */
+/* Many components use Tailwind text/border colors (e.g. text-slate-400)
+   on top of glass backgrounds (bg-white/5, border-white/10). In dark mode
+   some of these become too low-contrast, so we raise their readability
+   globally without touching component logic. */
+html:not([data-theme="light"]) .text-slate-400 {
+  color: #cbd5e1 !important;
+}
+html:not([data-theme="light"]) .text-slate-500 {
+  color: #94a3b8 !important;
+}
+html:not([data-theme="light"]) .text-slate-300 {
+  color: #e2e8f0 !important;
+}
+html:not([data-theme="light"]) .text-slate-200 {
+  color: #e5e7eb !important;
+}
+html:not([data-theme="light"]) .text-slate-600 {
+  color: #a3b3c6 !important;
+}
+
+/* Make glass container backgrounds and borders more visible */
+html:not([data-theme="light"]) .bg-white\/5 {
+  background-color: rgba(255, 255, 255, 0.065) !important;
+}
+html:not([data-theme="light"]) .bg-white\/10 {
+  background-color: rgba(255, 255, 255, 0.125) !important;
+}
+html:not([data-theme="light"]) .border-white\/5 {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+html:not([data-theme="light"]) .border-white\/10 {
+  border-color: rgba(148, 163, 184, 0.42) !important;
 }
 
 

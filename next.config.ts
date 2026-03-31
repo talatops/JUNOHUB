@@ -48,6 +48,10 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: [
     "https://precontributive-tribally-dione.ngrok-free.dev",
     "https://*.ngrok-free.dev",
+    "https://*.ngrok-free.app",
+    "https://brave-destined-gelding.ngrok-free.app",
+    "brave-destined-gelding.ngrok-free.app",
+    "*.ngrok-free.app",
     "https://*.ngrok.io",
   ],
   reactCompiler: true,

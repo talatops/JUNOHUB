@@ -99,6 +99,10 @@ export function Sidebar({ showLogo = true, className }: SidebarProps) {
     const pathname = usePathname()
     const { theme } = useTheme()
     const isLight = theme === "light"
+    const isRouteActive = (href: string) => {
+        if (href === "/dashboard") return pathname === "/dashboard"
+        return pathname === href || pathname.startsWith(`${href}/`)
+    }
 
     return (
         <div className={cn(
@@ -131,10 +135,10 @@ export function Sidebar({ showLogo = true, className }: SidebarProps) {
                             className={cn(
                                 "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-xl transition-all duration-200 ease-out border border-transparent",
                                 isLight
-                                    ? pathname.startsWith(route.href)
+                                    ? isRouteActive(route.href)
                                         ? "text-indigo-600 bg-indigo-50 border-indigo-100"
                                         : "text-slate-600 hover:text-indigo-600 hover:bg-slate-50"
-                                    : pathname.startsWith(route.href)
+                                    : isRouteActive(route.href)
                                         ? "text-white bg-white/10 border-white/10"
                                         : "text-slate-400 hover:text-white hover:bg-white/10"
                             )}
@@ -144,7 +148,7 @@ export function Sidebar({ showLogo = true, className }: SidebarProps) {
                                 {route.label}
                             </div>
                         </Link>
-                        {route.subRoutes && pathname.startsWith(route.href) && (
+                        {route.subRoutes && isRouteActive(route.href) && (
                             <div className="ml-8 mt-1 space-y-1">
                                 {route.subRoutes.map((sub) => (
                                     <Link

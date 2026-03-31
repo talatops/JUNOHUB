@@ -169,8 +169,8 @@ export default function OrderDetailsPage() {
                     {/* Order Summary & Status - Symmetric Top Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         {/* Order Date */}
-                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 text-slate-400 mb-3">
+                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col gap-3">
+                            <div className="flex items-center gap-2 text-slate-400 mb-0">
                                 <Calendar className="w-4 h-4" />
                                 <span className="text-xs font-bold uppercase tracking-wider">Order Date</span>
                             </div>
@@ -180,8 +180,8 @@ export default function OrderDetailsPage() {
                         </div>
 
                         {/* Total Amount */}
-                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col justify-between">
-                            <div className="flex items-center gap-2 text-slate-400 mb-3">
+                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col gap-3">
+                            <div className="flex items-center gap-2 text-slate-400 mb-0">
                                 <DollarSign className="w-4 h-4" />
                                 <span className="text-xs font-bold uppercase tracking-wider">Total Amount</span>
                             </div>
@@ -191,13 +191,13 @@ export default function OrderDetailsPage() {
                         </div>
 
                         {/* Payment Status */}
-                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col justify-between">
-                            <span className="text-xs font-bold uppercase text-slate-400 tracking-wider block mb-3">
+                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col gap-3">
+                            <span className="text-xs font-bold uppercase text-slate-400 tracking-wider block">
                                 Payment Status
                             </span>
                             <div>
                                 <span
-                                    className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${
+                                    className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5 whitespace-nowrap ${
                                         order.financial_status === "paid"
                                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                             : "bg-red-500/20 text-red-400 border border-red-500/30"
@@ -210,13 +210,13 @@ export default function OrderDetailsPage() {
                         </div>
 
                         {/* Fulfillment Status */}
-                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col justify-between">
-                            <span className="text-xs font-bold uppercase text-slate-400 tracking-wider block mb-3">
+                        <div className="bg-white/5 rounded-xl p-5 border border-white/10 flex flex-col gap-3">
+                            <span className="text-xs font-bold uppercase text-slate-400 tracking-wider block">
                                 Fulfillment Status
                             </span>
                             <div>
                                 <span
-                                    className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${
+                                    className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider inline-flex items-center gap-1.5 whitespace-nowrap ${
                                         order.fulfillment_status === "fulfilled"
                                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                             : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
@@ -236,7 +236,7 @@ export default function OrderDetailsPage() {
                     {/* Main Content Grid */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Left Column - Customer & Shipping */}
-                        <div className="lg:col-span-1 space-y-6">
+                        <div className="lg:col-span-1 space-y-6 min-w-0">
                             {/* Customer — always shown; placeholder when nothing is linked */}
                             <div className="bg-white/5 rounded-xl p-5 border border-white/10">
                                 <div className="flex items-center gap-2 text-slate-400 mb-4">
@@ -295,11 +295,10 @@ export default function OrderDetailsPage() {
                                 </div>
                             )}
                         </div>
-                    </div>
 
-                    {/* Centered Order Items Card */}
-                    <div className="mt-6 max-w-5xl mx-auto w-full">
-                        <div className="bg-white/5 rounded-xl p-5 border border-white/10">
+                        {/* Middle Column - Order Items */}
+                        <div className="lg:col-span-2 min-w-0">
+                            <div className="bg-white/5 rounded-xl p-5 border border-white/10 w-full">
                             <div className="flex items-center gap-2 text-slate-400 mb-5">
                                 <Package className="w-4 h-4" />
                                 <span className="text-xs font-bold uppercase tracking-wider">Order Items</span>
@@ -373,9 +372,10 @@ export default function OrderDetailsPage() {
                                 <p className="text-slate-300 text-sm leading-relaxed">{order.note}</p>
                             </div>
                         )}
+                        </div>
+                    </div>
                     </div>
                 </div>
             </div>
-        </div>
     )
 }
