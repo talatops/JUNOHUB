@@ -53,8 +53,17 @@ jobs:
             rm -rf "./prisma/init-pgvector.sql"
           fi
 
-          # Unpack latest code snapshot over deploy directory
-          unzip -oq deploy.zip -d .
+          # Clean, deletion-safe deploy:
+          # extract to temp dir, then rsync with --delete so removed files are purged.
+          rm -rf .deploy_extract_tmp
+          mkdir -p .deploy_extract_tmp
+          unzip -oq deploy.zip -d .deploy_extract_tmp
+          rsync -a --delete \
+            --exclude ".env" \
+            --exclude "deploy.zip" \
+            --exclude ".deploy_extract_tmp" \
+            .deploy_extract_tmp/ ./
+          rm -rf .deploy_extract_tmp
           rm -f deploy.zip
 
           # Recreate .env from secret for runtime values

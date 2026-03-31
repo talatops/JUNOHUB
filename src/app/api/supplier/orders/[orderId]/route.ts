@@ -96,6 +96,64 @@ async function syncOrderToShopify(
         }
     }
 
+    const updateTrackingOnExistingFulfillment = async (): Promise<{ ok: boolean; error?: string }> => {
+        const listRes = await fetch(
+            `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillments.json`,
+            {
+                method: "GET",
+                headers: {
+                    "X-Shopify-Access-Token": store.shopifyAccessToken,
+                    "Content-Type": "application/json",
+                },
+            },
+        )
+        if (!listRes.ok) {
+            const details = await listRes.text().catch(() => "Unknown Shopify response")
+            return { ok: false, error: `Read existing fulfillments failed: ${details}` }
+        }
+
+        const listPayload = (await listRes.json()) as {
+            fulfillments?: Array<{ id: number; created_at?: string }>
+        }
+        const fulfillments = listPayload.fulfillments || []
+        if (fulfillments.length === 0) {
+            return { ok: false, error: "No existing fulfillment found to update tracking." }
+        }
+
+        const sorted = [...fulfillments].sort((a, b) => {
+            const aTs = a.created_at ? new Date(a.created_at).getTime() : 0
+            const bTs = b.created_at ? new Date(b.created_at).getTime() : 0
+            return bTs - aTs
+        })
+        const latest = sorted[0]
+
+        const updateRes = await fetch(
+            `https://${cleanDomain}/admin/api/2024-01/fulfillments/${latest.id}/update_tracking.json`,
+            {
+                method: "POST",
+                headers: {
+                    "X-Shopify-Access-Token": store.shopifyAccessToken,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    fulfillment: {
+                        notify_customer: false,
+                        tracking_info: {
+                            number: trackingNumber,
+                            company: trackingCompany,
+                            url: trackingUrl || undefined,
+                        },
+                    },
+                }),
+            },
+        )
+        if (!updateRes.ok) {
+            const details = await updateRes.text().catch(() => "Unknown Shopify response")
+            return { ok: false, error: `Update tracking on existing fulfillment failed: ${details}` }
+        }
+        return { ok: true }
+    }
+
     const createLegacyFulfillmentFallback = async (): Promise<{ ok: boolean; error?: string }> => {
         const orderRes = await fetch(
             `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}.json?status=any`,
@@ -173,10 +231,24 @@ async function syncOrderToShopify(
         }
     }
 
-    const foJson = (await foRes.json()) as { fulfillment_orders?: Array<{ id: number }> }
-    const fulfillmentOrders = foJson.fulfillment_orders || []
+    const foJson = (await foRes.json()) as {
+        fulfillment_orders?: Array<{ id: number; status?: string; request_status?: string }>
+    }
+    const allFulfillmentOrders = foJson.fulfillment_orders || []
+    const fulfillmentOrders = allFulfillmentOrders.filter((fo) => {
+        const status = String(fo.status || "").toLowerCase()
+        // Only try fulfillment orders that are still actionable.
+        return status && status !== "closed" && status !== "cancelled" && status !== "incomplete"
+    })
     if (fulfillmentOrders.length === 0) {
-        return { ok: false, error: "No fulfillment orders available for this order." }
+        const closedCount = allFulfillmentOrders.filter((fo) => String(fo.status || "").toLowerCase() === "closed").length
+        if (closedCount > 0) {
+            // Closed fulfillment orders are usually already fulfilled: update tracking on existing fulfillment.
+            const updated = await updateTrackingOnExistingFulfillment()
+            if (updated.ok) return updated
+            return { ok: false, error: `All fulfillment orders are closed. ${updated.error}` }
+        }
+        return { ok: false, error: "No actionable fulfillment orders available for this order." }
     }
 
     const payload = {
@@ -203,12 +275,14 @@ async function syncOrderToShopify(
     })
     if (!syncRes.ok) {
         const details = await syncRes.text().catch(() => "Unknown Shopify response")
+        const updated = await updateTrackingOnExistingFulfillment()
+        if (updated.ok) return updated
         const fallback = await createLegacyFulfillmentFallback()
         if (fallback.ok) return fallback
         const scopes = await fetchScopes()
         return {
             ok: false,
-            error: `Shopify fulfillment sync failed: ${details}. Fallback also failed: ${fallback.error}. Token scopes: [${scopes.join(", ")}]. Re-install/reconnect app after scope changes.`,
+            error: `Shopify fulfillment sync failed: ${details}. Existing fulfillment tracking update failed: ${updated.error}. Fallback also failed: ${fallback.error}. Token scopes: [${scopes.join(", ")}]. Re-install/reconnect app after scope changes.`,
         }
     }
 
