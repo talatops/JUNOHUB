@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, ShoppingBag, User, Calendar, DollarSign, Package, MapPin, Phone, Mail, CheckCircle2, Clock, Loader2, AlertCircle } from "lucide-react"
+import { ArrowLeft, ShoppingBag, User, Calendar, DollarSign, Package, MapPin, Phone, Mail, CheckCircle2, Clock, Loader2, AlertCircle, Truck } from "lucide-react"
 
 interface LineItem {
     id: number
@@ -58,6 +58,11 @@ interface OrderDetails {
     line_items: LineItem[]
     note?: string
     tags?: string
+    tracking_number?: string | null
+    tracking_company?: string | null
+    tracking_url?: string | null
+    pending_vendor_sync?: boolean
+    last_shopify_sync_error?: string | null
 }
 
 export default function OrderDetailsPage() {
@@ -234,6 +239,35 @@ export default function OrderDetailsPage() {
                     </div>
 
                     {/* Main Content Grid */}
+                    <div className="bg-white/5 rounded-xl p-5 border border-white/10">
+                        <div className="flex items-center justify-between gap-3 mb-4">
+                            <h3 className="text-white font-bold inline-flex items-center gap-2">
+                                <Truck className="w-4 h-4 text-indigo-400" />
+                                Fulfillment & Tracking
+                            </h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div className="h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 text-sm flex items-center">
+                                {order.fulfillment_status || "unfulfilled"}
+                            </div>
+                            <div className="h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 text-sm flex items-center">
+                                {order.tracking_company || "Tracking platform not set"}
+                            </div>
+                            <div className="h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 text-sm flex items-center">
+                                {order.tracking_number || "Tracking number not set"}
+                            </div>
+                            <div className="h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 text-sm flex items-center truncate">
+                                {order.tracking_url || "Tracking URL not set"}
+                            </div>
+                        </div>
+                        {order.pending_vendor_sync && (
+                            <p className="text-xs text-yellow-300 mt-3">Supplier update is syncing to Shopify...</p>
+                        )}
+                        {order.last_shopify_sync_error && (
+                            <p className="text-xs text-red-300 mt-2">{order.last_shopify_sync_error}</p>
+                        )}
+                    </div>
+
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         {/* Left Column - Customer & Shipping */}
                         <div className="lg:col-span-1 space-y-6 min-w-0">

@@ -1,0 +1,7 @@
+ALTER TABLE "CachedOrder"
+  ADD COLUMN IF NOT EXISTS "pendingVendorSync" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS "lastSupplierUpdateAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "lastSupplierUpdatedBy" TEXT,
+  ADD COLUMN IF NOT EXISTS "lastShopifySyncAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "lastShopifySyncError" TEXT;
+

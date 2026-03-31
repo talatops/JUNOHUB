@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
 
 /**
  * GET /api/supplier/orders
@@ -154,11 +155,13 @@ export async function GET() {
                 total: Number.parseFloat(order.totalPrice || "0"),
                 currency: order.currency,
                 financialStatus: order.financialStatus,
-                fulfillmentStatus: order.fulfillmentStatus,
-                status: order.fulfillmentStatus || "UNFULFILLED",
+                fulfillmentStatus: normalizeFulfillmentStatus(order.fulfillmentStatus),
+                status: normalizeFulfillmentStatus(order.fulfillmentStatus),
+                fulfillmentStatusDisplay: toVendorDisplayStatus(order.fulfillmentStatus),
                 trackingNumber: (order as unknown as { trackingNumber?: string | null }).trackingNumber,
                 trackingCompany: (order as unknown as { trackingCompany?: string | null }).trackingCompany,
                 trackingUrl: (order as unknown as { trackingUrl?: string | null }).trackingUrl,
+                pendingVendorSync: (order as unknown as { pendingVendorSync?: boolean }).pendingVendorSync ?? false,
                 vendorName: order.store.businessName || order.store.shopifyStoreName,
                 createdAt: order.shopifyCreatedAt || order.createdAt,
                 store: order.store,

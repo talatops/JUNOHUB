@@ -32,6 +32,7 @@ interface ShopifyOrder {
     currency: string
     financial_status: string
     fulfillment_status: string | null
+    pending_vendor_sync?: boolean
     customer: {
         first_name: string
         last_name: string
@@ -342,6 +343,11 @@ export default function OrdersPage() {
                                             {order.fulfillment_status === "fulfilled" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                                             {order.fulfillment_status || "Unfulfilled"}
                                         </span>
+                                        {order.pending_vendor_sync && (
+                                            <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                                                Pending Sync
+                                            </span>
+                                        )}
                                     </div>
                                 </div>
                             </div>

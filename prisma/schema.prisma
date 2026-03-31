@@ -157,6 +157,11 @@ model CachedOrder {
   trackingNumber      String?
   trackingCompany     String?
   trackingUrl         String?
+  pendingVendorSync   Boolean  @default(false)
+  lastSupplierUpdateAt DateTime?
+  lastSupplierUpdatedBy String?
+  lastShopifySyncAt   DateTime?
+  lastShopifySyncError String?
   lineItems           Json     // Store line items as JSON
   customer            Json?    // Store customer info as JSON
   createdAt           DateTime @default(now())

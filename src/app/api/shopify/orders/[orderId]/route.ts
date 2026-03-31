@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { handleApiError } from "@/lib/errors"
+import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
 
 export async function GET(
     request: Request,
@@ -69,7 +70,18 @@ export async function GET(
                         storeId: store.id,
                     },
                 },
-                select: { email: true, customer: true },
+                select: {
+                    email: true,
+                    customer: true,
+                    fulfillmentStatus: true,
+                    trackingNumber: true,
+                    trackingCompany: true,
+                    trackingUrl: true,
+                    pendingVendorSync: true,
+                    lastSupplierUpdateAt: true,
+                    lastShopifySyncAt: true,
+                    lastShopifySyncError: true,
+                },
             })
 
             if (cached) {
@@ -96,6 +108,16 @@ export async function GET(
                         order.customer = { ...cust, email: cachedEmail }
                     }
                 }
+
+                order.fulfillment_status = toVendorDisplayStatus(cached.fulfillmentStatus)
+                order.fulfillment_status_canonical = normalizeFulfillmentStatus(cached.fulfillmentStatus)
+                order.tracking_number = cached.trackingNumber || null
+                order.tracking_company = cached.trackingCompany || null
+                order.tracking_url = cached.trackingUrl || null
+                order.pending_vendor_sync = cached.pendingVendorSync
+                order.last_supplier_update_at = cached.lastSupplierUpdateAt?.toISOString() || null
+                order.last_shopify_sync_at = cached.lastShopifySyncAt?.toISOString() || null
+                order.last_shopify_sync_error = cached.lastShopifySyncError || null
             }
 
             return NextResponse.json({ order })

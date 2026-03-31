@@ -171,9 +171,9 @@ export default function SupplierOrderDetailsPage() {
                 </button>
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch">
                 <div className="xl:col-span-2 space-y-6">
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-5 h-full">
                     <h2 className="text-white font-bold mb-4 inline-flex items-center gap-2">
                         <Package className="w-4 h-4 text-indigo-400" />
                         Order Snapshot
@@ -195,7 +195,7 @@ export default function SupplierOrderDetailsPage() {
                 </div>
                 </div>
 
-                <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-5 space-y-4 h-full">
                     <h2 className="text-white font-bold inline-flex items-center gap-2">
                         <Truck className="w-4 h-4 text-indigo-400" />
                         Fulfillment Update
@@ -258,8 +258,8 @@ export default function SupplierOrderDetailsPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-5 h-full min-h-[190px]">
                     <h2 className="text-white font-bold mb-4 inline-flex items-center gap-2">
                         <User className="w-4 h-4 text-indigo-400" />
                         Customer
@@ -279,7 +279,7 @@ export default function SupplierOrderDetailsPage() {
                     </div>
                 </div>
 
-                <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-5 h-full min-h-[190px]">
                     <h2 className="text-white font-bold mb-4 inline-flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-indigo-400" />
                         Shipping Address
@@ -299,7 +299,7 @@ export default function SupplierOrderDetailsPage() {
                     )}
                 </div>
 
-                <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-5 h-full min-h-[190px]">
                     <h2 className="text-white font-bold mb-4 inline-flex items-center gap-2">
                         <MapPin className="w-4 h-4 text-indigo-400" />
                         Billing Address
