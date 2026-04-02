@@ -10,18 +10,33 @@ export async function POST(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 })
         }
 
-        const { receiverId, content } = await req.json()
+        const { receiverId, content, kind, attachment } = await req.json()
 
-        if (!receiverId || !content || typeof content !== "string") {
+        if (!receiverId || typeof receiverId !== "string") {
             return new NextResponse("Missing fields", { status: 400 })
+        }
+
+        const CHAT_KINDS = ["TEXT", "PRODUCT", "ORDER"] as const
+        const normalizedKind = typeof kind === "string" && (CHAT_KINDS as readonly string[]).includes(kind) ? kind : "TEXT"
+
+        if (normalizedKind === "TEXT") {
+            if (content != null && typeof content !== "string") {
+                return new NextResponse("Invalid content", { status: 400 })
+            }
+        } else {
+            if (!attachment || typeof attachment !== "object") {
+                return new NextResponse("Missing attachment for typed message", { status: 400 })
+            }
         }
 
         const message = await prisma.chatMessage.create({
             data: {
                 senderId: session.user.id,
                 receiverId,
-                content,
-            }
+                kind: normalizedKind as any,
+                content: (typeof content === "string" ? content : "") as any,
+                attachment: (normalizedKind === "TEXT" ? null : (attachment as any)) as any,
+            } as any
         })
 
         // Send push notification to receiver

@@ -37,10 +37,41 @@ export async function GET() {
         type OrderItem = {
             id: number
             name: string
+            orderNumber?: string
             total_price: string
             currency?: string
             storeId: string
             storeName: string
+            customerName?: string | null
+            primaryImageUrl?: string | null
+        }
+
+        const extractCustomerName = (customer: unknown): string | null => {
+            const c = customer as any
+            if (!c || typeof c !== "object") return null
+
+            const first = typeof c.first_name === "string" ? c.first_name.trim() : ""
+            const last = typeof c.last_name === "string" ? c.last_name.trim() : ""
+            const email = typeof c.email === "string" ? c.email.trim() : ""
+
+            const combined = [first, last].filter(Boolean).join(" ").trim()
+            if (combined) return combined
+            if (email) return email
+            return null
+        }
+
+        const extractPrimaryImageUrl = (lineItems: unknown): string | null => {
+            if (!Array.isArray(lineItems) || lineItems.length === 0) return null
+            const first = lineItems[0] as any
+
+            return (
+                first?.image?.src ||
+                first?.image?.url ||
+                first?.variant?.image?.src ||
+                first?.variant?.image?.url ||
+                first?.variant?.image_url ||
+                null
+            )
         }
 
         const fetchOrdersForStore = async (
@@ -57,10 +88,13 @@ export async function GET() {
                 return cached.slice(0, PER_STORE_LIMIT).map((order: CachedOrderRow) => ({
                     id: parseInt(order.shopifyOrderId),
                     name: order.orderNumber,
+                    orderNumber: order.orderNumber,
                     total_price: order.totalPrice,
                     currency: order.currency || undefined,
                     storeId: store.id,
-                    storeName
+                    storeName,
+                    customerName: extractCustomerName(order.customer),
+                    primaryImageUrl: extractPrimaryImageUrl(order.lineItems)
                 }))
             }
 
@@ -84,13 +118,16 @@ export async function GET() {
                 if (data.orders?.length) {
                     await updateOrderCache(store.id, data.orders).catch(() => {})
                 }
-                return (data.orders || []).map((o: { id: number; name?: string; total_price?: string; currency?: string }) => ({
+                return (data.orders || []).map((o: any) => ({
                     id: o.id,
                     name: o.name || `#${o.id}`,
+                    orderNumber: typeof o.name === "string" ? o.name : `#${o.id}`,
                     total_price: o.total_price || "0",
                     currency: o.currency,
                     storeId: store.id,
-                    storeName
+                    storeName,
+                    customerName: extractCustomerName(o.customer),
+                    primaryImageUrl: extractPrimaryImageUrl(o.line_items)
                 }))
             } catch {
                 return []

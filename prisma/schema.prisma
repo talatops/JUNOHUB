@@ -12,6 +12,12 @@ enum UserRole {
   ADMIN
 }
 
+enum ChatMessageKind {
+  TEXT
+  PRODUCT
+  ORDER
+}
+
 model User {
   id            String    @id @default(cuid())
   name          String?
@@ -564,7 +570,9 @@ model ChatMessage {
   id                      String   @id @default(cuid())
   senderId                String
   receiverId              String
+  kind                    ChatMessageKind @default(TEXT)
   content                 String   @map("encryptedContent") @db.Text
+  attachment              Json?
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])

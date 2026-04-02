@@ -34,7 +34,20 @@ export async function GET() {
 
         type StoreRow = (typeof stores)[number]
 
-        type ProductItem = { id: number; title: string; storeId: string; storeName: string }
+        type ProductItem = {
+            id: number
+            title: string
+            storeId: string
+            storeName: string
+            imageUrl?: string | null
+            description?: string | null
+        }
+
+        const extractImageUrl = (images: unknown): string | null => {
+            if (!Array.isArray(images) || images.length === 0) return null
+            const first = images[0] as any
+            return first?.src || first?.url || null
+        }
 
         const fetchProductsForStore = async (
             store: { id: string; businessName: string | null; shopifyDomain: string | null; shopifyAccessToken: string | null }
@@ -51,7 +64,9 @@ export async function GET() {
                     id: parseInt(product.shopifyProductId),
                     title: product.title || "Product",
                     storeId: store.id,
-                    storeName
+                    storeName,
+                    imageUrl: extractImageUrl(product.images),
+                    description: null
                 }))
             }
 
@@ -75,11 +90,13 @@ export async function GET() {
                 if (data.products?.length) {
                     await updateProductCache(store.id, data.products).catch(() => {})
                 }
-                return (data.products || []).map((p: { id: number; title?: string }) => ({
+                return (data.products || []).map((p: any) => ({
                     id: p.id,
                     title: p.title || "Product",
                     storeId: store.id,
-                    storeName
+                    storeName,
+                    imageUrl: p.images?.[0]?.src || p.images?.[0]?.url || null,
+                    description: p.body_html || p.description || null
                 }))
             } catch {
                 return []
