@@ -18,9 +18,9 @@ export async function GET() {
       window.location.hostname;
 
     var containerId = "juno-storefront-chat-container";
-    var iframeId = "juno-storefront-chat-iframe";
+    var buttonId = "juno-storefront-chat-button";
 
-    function upsertIframe() {
+    function upsertButton() {
       var container = document.getElementById(containerId);
       if (!container) {
         container = document.createElement("div");
@@ -29,29 +29,50 @@ export async function GET() {
         container.style.bottom = "16px";
         container.style.right = "16px";
         container.style.zIndex = "2147483647";
-        container.style.width = "420px";
-        container.style.maxWidth = "calc(100vw - 32px)";
-        container.style.height = "640px";
-        container.style.maxHeight = "calc(100vh - 32px)";
-        container.style.borderRadius = "16px";
+        container.style.width = "56px";
+        container.style.height = "56px";
         document.body.appendChild(container);
       }
 
-      var existing = document.getElementById(iframeId);
+      var existing = document.getElementById(buttonId);
       if (existing) return;
 
-      var iframe = document.createElement("iframe");
-      iframe.id = iframeId;
-      iframe.title = "JUNO Storefront Chat";
-      iframe.style.border = "0";
-      iframe.style.width = "100%";
-      iframe.style.height = "100%";
-      iframe.style.borderRadius = "16px";
-      iframe.style.overflow = "hidden";
-      iframe.allow = "clipboard-write; fullscreen";
-      iframe.referrerPolicy = "no-referrer";
-      iframe.src = baseUrl + "/storefront-chat/widget?shop=" + encodeURIComponent(shop);
-      container.appendChild(iframe);
+      var btn = document.createElement("button");
+      btn.id = buttonId;
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Open chat");
+      btn.style.width = "56px";
+      btn.style.height = "56px";
+      btn.style.borderRadius = "16px";
+      btn.style.border = "0";
+      btn.style.cursor = "pointer";
+      btn.style.boxShadow = "0 12px 28px rgba(0,0,0,0.20)";
+      btn.style.background = "#4f46e5";
+      btn.style.color = "#fff";
+      btn.style.display = "flex";
+      btn.style.alignItems = "center";
+      btn.style.justifyContent = "center";
+      btn.style.fontFamily = "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      btn.style.fontWeight = "800";
+      btn.style.letterSpacing = "-0.02em";
+      btn.innerHTML = "Chat";
+
+      btn.addEventListener("click", function () {
+        try {
+          var url = baseUrl + "/storefront-chat/widget?shop=" + encodeURIComponent(shop);
+          // Try popup first (nice for testing), fallback to new tab.
+          var w = Math.min(420, Math.max(320, window.innerWidth));
+          var h = Math.min(640, Math.max(480, window.innerHeight));
+          var left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w)));
+          var top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h)));
+          var popup = window.open(url, "juno_storefront_chat", "popup=yes,width=" + w + ",height=" + h + ",left=" + left + ",top=" + top);
+          if (!popup) window.open(url, "_blank");
+        } catch (e) {
+          window.open(baseUrl + "/storefront-chat/widget?shop=" + encodeURIComponent(shop), "_blank");
+        }
+      });
+
+      container.appendChild(btn);
     }
 
     function removeWidget() {
@@ -65,7 +86,7 @@ export async function GET() {
       .then(function (r) { return r.json().catch(function(){ return {}; }); })
       .then(function (data) {
         var enabled = !!(data && data.enabled);
-        if (enabled) upsertIframe();
+        if (enabled) upsertButton();
         else removeWidget();
       })
       .catch(function () {
