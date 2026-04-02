@@ -7,6 +7,7 @@ type WidgetMessage = {
     id: string
     content: string
     createdAt: string
+    senderType: "CUSTOMER" | "AI"
 }
 
 function getOrCreateVisitorId(shop: string) {
@@ -31,6 +32,7 @@ export default function StorefrontChatWidgetPage() {
     const [composer, setComposer] = useState("")
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState<string | null>(null)
+    const [loadingHistory, setLoadingHistory] = useState(false)
 
     const composerRef = useRef<HTMLTextAreaElement | null>(null)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -75,6 +77,48 @@ export default function StorefrontChatWidgetPage() {
     }, [shop])
 
     useEffect(() => {
+        if (!shop || !visitorId) return
+        let cancelled = false
+
+        const run = async () => {
+            try {
+                setLoadingHistory(true)
+                const res = await fetch(
+                    `/api/storefront-chat/messages?shop=${encodeURIComponent(shop)}&visitorId=${encodeURIComponent(visitorId)}`
+                )
+                const data = await res.json().catch(() => ({}))
+                if (!res.ok) {
+                    throw new Error(data?.message || "Failed to load history")
+                }
+                const nextMessages = Array.isArray(data?.messages) ? data.messages : []
+                if (!cancelled) {
+                    setMessages(
+                        nextMessages.map((m: any) => ({
+                            id: String(m.id),
+                            content: String(m.content || ""),
+                            senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
+                            createdAt: String(m.createdAt || new Date().toISOString())
+                        }))
+                    )
+                }
+            } catch (e: any) {
+                if (!cancelled) {
+                    setSendError(e?.message || "Failed to load chat history")
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoadingHistory(false)
+                }
+            }
+        }
+
+        void run()
+        return () => {
+            cancelled = true
+        }
+    }, [shop, visitorId])
+
+    useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [messages])
 
@@ -97,14 +141,28 @@ export default function StorefrontChatWidgetPage() {
                 throw new Error(data?.message || "Failed to send message")
             }
 
-            setMessages(prev => [
-                ...prev,
-                {
-                    id: data?.message?.id || `local_${Date.now()}`,
-                    content: text,
-                    createdAt: new Date().toISOString()
-                }
-            ])
+            const returned = Array.isArray(data?.messages) ? data.messages : []
+            if (returned.length) {
+                setMessages(prev => [
+                    ...prev,
+                    ...returned.map((m: any) => ({
+                        id: String(m.id || `local_${Date.now()}`),
+                        content: String(m.content || ""),
+                        senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
+                        createdAt: String(m.createdAt || new Date().toISOString())
+                    }))
+                ])
+            } else {
+                setMessages(prev => [
+                    ...prev,
+                    {
+                        id: `local_${Date.now()}`,
+                        content: text,
+                        senderType: "CUSTOMER",
+                        createdAt: new Date().toISOString()
+                    }
+                ])
+            }
             setComposer("")
             setTimeout(() => composerRef.current?.focus(), 0)
         } catch (e: any) {
@@ -138,7 +196,11 @@ export default function StorefrontChatWidgetPage() {
                     </div>
                 ) : null}
 
-                {messages.length === 0 ? (
+                {loadingHistory ? (
+                    <div className="h-full flex items-center justify-center text-center p-4">
+                        <p className="text-sm font-medium text-slate-500">Loading chat...</p>
+                    </div>
+                ) : messages.length === 0 ? (
                     <div className="h-full flex items-center justify-center text-center p-4">
                         <div>
                             <p className="font-black text-slate-900">Start a conversation</p>
@@ -150,8 +212,17 @@ export default function StorefrontChatWidgetPage() {
                 ) : (
                     <div className="space-y-3">
                         {messages.map((m) => (
-                            <div key={m.id} className="flex justify-end">
-                                <div className="max-w-[85%] px-3 py-2 rounded-2xl bg-indigo-600 text-white text-sm font-medium">
+                            <div
+                                key={m.id}
+                                className={`flex ${m.senderType === "AI" ? "justify-start" : "justify-end"}`}
+                            >
+                                <div
+                                    className={`max-w-[88%] px-3 py-2 rounded-2xl text-sm font-medium whitespace-pre-wrap ${
+                                        m.senderType === "AI"
+                                            ? "bg-white border border-slate-200 text-slate-800"
+                                            : "bg-indigo-600 text-white"
+                                    }`}
+                                >
                                     {m.content}
                                 </div>
                             </div>
@@ -187,9 +258,7 @@ export default function StorefrontChatWidgetPage() {
                         <Send className="w-4 h-4" />
                     </button>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-500">
-                    Customer messages are saved now. AI replies later.
-                </p>
+                <p className="mt-2 text-[11px] text-slate-500">AI replies are generated from products, FAQs and KB.</p>
             </div>
         </div>
     )

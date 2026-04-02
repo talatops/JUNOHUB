@@ -52,6 +52,8 @@ export default async function StorefrontChatInboxPage() {
     })
 
     const sorted = [...messages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    const aiCount = sorted.filter((m) => m.senderType === "AI").length
+    const customerCount = sorted.filter((m) => m.senderType === "CUSTOMER").length
 
     return (
         <div className="flex flex-col gap-4 p-1">
@@ -65,6 +67,9 @@ export default async function StorefrontChatInboxPage() {
                 <div className="shrink-0 text-right">
                     <p className="text-sm font-black text-white">{conversations.length} visitors</p>
                     <p className="text-xs text-slate-500 mt-1">{sorted.length} messages</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                        {customerCount} customer · {aiCount} AI
+                    </p>
                 </div>
             </div>
 
@@ -84,11 +89,20 @@ export default async function StorefrontChatInboxPage() {
                             <div key={m.id} className="flex flex-col gap-2">
                                 <div className="flex items-center justify-between gap-4">
                                     <div className="min-w-0">
-                                        <p className="text-xs font-black uppercase tracking-widest text-slate-400 truncate">
-                                            {m.senderType === "CUSTOMER" ? "CUSTOMER" : m.senderType}
-                                            {" · "}
-                                            {m.conversation?.visitorId || "visitor"}
-                                        </p>
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <span
+                                                className={`text-[10px] font-black uppercase tracking-widest rounded-full px-2 py-1 border ${
+                                                    m.senderType === "AI"
+                                                        ? "text-indigo-300 border-indigo-400/30 bg-indigo-500/10"
+                                                        : "text-emerald-300 border-emerald-400/30 bg-emerald-500/10"
+                                                }`}
+                                            >
+                                                {m.senderType === "CUSTOMER" ? "CUSTOMER" : "AI"}
+                                            </span>
+                                            <p className="text-xs font-black uppercase tracking-widest text-slate-400 truncate">
+                                                {m.conversation?.visitorId || "visitor"}
+                                            </p>
+                                        </div>
                                         {m.conversation?.customerEmail ? (
                                             <p className="text-[11px] text-slate-500 truncate">{m.conversation.customerEmail}</p>
                                         ) : null}
