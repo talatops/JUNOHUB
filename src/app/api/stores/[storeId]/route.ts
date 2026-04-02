@@ -162,8 +162,19 @@ export async function PATCH(
             const accessToken = store.shopifyAccessToken
 
             if (injectorBase && cleanDomain && accessToken) {
-                const injectorSrc = `${injectorBase}/storefront-chat/widget-injector`
-                const listUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?src=${encodeURIComponent(injectorSrc)}`
+                const injectorPath = `${injectorBase}/storefront-chat/widget-injector`
+                // ngrok often serves an HTML interstitial to third-party script requests unless this param is present.
+                const needsNgrokSkip =
+                    injectorBase.includes("ngrok-free.dev") ||
+                    injectorBase.includes("ngrok.app") ||
+                    injectorBase.includes("ngrok.io")
+                const injectorSrc = needsNgrokSkip
+                    ? `${injectorPath}?ngrok-skip-browser-warning=1`
+                    : injectorPath
+
+                // Shopify's `src` filter is exact-match; we want to delete any older variants too.
+                // So we list a small page and filter by prefix instead.
+                const listUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?limit=250&fields=id,src`
 
                 const commonHeaders = {
                     "X-Shopify-Access-Token": accessToken,
@@ -172,12 +183,40 @@ export async function PATCH(
 
                 const listRes = await fetch(listUrl, { headers: commonHeaders })
                 const listData = await listRes.json().catch(() => ({}))
-                const existing: Array<{ id: number }> = Array.isArray(listData?.script_tags)
+                const allTags: Array<{ id: number; src?: string }> = Array.isArray(listData?.script_tags)
                     ? listData.script_tags
                     : []
+                const existing = allTags.filter((t) => {
+                    const src = typeof t?.src === "string" ? t.src : ""
+                    return src === injectorSrc || src.startsWith(injectorPath)
+                })
 
                 if (storefrontChatEnabled) {
-                    if (existing.length === 0) {
+                    // Ensure exactly one matching tag exists; clean up duplicates/old variants.
+                    if (existing.length > 1) {
+                        for (const tag of existing.slice(1)) {
+                            if (!tag?.id) continue
+                            const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
+                            await fetch(deleteUrl, {
+                                method: "DELETE",
+                                headers: { "X-Shopify-Access-Token": accessToken }
+                            }).catch(() => {})
+                        }
+                    }
+
+                    // If the remaining tag isn't the exact injectorSrc (ngrok skip param), replace it.
+                    const hasExact = existing.some((t) => typeof t?.src === "string" && t.src === injectorSrc)
+                    if (!hasExact) {
+                        // Delete old variant(s)
+                        for (const tag of existing) {
+                            if (!tag?.id) continue
+                            const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
+                            await fetch(deleteUrl, {
+                                method: "DELETE",
+                                headers: { "X-Shopify-Access-Token": accessToken }
+                            }).catch(() => {})
+                        }
+
                         const createUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json`
                         const createBody = {
                             script_tag: {
