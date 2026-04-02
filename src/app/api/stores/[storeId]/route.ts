@@ -137,10 +137,89 @@ export async function PATCH(
 
         await prisma.store.update({
             where: { id: storeId },
-            data: {
-                storefrontChatEnabled
-            }
+            data: { storefrontChatEnabled } as any
         })
+
+        // Best-effort: keep a Shopify ScriptTag in sync with the checkbox.
+        // Even if ScriptTag operations fail (missing scopes), the widget still
+        // won’t render because /api/storefront-chat/config returns the flag.
+        try {
+            const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim()
+            const apiVersion = "2024-01"
+            const injectorBase = appBaseUrl ? appBaseUrl.replace(/\/$/, "") : ""
+
+            const cleanDomain = (store.shopifyDomain || "")
+                .trim()
+                .replace(/^https?:\/\//, "")
+                .replace(/\/$/, "")
+                .trim()
+
+            const accessToken = store.shopifyAccessToken
+
+            if (injectorBase && cleanDomain && accessToken) {
+                const injectorSrc = `${injectorBase}/storefront-chat/widget-injector`
+                const listUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?src=${encodeURIComponent(injectorSrc)}`
+
+                const commonHeaders = {
+                    "X-Shopify-Access-Token": accessToken,
+                    "Content-Type": "application/json"
+                }
+
+                const listRes = await fetch(listUrl, { headers: commonHeaders })
+                const listData = await listRes.json().catch(() => ({}))
+                const existing: Array<{ id: number }> = Array.isArray(listData?.script_tags)
+                    ? listData.script_tags
+                    : []
+
+                if (storefrontChatEnabled) {
+                    if (existing.length === 0) {
+                        const createUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json`
+                        const createBody = {
+                            script_tag: {
+                                event: "onload",
+                                src: injectorSrc,
+                                display_scope: "online_store",
+                                cache: false
+                            }
+                        }
+
+                        const createRes = await fetch(createUrl, {
+                            method: "POST",
+                            headers: commonHeaders,
+                            body: JSON.stringify(createBody)
+                        })
+
+                        if (!createRes.ok) {
+                            const errText = await createRes.text().catch(() => "")
+                            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_CREATE]", { storeId, status: createRes.status, errText })
+                        }
+                    }
+                } else {
+                    for (const tag of existing) {
+                        if (!tag?.id) continue
+                        const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
+                        const delRes = await fetch(deleteUrl, {
+                            method: "DELETE",
+                            headers: { "X-Shopify-Access-Token": accessToken }
+                        })
+
+                        if (!delRes.ok) {
+                            const errText = await delRes.text().catch(() => "")
+                            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_DELETE]", { storeId, tagId: tag.id, status: delRes.status, errText })
+                        }
+                    }
+                }
+            } else {
+                console.warn("[STORE_FRONT_CHAT_SCRIPTTAG_SKIP]", {
+                    storeId,
+                    hasInjectorBase: Boolean(appBaseUrl),
+                    cleanDomain,
+                    hasAccessToken: Boolean(accessToken)
+                })
+            }
+        } catch (scriptError) {
+            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_ERROR]", scriptError)
+        }
 
         return NextResponse.json({
             success: true,
