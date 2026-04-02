@@ -1,7 +1,26 @@
 import type { NextConfig } from "next";
 
+/** Lets Shopify / custom domains embed the public widget in an iframe (Firefox blocks without this). */
+const STOREFRONT_WIDGET_CSP = "frame-ancestors *";
+
 const nextConfig: NextConfig = {
   /* config options here */
+  async headers() {
+    return [
+      {
+        source: "/storefront-chat/widget",
+        headers: [
+          { key: "Content-Security-Policy", value: STOREFRONT_WIDGET_CSP },
+        ],
+      },
+      {
+        source: "/storefront-chat/widget/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: STOREFRONT_WIDGET_CSP },
+        ],
+      },
+    ];
+  },
   // Keep Prisma + pg as Node externals so Turbopack does not bundle the
   // generated client (fixes "Cannot read properties of undefined (reading 'graph')"
   // during `next build` in some Docker/Linux environments).
