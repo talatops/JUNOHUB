@@ -144,14 +144,7 @@ export async function PATCH(
         // Even if ScriptTag operations fail (missing scopes), the widget still
         // won’t render because /api/storefront-chat/config returns the flag.
         try {
-            const appBaseUrl = (
-                process.env.NEXT_PUBLIC_APP_URL ||
-                process.env.AUTH_URL ||
-                process.env.NEXTAUTH_URL ||
-                ""
-            ).trim()
             const apiVersion = "2024-01"
-            const injectorBase = appBaseUrl ? appBaseUrl.replace(/\/$/, "") : ""
 
             const cleanDomain = (store.shopifyDomain || "")
                 .trim()
@@ -161,16 +154,14 @@ export async function PATCH(
 
             const accessToken = store.shopifyAccessToken
 
-            if (injectorBase && cleanDomain && accessToken) {
-                const injectorPath = `${injectorBase}/storefront-chat/widget-injector`
-                // ngrok often serves an HTML interstitial to third-party script requests unless this param is present.
-                const needsNgrokSkip =
-                    injectorBase.includes("ngrok-free.dev") ||
-                    injectorBase.includes("ngrok.app") ||
-                    injectorBase.includes("ngrok.io")
-                const injectorSrc = needsNgrokSkip
-                    ? `${injectorPath}?ngrok-skip-browser-warning=1`
-                    : injectorPath
+            // Use Shopify App Proxy URL for the ScriptTag src to avoid CSP/ORB/ngrok issues.
+            // Requires one-time App Proxy setup in Shopify admin for the app:
+            //  - App proxy prefix: apps
+            //  - Subpath: juno-chat
+            //  - Proxy URL: <APP_URL>/api/shopify/app-proxy
+            if (cleanDomain && accessToken) {
+                const injectorPath = `https://${cleanDomain}/apps/juno-chat/widget-injector.js`
+                const injectorSrc = injectorPath
 
                 // Shopify's `src` filter is exact-match; we want to delete any older variants too.
                 // So we list a small page and filter by prefix instead.
@@ -256,7 +247,6 @@ export async function PATCH(
             } else {
                 console.warn("[STORE_FRONT_CHAT_SCRIPTTAG_SKIP]", {
                     storeId,
-                    hasInjectorBase: Boolean(appBaseUrl),
                     cleanDomain,
                     hasAccessToken: Boolean(accessToken)
                 })
