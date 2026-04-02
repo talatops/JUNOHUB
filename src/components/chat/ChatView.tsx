@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { createPortal } from "react-dom"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useTheme } from "@/components/ThemeProvider"
@@ -20,6 +19,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
+import { ChatAttachmentModal } from "@/components/chat/ChatAttachmentModal"
 
 interface Contact {
     id: string
@@ -320,6 +320,87 @@ export function ChatView() {
         }
     }
 
+    // Best-effort compatibility for legacy bracket-style chat messages.
+    // Example legacy content:
+    // - [Product: Title · Store (#123)]
+    // - [Order 1005 · Store - USD 25.00]
+    const parseLegacyAttachment = (raw: string): { kind: "PRODUCT" | "ORDER"; attachment: any } | null => {
+        const text = (raw || "").trim()
+        if (!text) return null
+
+        // PRODUCT
+        if (text.startsWith("[Product:") && text.includes("]")) {
+            const body = text
+                .replace(/^\[Product:\s*/i, "")
+                .replace(/\]\s*$/, "")
+                .trim()
+
+            const cleanedBody = body.replace(/\(#\d+\)\s*$/, "").trim()
+            const parts = cleanedBody.split(" · ")
+            const title = (parts[0] || "").trim()
+            const storeName = parts.length > 1 ? parts.slice(1).join(" · ").trim() : null
+
+            if (!title) return null
+            return {
+                kind: "PRODUCT",
+                attachment: {
+                    title,
+                    description: null,
+                    imageUrl: null,
+                    storeName: storeName || null,
+                },
+            }
+        }
+
+        // ORDER
+        if (text.startsWith("[Order") && text.includes("]")) {
+            const body = text
+                .replace(/^\[Order\s*/i, "")
+                .replace(/\]\s*$/, "")
+                .trim()
+
+            // Split totals: "<orderNumber> · <storeName> - USD 25.00"
+            const [leftPart, totalPartRaw] = body.split(" - ", 2)
+            if (!leftPart) return null
+
+            let orderNumber = leftPart.trim()
+            let storeName: string | null = null
+            if (leftPart.includes(" · ")) {
+                const [leftOrder, ...rest] = leftPart.split(" · ")
+                orderNumber = (leftOrder || "").trim()
+                storeName = rest.join(" · ").trim() || null
+            }
+
+            const totalPart = (totalPartRaw || "").trim()
+            let currency: string | null = null
+            let total_price: string | null = null
+            if (totalPart) {
+                const tokens = totalPart.split(/\s+/)
+                if (tokens.length >= 2 && tokens[0].length === 3) {
+                    currency = tokens[0]
+                    total_price = tokens.slice(1).join(" ")
+                } else {
+                    total_price = tokens.join(" ")
+                }
+            }
+
+            if (!orderNumber) return null
+            return {
+                kind: "ORDER",
+                attachment: {
+                    orderNumber,
+                    customerName: null,
+                    primaryImageUrl: null,
+                    total_price: total_price || null,
+                    currency: currency || null,
+                    storeName: storeName || null,
+                },
+            }
+        }
+
+        return null
+    }
+
     const filteredContacts = contacts.filter(c =>
         c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         c.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -512,6 +593,20 @@ export function ChatView() {
                                     const isMe = msg.senderId !== selectedContact.id
                                     const prevMsg = idx > 0 ? messages[idx - 1] : null
                                     const showTime = !prevMsg || format(new Date(msg.createdAt), "HH:mm") !== format(new Date(prevMsg.createdAt), "HH:mm")
+                                    const legacy =
+                                        msg.kind === "TEXT" || !msg.kind
+                                            ? parseLegacyAttachment(msg.content)
+                                            : null
+                                    const kindToRender =
+                                        msg.kind === "PRODUCT" || msg.kind === "ORDER"
+                                            ? msg.kind
+                                            : legacy?.kind
+                                    const attachmentToRender =
+                                        kindToRender === "PRODUCT" || kindToRender === "ORDER"
+                                            ? msg.kind
+                                                ? msg.attachment
+                                                : legacy?.attachment
+                                            : null
 
                                     return (
                                         <div
@@ -529,83 +624,83 @@ export function ChatView() {
                                                         ? "bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-md"
                                                         : "bg-white/5 border border-white/10 text-slate-200 rounded-tl-none backdrop-blur-sm shadow-xl"
                                             )}>
-                                                {msg.kind === "PRODUCT" && msg.attachment ? (
+                                                {kindToRender === "PRODUCT" && attachmentToRender ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             setActiveAttachmentKind("PRODUCT")
-                                                            setActiveAttachment(msg.attachment)
+                                                            setActiveAttachment(attachmentToRender)
                                                             setAttachmentModalOpen(true)
                                                         }}
                                                         className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                {msg.attachment.imageUrl ? (
+                                                                {attachmentToRender.imageUrl ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={msg.attachment.imageUrl} alt={msg.attachment.title || "Product"} className="w-full h-full object-cover" />
+                                                                    <img src={attachmentToRender.imageUrl} alt={attachmentToRender.title || "Product"} className="w-full h-full object-cover" />
                                                                 ) : (
                                                                     <div className="flex flex-col items-center justify-center px-1">
                                                                         <Package className="w-5 h-5 text-indigo-400" />
                                                                         <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
-                                                                            {msg.attachment.title ? msg.attachment.title : ""}
+                                                                            {attachmentToRender.title ? attachmentToRender.title : ""}
                                                                         </div>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <div className="font-black truncate">
-                                                                    {msg.attachment.title || msg.content}
+                                                                    {attachmentToRender.title || msg.content}
                                                                 </div>
-                                                                {msg.attachment.description ? (
+                                                                {attachmentToRender.description ? (
                                                                     <div className={cn("text-xs opacity-90 mt-1 line-clamp-2")}>
-                                                                        {msg.attachment.description}
+                                                                        {attachmentToRender.description}
                                                                     </div>
                                                                 ) : null}
-                                                                {msg.attachment.storeName ? (
+                                                                {attachmentToRender.storeName ? (
                                                                     <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
-                                                                        {msg.attachment.storeName}
+                                                                        {attachmentToRender.storeName}
                                                                     </div>
                                                                 ) : null}
                                                             </div>
                                                         </div>
                                                     </button>
-                                                ) : msg.kind === "ORDER" && msg.attachment ? (
+                                                ) : kindToRender === "ORDER" && attachmentToRender ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             setActiveAttachmentKind("ORDER")
-                                                            setActiveAttachment(msg.attachment)
+                                                            setActiveAttachment(attachmentToRender)
                                                             setAttachmentModalOpen(true)
                                                         }}
-                                                        className={cn("w-full text-left")}
+                                                        className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
                                                     >
-                                                        <div className="flex items-start gap-3">
+                                                        <div className="flex items-center gap-3">
                                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                {msg.attachment.primaryImageUrl ? (
+                                                                {attachmentToRender.primaryImageUrl ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={msg.attachment.primaryImageUrl} alt="Order item" className="w-full h-full object-cover" />
+                                                                    <img src={attachmentToRender.primaryImageUrl} alt="Order item" className="w-full h-full object-cover" />
                                                                 ) : (
                                                                     <div className="flex flex-col items-center justify-center px-1">
                                                                         <ShoppingCart className="w-5 h-5 text-indigo-400" />
                                                                         <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
-                                                                            {msg.attachment.orderNumber || "#"}
+                                                                            {attachmentToRender.orderNumber || "#"}
                                                                         </div>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <div className="font-black truncate">
-                                                                    Order {msg.attachment.orderNumber || msg.content}
+                                                                    Order {attachmentToRender.orderNumber || msg.content}
                                                                 </div>
-                                                                {msg.attachment.customerName ? (
+                                                                {attachmentToRender.customerName ? (
                                                                     <div className={cn("text-xs opacity-90 mt-1 line-clamp-1")}>
-                                                                        {msg.attachment.customerName}
+                                                                        {attachmentToRender.customerName}
                                                                     </div>
                                                                 ) : null}
-                                                                {msg.attachment.total_price ? (
+                                                                {attachmentToRender.total_price ? (
                                                                     <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
-                                                                        {msg.attachment.currency ? `${msg.attachment.currency} ` : ""}{msg.attachment.total_price}
+                                                                        {attachmentToRender.currency ? `${attachmentToRender.currency} ` : ""}{attachmentToRender.total_price}
                                                                     </div>
                                                                 ) : null}
                                                             </div>
@@ -631,142 +726,13 @@ export function ChatView() {
                                 })
                             )}
                             <div ref={messagesEndRef} />
-                            {attachmentModalOpen && activeAttachmentKind && activeAttachment && typeof document !== "undefined"
-                                ? createPortal(
-                                <div
-                                    className="fixed inset-0 z-[99999] bg-transparent"
-                                    onClick={() => setAttachmentModalOpen(false)}
-                                >
-                                    <div className="min-h-screen flex items-center justify-center p-4 py-10">
-                                        <div
-                                            className={cn(
-                                                "w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden",
-                                                isLight ? "bg-white border-slate-200" : "bg-slate-900/95 border-white/10"
-                                            )}
-                                        >
-                                            <div
-                                                className={cn(
-                                                    "flex items-center justify-between p-4 md:p-5 border-b flex-shrink-0",
-                                                    isLight ? "border-slate-200 bg-white" : "border-white/10 bg-slate-900/95"
-                                                )}
-                                            >
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div
-                                                        className={cn(
-                                                            "w-10 h-10 rounded-xl flex items-center justify-center",
-                                                            isLight ? "bg-indigo-100 text-indigo-600" : "bg-indigo-500/20 text-indigo-300 border border-indigo-500/20"
-                                                        )}
-                                                    >
-                                                        {activeAttachmentKind === "PRODUCT" ? (
-                                                            <Package className="w-5 h-5" />
-                                                        ) : (
-                                                            <ShoppingCart className="w-5 h-5" />
-                                                        )}
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <h3 className={cn("text-sm md:text-base font-black truncate", isLight ? "text-slate-900" : "text-white")}>
-                                                            {activeAttachmentKind === "PRODUCT" ? "Product" : "Order"}
-                                                        </h3>
-                                                        <p className={cn("text-[11px] md:text-xs truncate", isLight ? "text-slate-500" : "text-slate-300/80")}>
-                                                            {activeAttachmentKind === "PRODUCT"
-                                                                ? activeAttachment.title || "Attached product"
-                                                                : `Order ${activeAttachment.orderNumber || ""}`.trim()}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setAttachmentModalOpen(false)}
-                                                    className={cn(
-                                                        "p-2 rounded-lg transition-colors flex-shrink-0",
-                                                        isLight ? "hover:bg-slate-100 text-slate-600" : "hover:bg-white/10 text-slate-300"
-                                                    )}
-                                                    aria-label="Close attachment modal"
-                                                >
-                                                    <X className="w-5 h-5" />
-                                                </button>
-                                            </div>
-
-                                            <div className={cn("p-4 md:p-5 space-y-4", isLight ? "bg-white" : "bg-slate-900/95")}>
-                                                {activeAttachmentKind === "PRODUCT" ? (
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-24 h-24 rounded-2xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0">
-                                                            {activeAttachment.imageUrl ? (
-                                                                // eslint-disable-next-line @next/next/no-img-element
-                                                                <img
-                                                                    src={activeAttachment.imageUrl}
-                                                                    alt={activeAttachment.title || "Product image"}
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div className="w-full h-full flex items-center justify-center">
-                                                                    <Package className="w-7 h-7 text-indigo-400" />
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className={cn("font-black text-base md:text-lg truncate", isLight ? "text-slate-900" : "text-white")}>
-                                                                {activeAttachment.title || "Product"}
-                                                            </div>
-                                                            {activeAttachment.storeName ? (
-                                                                <div className={cn("text-[11px] font-black uppercase tracking-widest mt-1", isLight ? "text-indigo-600" : "text-indigo-300")}>
-                                                                    {activeAttachment.storeName}
-                                                                </div>
-                                                            ) : null}
-                                                            {activeAttachment.description ? (
-                                                                <p className={cn("text-sm mt-2 leading-relaxed", isLight ? "text-slate-600" : "text-slate-300/90")}>
-                                                                    {activeAttachment.description}
-                                                                </p>
-                                                            ) : (
-                                                                <p className={cn("text-sm mt-2 opacity-70", isLight ? "text-slate-500" : "text-slate-400")}>
-                                                                    No description provided.
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="w-24 h-24 rounded-2xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                            {activeAttachment.primaryImageUrl ? (
-                                                                // eslint-disable-next-line @next/next/no-img-element
-                                                                <img
-                                                                    src={activeAttachment.primaryImageUrl}
-                                                                    alt="Order image"
-                                                                    className="w-full h-full object-cover"
-                                                                />
-                                                            ) : (
-                                                                <div className="flex flex-col items-center justify-center px-2 text-center">
-                                                                    <ShoppingCart className="w-6 h-6 text-indigo-400" />
-                                                                    <div className="text-[11px] font-black mt-2 leading-none text-indigo-200">
-                                                                        {activeAttachment.orderNumber || ""}
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className={cn("font-black text-base md:text-lg truncate", isLight ? "text-slate-900" : "text-white")}>
-                                                                Order {activeAttachment.orderNumber || ""}
-                                                            </div>
-                                                            {activeAttachment.customerName ? (
-                                                                <div className={cn("text-sm mt-1 leading-relaxed", isLight ? "text-slate-700" : "text-slate-200/90")}>
-                                                                    Customer: {activeAttachment.customerName}
-                                                                </div>
-                                                            ) : null}
-                                                            {activeAttachment.total_price ? (
-                                                                <div className={cn("text-sm mt-2 font-bold", isLight ? "text-slate-700" : "text-slate-200/90")}>
-                                                                    {activeAttachment.currency ? `${activeAttachment.currency} ` : ""}
-                                                                    {activeAttachment.total_price}
-                                                                </div>
-                                                            ) : null}
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>,
-                                document.body
-                            ) : null}
+                            <ChatAttachmentModal
+                                isOpen={attachmentModalOpen}
+                                onClose={() => setAttachmentModalOpen(false)}
+                                kind={activeAttachmentKind}
+                                attachment={activeAttachment}
+                                isLight={isLight}
+                            />
                         </div>
 
                         <div className="p-6 flex-shrink-0">

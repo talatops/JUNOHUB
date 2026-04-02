@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect } from "react"
+import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
 import { Package, ShoppingCart, X } from "lucide-react"
 
@@ -27,17 +29,33 @@ export function ChatAttachmentModal({
             ? attachment.title || "Attached product"
             : `Order ${attachment.orderNumber || ""}`.trim()
 
-    return (
+    useEffect(() => {
+        if (!isOpen) return
+        const prevOverflow = document.body.style.overflow
+        document.body.style.overflow = "hidden"
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") onClose()
+        }
+        window.addEventListener("keydown", onKeyDown)
+
+        return () => {
+            document.body.style.overflow = prevOverflow
+            window.removeEventListener("keydown", onKeyDown)
+        }
+    }, [isOpen, onClose])
+
+    const overlay = (
         <div
-            className="fixed inset-0 z-[99999] bg-black/70 backdrop-blur-md overflow-y-auto overflow-x-hidden"
+            className="fixed inset-0 z-[99999] bg-transparent"
             onClick={(e) => {
                 if (e.target === e.currentTarget) onClose()
             }}
         >
-            <div className="min-h-screen flex items-center justify-center p-4 py-10">
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100%-2rem)] max-w-xl p-4 py-10">
                 <div
                     className={cn(
-                        "w-full max-w-xl rounded-2xl border shadow-2xl overflow-hidden",
+                        "w-full rounded-2xl border shadow-2xl overflow-hidden",
                         isLight ? "bg-white border-slate-200" : "bg-slate-900/95 border-white/10"
                     )}
                 >
@@ -151,5 +169,8 @@ export function ChatAttachmentModal({
             </div>
         </div>
     )
+
+    if (typeof document === "undefined") return overlay
+    return createPortal(overlay, document.body)
 }
 
