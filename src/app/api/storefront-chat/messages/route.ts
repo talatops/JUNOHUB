@@ -9,6 +9,24 @@ type StorefrontMessagePayload = {
     customerEmail?: string | null
 }
 
+function normalizeShopDomain(input: string) {
+    return input
+        .trim()
+        .toLowerCase()
+        .replace(/^https?:\/\//i, "")
+        .replace(/\/$/, "")
+}
+
+function shopVariants(cleanDomain: string) {
+    if (!cleanDomain) return []
+    const v = new Set<string>()
+    v.add(cleanDomain)
+    v.add(`${cleanDomain}/`)
+    v.add(`https://${cleanDomain}`)
+    v.add(`http://${cleanDomain}`)
+    return Array.from(v)
+}
+
 export async function POST(req: Request) {
     try {
         const p = prisma as any
@@ -27,7 +45,7 @@ export async function POST(req: Request) {
 
         const trimmedContent = content.trim()
         const trimmedVisitorId = visitorId.trim()
-        const trimmedShop = shop.trim()
+        const normalizedShop = normalizeShopDomain(shop)
 
         // Guardrails (v1): keep it small, avoid empty spam.
         if (trimmedContent.length < 1) {
@@ -40,11 +58,13 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Invalid visitorId" }, { status: 400 })
         }
 
-        const store = await p.store.findFirst({
-            where: { shopifyDomain: trimmedShop },
+        const variants = shopVariants(normalizedShop)
+        const stores = await p.store.findMany({
+            where: { shopifyDomain: { in: variants } },
             select: { id: true, storefrontChatEnabled: true }
         })
 
+        const store = stores.find((s: any) => Boolean(s.storefrontChatEnabled)) || stores[0]
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
@@ -142,10 +162,14 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: "Missing visitorId" }, { status: 400 })
         }
 
-        const store = await p.store.findFirst({
-            where: { shopifyDomain: shop },
+        const normalizedShop = normalizeShopDomain(shop)
+        const variants = shopVariants(normalizedShop)
+        const stores = await p.store.findMany({
+            where: { shopifyDomain: { in: variants } },
             select: { id: true, storefrontChatEnabled: true }
         })
+
+        const store = stores.find((s: any) => Boolean(s.storefrontChatEnabled)) || stores[0]
 
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
