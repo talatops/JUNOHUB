@@ -144,7 +144,12 @@ export async function PATCH(
         // Even if ScriptTag operations fail (missing scopes), the widget still
         // won’t render because /api/storefront-chat/config returns the flag.
         try {
-            const appBaseUrl = (process.env.NEXT_PUBLIC_APP_URL || "").trim()
+            const appBaseUrl = (
+                process.env.NEXT_PUBLIC_APP_URL ||
+                process.env.AUTH_URL ||
+                process.env.NEXTAUTH_URL ||
+                ""
+            ).trim()
             const apiVersion = "2024-01"
             const injectorBase = appBaseUrl ? appBaseUrl.replace(/\/$/, "") : ""
 

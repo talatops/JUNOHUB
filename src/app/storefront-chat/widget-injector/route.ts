@@ -11,7 +11,11 @@ export async function GET() {
   try {
     var script = document.currentScript;
     var baseUrl = script && script.src ? new URL(script.src).origin : window.location.origin;
-    var shop = window.location.hostname;
+    // Prefer Shopify-provided shop identifier when available.
+    // On custom domains, window.location.hostname won't match the shop's myshopify domain.
+    var shop =
+      (window.Shopify && (window.Shopify.shop || window.Shopify.myshopifyDomain)) ||
+      window.location.hostname;
 
     var containerId = "juno-storefront-chat-container";
     var iframeId = "juno-storefront-chat-iframe";
