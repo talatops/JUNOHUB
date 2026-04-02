@@ -1,0 +1,24 @@
+<div style="position: fixed; bottom: 16px; right: 16px; z-index: 2147483647;">
+  <iframe
+    title="JUNO Storefront Chat"
+    style="border: 0; width: 420px; height: 640px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); border-radius: 16px; overflow: hidden;"
+    allow="clipboard-write; fullscreen"
+    src="{{ settings.widget_base_url | append: '/storefront-chat/widget?shop=' | append: shop.permanent_domain }}"
+  ></iframe>
+</div>
+
+{% schema %}
+{
+  "name": "JUNO Storefront Chat",
+  "target": "body",
+  "settings": [
+    {
+      "type": "url",
+      "id": "widget_base_url",
+      "label": "JUNO app base URL",
+      "default": "https://precontributive-tribally-dione.ngrok-free.dev"
+    }
+  ]
+}
+{% endschema %}
+

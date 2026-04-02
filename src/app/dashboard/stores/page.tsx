@@ -11,6 +11,7 @@ interface StoreData {
     shopifyDomain: string
     isActive: boolean
     onboardingComplete: boolean
+    storefrontChatEnabled: boolean
     createdAt: string
 }
 
@@ -19,6 +20,7 @@ export default function StoresPage() {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
     const [switching, setSwitching] = useState<string | null>(null)
+    const [togglingStorefrontChat, setTogglingStorefrontChat] = useState<string | null>(null)
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     /*
      * Alignment Fix Details:
@@ -47,6 +49,30 @@ export default function StoresPage() {
             setError("Could not load stores")
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleToggleStorefrontChat = async (storeId: string, enabled: boolean) => {
+        setTogglingStorefrontChat(storeId)
+        try {
+            const res = await fetch(`/api/stores/${storeId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ storefrontChatEnabled: enabled })
+            })
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({ message: "Failed to update store setting" }))
+                throw new Error(data.message || "Failed to update store setting")
+            }
+
+            await fetchStores()
+            window.dispatchEvent(new CustomEvent("storeUpdated"))
+        } catch (err) {
+            console.error("Toggle storefront chat error:", err)
+            alert("Could not update storefront chat setting. Please try again.")
+        } finally {
+            setTogglingStorefrontChat(null)
         }
     }
 
@@ -196,6 +222,27 @@ export default function StoresPage() {
                                 <p className="text-[10px] text-slate-500">
                                     Connected {new Date(store.createdAt).toLocaleDateString()}
                                 </p>
+                            </div>
+
+                            <div className="flex items-center justify-between gap-3 mb-3">
+                                <div className="min-w-0">
+                                    <p className="text-xs md:text-sm text-white font-bold truncate">Storefront Chat (Customers)</p>
+                                    <p className="text-[10px] md:text-[11px] text-slate-400">
+                                        Show chat widget on the storefront
+                                    </p>
+                                </div>
+                                <div className="shrink-0 flex items-center gap-3">
+                                    <label className="inline-flex items-center cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={store.storefrontChatEnabled}
+                                            disabled={togglingStorefrontChat === store.id}
+                                            onChange={(e) => handleToggleStorefrontChat(store.id, e.target.checked)}
+                                            className="h-4 w-4 rounded border-white/20 accent-indigo-600"
+                                            aria-label="Enable storefront chat"
+                                        />
+                                    </label>
+                                </div>
                             </div>
 
                             <div className="flex items-center justify-between gap-2">

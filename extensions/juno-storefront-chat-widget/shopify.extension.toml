@@ -1,0 +1,7 @@
+api_version = "2024-07"
+
+[[extensions]]
+name = "JUNO Storefront Chat"
+handle = "juno-storefront-chat"
+type = "theme"
+

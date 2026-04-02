@@ -106,12 +106,16 @@ model Store {
   
   onboardingComplete Boolean @default(false)
   isActive         Boolean  @default(true)  // Track if this is the active store
+
+  // Customer-facing storefront widget (floating chat) enablement.
+  storefrontChatEnabled Boolean @default(false)
   
   // Relations
   connections      Connection[]
   cachedProducts   CachedProduct[]
   cachedOrders     CachedOrder[]
   cachedCustomers  CachedCustomer[]
+  storefrontChatConversations StorefrontChatConversation[]
   syncMetadata     SyncMetadata[]
   invitations      Invitation[]
   productSyncs     ProductSync[]
@@ -582,6 +586,40 @@ model ChatMessage {
   @@index([senderId, receiverId])
   @@index([receiverId, senderId])
 }
+
+enum StorefrontChatSenderType {
+  CUSTOMER
+  AI
+}
+
+model StorefrontChatConversation {
+  id            String   @id @default(cuid())
+  storeId       String
+  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  visitorId     String
+  customerEmail String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  messages      StorefrontChatMessage[]
+
+  @@unique([storeId, visitorId])
+  @@index([storeId])
+}
+
+model StorefrontChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  conversation  StorefrontChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType    StorefrontChatSenderType
+  content       String   @db.Text
+
+  createdAt     DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
 model PushSubscription {
   id        String   @id @default(cuid())
   userId    String

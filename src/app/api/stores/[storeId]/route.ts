@@ -98,3 +98,59 @@ export async function DELETE(
         )
     }
 }
+
+/**
+ * PATCH /api/stores/[storeId]
+ * Update per-store configuration (vendor only).
+ */
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ storeId: string }> }
+) {
+    try {
+        const session = await auth()
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+
+        const { storeId } = await params
+        if (!storeId) {
+            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
+        }
+
+        const { storefrontChatEnabled } = await request.json().catch(() => ({}))
+        if (typeof storefrontChatEnabled !== "boolean") {
+            return NextResponse.json({ message: "Invalid storefrontChatEnabled" }, { status: 400 })
+        }
+
+        // Verify store belongs to the user
+        const store = await prisma.store.findFirst({
+            where: {
+                id: storeId,
+                userId: session.user.id
+            }
+        })
+
+        if (!store) {
+            return NextResponse.json({ message: "Store not found" }, { status: 404 })
+        }
+
+        await prisma.store.update({
+            where: { id: storeId },
+            data: {
+                storefrontChatEnabled
+            }
+        })
+
+        return NextResponse.json({
+            success: true,
+            storefrontChatEnabled
+        })
+    } catch (error) {
+        console.error("Error updating store settings:", error)
+        return NextResponse.json(
+            { message: "Failed to update store setting" },
+            { status: 500 }
+        )
+    }
+}

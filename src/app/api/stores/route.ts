@@ -25,6 +25,7 @@ export async function GET() {
                 shopifyStoreName: true,
                 onboardingComplete: true,
                 isActive: true,
+                storefrontChatEnabled: true,
                 createdAt: true
             },
             orderBy: {
