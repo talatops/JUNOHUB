@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import {
+    getPublishedThemeId,
+    getThemeAsset,
+    putThemeAsset,
+    removeThemeLiquidInjection,
+    upsertThemeLiquidInjection
+} from "@/lib/shopify/theme"
 
 /**
  * DELETE /api/stores/[storeId]
@@ -140,8 +147,8 @@ export async function PATCH(
             data: { storefrontChatEnabled } as any
         })
 
-        // Best-effort: keep a Shopify ScriptTag in sync with the checkbox.
-        // Even if ScriptTag operations fail (missing scopes), the widget still
+        // Best-effort: keep the PUBLISHED Shopify theme in sync with the checkbox.
+        // Even if theme operations fail (missing scopes), the widget still
         // won’t render because /api/storefront-chat/config returns the flag.
         try {
             const apiVersion = "2024-01"
@@ -154,105 +161,238 @@ export async function PATCH(
 
             const accessToken = store.shopifyAccessToken
 
-            // Use Shopify App Proxy URL for the ScriptTag src to avoid CSP/ORB/ngrok issues.
-            // Requires one-time App Proxy setup in Shopify admin for the app:
-            //  - App proxy prefix: apps
-            //  - Subpath: juno-chat
-            //  - Proxy URL: <APP_URL>/api/shopify/app-proxy
             if (cleanDomain && accessToken) {
-                const injectorPath = `https://${cleanDomain}/apps/juno-chat/widget-injector.js`
-                const injectorSrc = injectorPath
+                console.log("[STOREFRONT_CHAT_THEME_SYNC_START]", { storeId, enabled: storefrontChatEnabled, shop: cleanDomain })
 
-                // Shopify's `src` filter is exact-match; we want to delete any older variants too.
-                // So we list a small page and filter by prefix instead.
-                const listUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?limit=250&fields=id,src`
-
-                const commonHeaders = {
-                    "X-Shopify-Access-Token": accessToken,
-                    "Content-Type": "application/json"
+                // Cleanup legacy ScriptTags from earlier implementations so storefront
+                // stops loading old ngrok/app-proxy/widget-injector sources.
+                const listLegacyTags = await fetch(`https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?limit=250&fields=id,src`, {
+                    headers: {
+                        "X-Shopify-Access-Token": accessToken,
+                        "Content-Type": "application/json"
+                    }
+                }).then((r) => r.json().catch(() => ({}))).catch(() => ({}))
+                const legacyTags: Array<{ id: number; src?: string }> = Array.isArray(listLegacyTags?.script_tags)
+                    ? listLegacyTags.script_tags
+                    : []
+                const legacyMatches = legacyTags.filter((t) => {
+                    const src = typeof t?.src === "string" ? t.src : ""
+                    return src.includes("/storefront-chat/widget-injector") || src.includes("/apps/juno-chat/widget-injector.js")
+                })
+                for (const tag of legacyMatches) {
+                    if (!tag?.id) continue
+                    await fetch(`https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`, {
+                        method: "DELETE",
+                        headers: { "X-Shopify-Access-Token": accessToken }
+                    }).catch(() => {})
                 }
 
-                const listRes = await fetch(listUrl, { headers: commonHeaders })
-                const listData = await listRes.json().catch(() => ({}))
-                const allTags: Array<{ id: number; src?: string }> = Array.isArray(listData?.script_tags)
-                    ? listData.script_tags
-                    : []
-                const existing = allTags.filter((t) => {
-                    const src = typeof t?.src === "string" ? t.src : ""
-                    return src === injectorSrc || src.startsWith(injectorPath)
-                })
-
-                if (storefrontChatEnabled) {
-                    // Ensure exactly one matching tag exists; clean up duplicates/old variants.
-                    if (existing.length > 1) {
-                        for (const tag of existing.slice(1)) {
-                            if (!tag?.id) continue
-                            const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
-                            await fetch(deleteUrl, {
-                                method: "DELETE",
-                                headers: { "X-Shopify-Access-Token": accessToken }
-                            }).catch(() => {})
-                        }
-                    }
-
-                    // If the remaining tag isn't the exact injectorSrc (ngrok skip param), replace it.
-                    const hasExact = existing.some((t) => typeof t?.src === "string" && t.src === injectorSrc)
-                    if (!hasExact) {
-                        // Delete old variant(s)
-                        for (const tag of existing) {
-                            if (!tag?.id) continue
-                            const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
-                            await fetch(deleteUrl, {
-                                method: "DELETE",
-                                headers: { "X-Shopify-Access-Token": accessToken }
-                            }).catch(() => {})
-                        }
-
-                        const createUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json`
-                        const createBody = {
-                            script_tag: {
-                                event: "onload",
-                                src: injectorSrc,
-                                display_scope: "online_store",
-                                cache: false
-                            }
-                        }
-
-                        const createRes = await fetch(createUrl, {
-                            method: "POST",
-                            headers: commonHeaders,
-                            body: JSON.stringify(createBody)
-                        })
-
-                        if (!createRes.ok) {
-                            const errText = await createRes.text().catch(() => "")
-                            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_CREATE]", { storeId, status: createRes.status, errText })
-                        }
-                    }
+                const published = await getPublishedThemeId(cleanDomain, accessToken, apiVersion)
+                if (!published.ok) {
+                    console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, status: published.status, text: published.text })
                 } else {
-                    for (const tag of existing) {
-                        if (!tag?.id) continue
-                        const deleteUrl = `https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`
-                        const delRes = await fetch(deleteUrl, {
-                            method: "DELETE",
-                            headers: { "X-Shopify-Access-Token": accessToken }
-                        })
+                    const themeId = published.data.themeId
+                    const themeLiquidKey = "layout/theme.liquid"
+                    const assetKey = "assets/juno-storefront-chat.js"
+                    const assetFilename = "juno-storefront-chat.js"
 
-                        if (!delRes.ok) {
-                            const errText = await delRes.text().catch(() => "")
-                            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_DELETE]", { storeId, tagId: tag.id, status: delRes.status, errText })
+                    const appBaseUrl = (
+                        process.env.NEXT_PUBLIC_APP_URL ||
+                        process.env.AUTH_URL ||
+                        process.env.NEXTAUTH_URL ||
+                        ""
+                    ).trim().replace(/\/$/, "")
+
+                    const js = `
+(function () {
+  try {
+    var appBaseUrl = ${JSON.stringify(appBaseUrl)};
+    if (!appBaseUrl) return;
+    var shop = (window.Shopify && (window.Shopify.shop || window.Shopify.myshopifyDomain)) || window.location.hostname;
+
+    var containerId = "juno-storefront-chat-container";
+    var buttonId = "juno-storefront-chat-button";
+    var panelId = "juno-storefront-chat-panel";
+    var backdropId = "juno-storefront-chat-backdrop";
+    var closeId = "juno-storefront-chat-close";
+    var iframeId = "juno-storefront-chat-iframe";
+
+    function ensurePanel() {
+      var existingPanel = document.getElementById(panelId);
+      if (existingPanel) return;
+
+      var backdrop = document.createElement("div");
+      backdrop.id = backdropId;
+      backdrop.style.position = "fixed";
+      backdrop.style.inset = "0";
+      backdrop.style.background = "rgba(2,6,23,0.28)";
+      backdrop.style.backdropFilter = "blur(2px)";
+      backdrop.style.zIndex = "2147483645";
+      backdrop.style.display = "none";
+      backdrop.addEventListener("click", function () { closePanel(); });
+      document.body.appendChild(backdrop);
+
+      var panel = document.createElement("div");
+      panel.id = panelId;
+      panel.style.position = "fixed";
+      panel.style.bottom = "86px";
+      panel.style.right = "16px";
+      panel.style.width = "380px";
+      panel.style.maxWidth = "calc(100vw - 24px)";
+      panel.style.height = "620px";
+      panel.style.maxHeight = "calc(100vh - 110px)";
+      panel.style.background = "#fff";
+      panel.style.border = "1px solid rgba(15,23,42,0.12)";
+      panel.style.borderRadius = "16px";
+      panel.style.overflow = "hidden";
+      panel.style.boxShadow = "0 30px 60px rgba(2,6,23,0.28)";
+      panel.style.zIndex = "2147483646";
+      panel.style.display = "none";
+
+      var closeBtn = document.createElement("button");
+      closeBtn.id = closeId;
+      closeBtn.type = "button";
+      closeBtn.innerHTML = "Close";
+      closeBtn.setAttribute("aria-label", "Close chat");
+      closeBtn.style.position = "absolute";
+      closeBtn.style.top = "10px";
+      closeBtn.style.right = "10px";
+      closeBtn.style.zIndex = "2";
+      closeBtn.style.border = "1px solid rgba(255,255,255,0.5)";
+      closeBtn.style.borderRadius = "10px";
+      closeBtn.style.padding = "6px 10px";
+      closeBtn.style.fontSize = "12px";
+      closeBtn.style.fontWeight = "700";
+      closeBtn.style.color = "#ffffff";
+      closeBtn.style.background = "rgba(15,23,42,0.45)";
+      closeBtn.style.cursor = "pointer";
+      closeBtn.addEventListener("click", function () { closePanel(); });
+      panel.appendChild(closeBtn);
+
+      var iframe = document.createElement("iframe");
+      iframe.id = iframeId;
+      iframe.title = "JUNO Chat";
+      iframe.src = appBaseUrl + "/storefront-chat/widget?shop=" + encodeURIComponent(shop);
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      iframe.style.border = "0";
+      iframe.style.background = "white";
+      panel.appendChild(iframe);
+
+      document.body.appendChild(panel);
+    }
+
+    function openPanel() {
+      ensurePanel();
+      var panel = document.getElementById(panelId);
+      var backdrop = document.getElementById(backdropId);
+      if (panel) panel.style.display = "block";
+      if (backdrop) backdrop.style.display = "block";
+    }
+
+    function closePanel() {
+      var panel = document.getElementById(panelId);
+      var backdrop = document.getElementById(backdropId);
+      if (panel) panel.style.display = "none";
+      if (backdrop) backdrop.style.display = "none";
+    }
+
+    function upsertButton() {
+      var container = document.getElementById(containerId);
+      if (!container) {
+        container = document.createElement("div");
+        container.id = containerId;
+        container.style.position = "fixed";
+        container.style.bottom = "16px";
+        container.style.right = "16px";
+        container.style.zIndex = "2147483647";
+        container.style.width = "56px";
+        container.style.height = "56px";
+        document.body.appendChild(container);
+      }
+
+      var existing = document.getElementById(buttonId);
+      if (existing) return;
+
+      var btn = document.createElement("button");
+      btn.id = buttonId;
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Open chat");
+      btn.style.width = "56px";
+      btn.style.height = "56px";
+      btn.style.borderRadius = "16px";
+      btn.style.border = "0";
+      btn.style.cursor = "pointer";
+      btn.style.boxShadow = "0 12px 28px rgba(0,0,0,0.20)";
+      btn.style.background = "#4f46e5";
+      btn.style.color = "#fff";
+      btn.style.display = "flex";
+      btn.style.alignItems = "center";
+      btn.style.justifyContent = "center";
+      btn.style.fontFamily = "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      btn.style.fontWeight = "800";
+      btn.style.letterSpacing = "-0.02em";
+      btn.innerHTML = "Chat";
+
+      btn.addEventListener("click", function () {
+        openPanel();
+      });
+
+      container.appendChild(btn);
+    }
+
+    function removeWidget() {
+      var container = document.getElementById(containerId);
+      if (container && container.parentNode) container.parentNode.removeChild(container);
+    }
+
+    // Theme injection itself is the source of truth:
+    // - ON: this script is injected in theme.liquid (show button)
+    // - OFF: injected snippet is removed (button cannot render)
+    removeWidget();
+    upsertButton();
+    ensurePanel();
+  } catch (e) {}
+})();
+`.trimStart()
+
+                    // Always upload/update the asset (safe & idempotent).
+                    const putAsset = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, assetKey, js)
+                    if (!putAsset.ok) {
+                        console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "put_asset", status: putAsset.status, text: putAsset.text })
+                    }
+
+                    const themeLiquid = await getThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey)
+                    if (!themeLiquid.ok) {
+                        console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "get_theme_liquid", status: themeLiquid.status, text: themeLiquid.text })
+                    } else {
+                        const updated = storefrontChatEnabled
+                            ? upsertThemeLiquidInjection(themeLiquid.data.value, assetFilename)
+                            : removeThemeLiquidInjection(themeLiquid.data.value)
+
+                        if (!updated.updated && (updated as any).error) {
+                            console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "patch_theme_liquid", error: (updated as any).error })
+                        } else if (updated.updated) {
+                            const putThemeLiquid = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey, updated.next)
+                            if (!putThemeLiquid.ok) {
+                                console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "put_theme_liquid", status: putThemeLiquid.status, text: putThemeLiquid.text })
+                            } else {
+                                console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId, enabled: storefrontChatEnabled, themeId })
+                            }
+                        } else {
+                            console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId, enabled: storefrontChatEnabled, themeId, changed: false })
                         }
                     }
                 }
             } else {
-                console.warn("[STORE_FRONT_CHAT_SCRIPTTAG_SKIP]", {
+                console.warn("[STOREFRONT_CHAT_THEME_SYNC_SKIP]", {
                     storeId,
                     cleanDomain,
                     hasAccessToken: Boolean(accessToken)
                 })
             }
         } catch (scriptError) {
-            console.error("[STORE_FRONT_CHAT_SCRIPTTAG_ERROR]", scriptError)
+            console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", scriptError)
         }
 
         return NextResponse.json({
