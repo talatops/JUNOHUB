@@ -8,6 +8,7 @@ import {
     ShoppingCart,
     Users,
     Mail,
+    HelpCircle,
 } from "lucide-react"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
@@ -51,6 +52,10 @@ interface SupplierSidebarProps {
 
 export function SupplierSidebar({ showLogo = true }: SupplierSidebarProps) {
     const pathname = usePathname()
+    const isRouteActive = (href: string) => {
+        if (href === "/supplier") return pathname === "/supplier"
+        return pathname === href || pathname.startsWith(`${href}/`)
+    }
 
     return (
         <div className="space-y-4 py-4 flex flex-col h-full text-white">
@@ -75,7 +80,7 @@ export function SupplierSidebar({ showLogo = true }: SupplierSidebarProps) {
                         href={route.href}
                         className={cn(
                             "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 ease-out border border-transparent",
-                            pathname === route.href ? "text-white bg-white/10 border-white/10" : "text-slate-400"
+                            isRouteActive(route.href) ? "text-white bg-white/10 border-white/10" : "text-slate-400"
                         )}
                     >
                         <div className="flex items-center flex-1">
@@ -84,6 +89,22 @@ export function SupplierSidebar({ showLogo = true }: SupplierSidebarProps) {
                         </div>
                     </Link>
                 ))}
+            </div>
+            <div className="px-3 pt-4 border-t border-white/10">
+                <Link
+                    href="/supplier/help-support"
+                    className={cn(
+                        "text-sm group flex p-3 w-full justify-start font-medium cursor-pointer rounded-xl transition-all duration-200 ease-out border border-transparent",
+                        pathname === "/supplier/help-support"
+                            ? "text-white bg-white/10 border-white/10"
+                            : "text-slate-400 hover:text-white hover:bg-white/10"
+                    )}
+                >
+                    <div className="flex items-center flex-1">
+                        <HelpCircle className="h-5 w-5 mr-3 text-blue-500" />
+                        Help & Support
+                    </div>
+                </Link>
             </div>
         </div>
     )
