@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Store, Plus, Check, Loader2, AlertCircle, Building2, Trash2 } from "lucide-react"
 import AddStoreModal from "@/components/AddStoreModal"
 import DeleteStoreModal from "@/components/DeleteStoreModal"
+import StorefrontChatCustomizeModal, { type StorefrontChatCustomization } from "@/components/StorefrontChatCustomizeModal"
 
 interface StoreData {
     id: string
@@ -12,7 +13,20 @@ interface StoreData {
     isActive: boolean
     onboardingComplete: boolean
     storefrontChatEnabled: boolean
+    storefrontChatName: string | null
+    storefrontChatTagline: string | null
+    storefrontChatBrandColor: string | null
+    storefrontChatFontFamily: string | null
+    storefrontChatLogoUrl: string | null
     createdAt: string
+}
+
+const DEFAULT_CUSTOMIZATION: StorefrontChatCustomization = {
+    storefrontChatName: "JUNO Chat",
+    storefrontChatTagline: "Ask about products",
+    storefrontChatBrandColor: "#4f46e5",
+    storefrontChatFontFamily: "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    storefrontChatLogoUrl: "",
 }
 
 export default function StoresPage() {
@@ -21,6 +35,8 @@ export default function StoresPage() {
     const [error, setError] = useState("")
     const [switching, setSwitching] = useState<string | null>(null)
     const [togglingStorefrontChat, setTogglingStorefrontChat] = useState<string | null>(null)
+    const [customizeStoreId, setCustomizeStoreId] = useState<string | null>(null)
+    const [injectingStoreId, setInjectingStoreId] = useState<string | null>(null)
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
     /*
      * Alignment Fix Details:
@@ -68,11 +84,57 @@ export default function StoresPage() {
 
             await fetchStores()
             window.dispatchEvent(new CustomEvent("storeUpdated"))
+            if (enabled) {
+                setCustomizeStoreId(storeId)
+            }
         } catch (err) {
             console.error("Toggle storefront chat error:", err)
             alert("Could not update storefront chat setting. Please try again.")
         } finally {
             setTogglingStorefrontChat(null)
+        }
+    }
+
+    const openCustomize = (storeId: string) => {
+        setCustomizeStoreId(storeId)
+    }
+
+    const getCustomizationValues = (store: StoreData | undefined): StorefrontChatCustomization => {
+        if (!store) return DEFAULT_CUSTOMIZATION
+        return {
+            storefrontChatName: store.storefrontChatName || DEFAULT_CUSTOMIZATION.storefrontChatName,
+            storefrontChatTagline: store.storefrontChatTagline || DEFAULT_CUSTOMIZATION.storefrontChatTagline,
+            storefrontChatBrandColor: store.storefrontChatBrandColor || DEFAULT_CUSTOMIZATION.storefrontChatBrandColor,
+            storefrontChatFontFamily: store.storefrontChatFontFamily || DEFAULT_CUSTOMIZATION.storefrontChatFontFamily,
+            storefrontChatLogoUrl: store.storefrontChatLogoUrl || "",
+        }
+    }
+
+    const saveStorefrontCustomization = async (storeId: string, payload: StorefrontChatCustomization) => {
+        const res = await fetch(`/api/stores/${storeId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+        })
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({ message: "Failed to save storefront customization" }))
+            throw new Error(data.message || "Failed to save storefront customization")
+        }
+        await fetchStores()
+    }
+
+    const injectStorefrontCustomization = async (storeId: string) => {
+        setInjectingStoreId(storeId)
+        try {
+            const res = await fetch(`/api/stores/${storeId}`, {
+                method: "POST",
+            })
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({ message: "Failed to inject storefront chat" }))
+                throw new Error(data.message || "Failed to inject storefront chat")
+            }
+        } finally {
+            setInjectingStoreId(null)
         }
     }
 
@@ -246,24 +308,31 @@ export default function StoresPage() {
                             </div>
 
                             <div className="flex items-center justify-between gap-2">
-                                {!store.isActive ? (
+                                <div className="flex-1 flex items-center gap-2">
+                                    {!store.isActive ? (
+                                        <button
+                                            onClick={() => handleSwitchStore(store.id)}
+                                            disabled={switching === store.id}
+                                            className="flex-1 h-9 md:h-10 rounded-xl bg-white/10 text-white text-xs md:text-sm font-bold hover:bg-white/15 border border-white/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        >
+                                            {switching === store.id ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" />
+                                                    Switching...
+                                                </>
+                                            ) : (
+                                                "Switch to this store"
+                                            )}
+                                        </button>
+                                    ) : null}
                                     <button
-                                        onClick={() => handleSwitchStore(store.id)}
-                                        disabled={switching === store.id}
-                                        className="flex-1 h-9 md:h-10 rounded-xl bg-white/10 text-white text-xs md:text-sm font-bold hover:bg-white/15 border border-white/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                        onClick={() => openCustomize(store.id)}
+                                        disabled={!store.storefrontChatEnabled || injectingStoreId === store.id}
+                                        className="h-9 md:h-10 px-3 rounded-xl bg-indigo-500/20 text-indigo-200 text-xs font-bold hover:bg-indigo-500/30 border border-indigo-400/30 transition-all disabled:opacity-50"
                                     >
-                                        {switching === store.id ? (
-                                            <>
-                                                <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 animate-spin" />
-                                                Switching...
-                                            </>
-                                        ) : (
-                                            "Switch to this store"
-                                        )}
+                                        {injectingStoreId === store.id ? "Injecting..." : "Customize"}
                                     </button>
-                                ) : (
-                                    <div className="flex-1" />
-                                )}
+                                </div>
                                 <button
                                     onClick={() => handleDeleteClick(store)}
                                     className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/10 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shrink-0"
@@ -290,6 +359,21 @@ export default function StoresPage() {
                 onConfirm={handleDeleteConfirm}
                 storeName={deleteModal.storeName}
                 isActive={deleteModal.isActive}
+            />
+
+            <StorefrontChatCustomizeModal
+                isOpen={Boolean(customizeStoreId)}
+                storeName={stores.find((s) => s.id === customizeStoreId)?.businessName || "Store"}
+                initialValues={getCustomizationValues(stores.find((s) => s.id === customizeStoreId))}
+                onClose={() => setCustomizeStoreId(null)}
+                onSave={async (payload) => {
+                    if (!customizeStoreId) return
+                    await saveStorefrontCustomization(customizeStoreId, payload)
+                }}
+                onInject={async () => {
+                    if (!customizeStoreId) return
+                    await injectStorefrontCustomization(customizeStoreId)
+                }}
             />
         </div>
     )

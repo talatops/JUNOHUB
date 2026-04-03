@@ -110,105 +110,73 @@ export async function DELETE(
  * PATCH /api/stores/[storeId]
  * Update per-store configuration (vendor only).
  */
-export async function PATCH(
-    request: Request,
-    { params }: { params: Promise<{ storeId: string }> }
-) {
+const ALLOWED_FONTS = new Set([
+    "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "Poppins, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "Montserrat, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+    "Nunito, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif",
+])
+
+const DEFAULT_CHAT_NAME = "JUNO Chat"
+const DEFAULT_TAGLINE = "Ask about products"
+const DEFAULT_BRAND_COLOR = "#4f46e5"
+const DEFAULT_FONT = "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif"
+
+function sanitizeColor(value: unknown) {
+    if (typeof value !== "string") return DEFAULT_BRAND_COLOR
+    const v = value.trim()
+    return /^#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.test(v) ? v : DEFAULT_BRAND_COLOR
+}
+
+function sanitizeShortText(value: unknown, fallback: string, max = 64) {
+    if (typeof value !== "string") return fallback
+    const v = value.trim()
+    if (!v) return fallback
+    return v.slice(0, max)
+}
+
+function sanitizeFont(value: unknown) {
+    if (typeof value !== "string") return DEFAULT_FONT
+    const v = value.trim()
+    return ALLOWED_FONTS.has(v) ? v : DEFAULT_FONT
+}
+
+function sanitizeLogoUrl(value: unknown) {
+    if (typeof value !== "string") return null
+    const v = value.trim()
+    if (!v) return null
     try {
-        const session = await auth()
-        if (!session?.user?.id) {
-            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-        }
+        const parsed = new URL(v)
+        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
+        return parsed.toString().slice(0, 500)
+    } catch {
+        return null
+    }
+}
 
-        const { storeId } = await params
-        if (!storeId) {
-            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
-        }
+function buildStorefrontScript(params: {
+    appBaseUrl: string
+    chatName: string
+    tagline: string
+    brandColor: string
+    fontFamily: string
+    logoUrl: string | null
+}) {
+    const { appBaseUrl, chatName, tagline, brandColor, fontFamily, logoUrl } = params
 
-        const { storefrontChatEnabled } = await request.json().catch(() => ({}))
-        if (typeof storefrontChatEnabled !== "boolean") {
-            return NextResponse.json({ message: "Invalid storefrontChatEnabled" }, { status: 400 })
-        }
-
-        // Verify store belongs to the user
-        const store = await prisma.store.findFirst({
-            where: {
-                id: storeId,
-                userId: session.user.id
-            }
-        })
-
-        if (!store) {
-            return NextResponse.json({ message: "Store not found" }, { status: 404 })
-        }
-
-        await prisma.store.update({
-            where: { id: storeId },
-            data: { storefrontChatEnabled } as any
-        })
-
-        // Best-effort: keep the PUBLISHED Shopify theme in sync with the checkbox.
-        // Even if theme operations fail (missing scopes), the widget still
-        // won’t render because /api/storefront-chat/config returns the flag.
-        try {
-            const apiVersion = "2024-01"
-
-            const cleanDomain = (store.shopifyDomain || "")
-                .trim()
-                .replace(/^https?:\/\//, "")
-                .replace(/\/$/, "")
-                .trim()
-
-            const accessToken = store.shopifyAccessToken
-
-            if (cleanDomain && accessToken) {
-                console.log("[STOREFRONT_CHAT_THEME_SYNC_START]", { storeId, enabled: storefrontChatEnabled, shop: cleanDomain })
-
-                // Cleanup legacy ScriptTags from earlier implementations so storefront
-                // stops loading old ngrok/app-proxy/widget-injector sources.
-                const listLegacyTags = await fetch(`https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?limit=250&fields=id,src`, {
-                    headers: {
-                        "X-Shopify-Access-Token": accessToken,
-                        "Content-Type": "application/json"
-                    }
-                }).then((r) => r.json().catch(() => ({}))).catch(() => ({}))
-                const legacyTags: Array<{ id: number; src?: string }> = Array.isArray(listLegacyTags?.script_tags)
-                    ? listLegacyTags.script_tags
-                    : []
-                const legacyMatches = legacyTags.filter((t) => {
-                    const src = typeof t?.src === "string" ? t.src : ""
-                    return src.includes("/storefront-chat/widget-injector") || src.includes("/apps/juno-chat/widget-injector.js")
-                })
-                for (const tag of legacyMatches) {
-                    if (!tag?.id) continue
-                    await fetch(`https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`, {
-                        method: "DELETE",
-                        headers: { "X-Shopify-Access-Token": accessToken }
-                    }).catch(() => {})
-                }
-
-                const published = await getPublishedThemeId(cleanDomain, accessToken, apiVersion)
-                if (!published.ok) {
-                    console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, status: published.status, text: published.text })
-                } else {
-                    const themeId = published.data.themeId
-                    const themeLiquidKey = "layout/theme.liquid"
-                    const assetKey = "assets/juno-storefront-chat.js"
-                    const assetFilename = "juno-storefront-chat.js"
-
-                    const appBaseUrl = (
-                        process.env.NEXT_PUBLIC_APP_URL ||
-                        process.env.AUTH_URL ||
-                        process.env.NEXTAUTH_URL ||
-                        ""
-                    ).trim().replace(/\/$/, "")
-
-                    const js = `
+    return `
 (function () {
   try {
     var appBaseUrl = ${JSON.stringify(appBaseUrl)};
     if (!appBaseUrl) return;
     var shop = (window.Shopify && (window.Shopify.shop || window.Shopify.myshopifyDomain)) || window.location.hostname;
+
+    var chatName = ${JSON.stringify(chatName)};
+    var tagline = ${JSON.stringify(tagline)};
+    var brandColor = ${JSON.stringify(brandColor)};
+    var fontFamily = ${JSON.stringify(fontFamily)};
+    var logoUrl = ${JSON.stringify(logoUrl)};
 
     var containerId = "juno-storefront-chat-container";
     var buttonId = "juno-storefront-chat-button";
@@ -248,6 +216,49 @@ export async function PATCH(
       panel.style.boxShadow = "0 30px 60px rgba(2,6,23,0.28)";
       panel.style.zIndex = "2147483646";
       panel.style.display = "none";
+      panel.style.fontFamily = fontFamily;
+
+      var header = document.createElement("div");
+      header.style.height = "56px";
+      header.style.display = "flex";
+      header.style.alignItems = "center";
+      header.style.gap = "10px";
+      header.style.padding = "0 12px";
+      header.style.borderBottom = "1px solid rgba(15,23,42,0.08)";
+      header.style.background = "#fff";
+
+      var logoWrap = document.createElement("div");
+      logoWrap.style.width = "30px";
+      logoWrap.style.height = "30px";
+      logoWrap.style.borderRadius = "10px";
+      logoWrap.style.flexShrink = "0";
+      logoWrap.style.display = "flex";
+      logoWrap.style.alignItems = "center";
+      logoWrap.style.justifyContent = "center";
+      logoWrap.style.background = "rgba(79,70,229,0.12)";
+      logoWrap.style.border = "1px solid rgba(79,70,229,0.2)";
+      if (logoUrl) {
+        var logo = document.createElement("img");
+        logo.src = logoUrl;
+        logo.alt = chatName;
+        logo.style.width = "20px";
+        logo.style.height = "20px";
+        logo.style.objectFit = "contain";
+        logoWrap.appendChild(logo);
+      } else {
+        logoWrap.innerHTML = "<span style=\\"font-weight:700;color:#4338ca;font-size:12px\\">J</span>";
+      }
+      header.appendChild(logoWrap);
+
+      var headerText = document.createElement("div");
+      headerText.style.minWidth = "0";
+      headerText.innerHTML = "<div style=\\"font-size:13px;font-weight:800;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\">" +
+        String(chatName || "Chat") +
+        "</div><div style=\\"font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\">" +
+        String(tagline || "") +
+        "</div>";
+      header.appendChild(headerText);
+      panel.appendChild(header);
 
       var closeBtn = document.createElement("button");
       closeBtn.id = closeId;
@@ -271,10 +282,10 @@ export async function PATCH(
 
       var iframe = document.createElement("iframe");
       iframe.id = iframeId;
-      iframe.title = "JUNO Chat";
+      iframe.title = chatName || "Chat";
       iframe.src = appBaseUrl + "/storefront-chat/widget?shop=" + encodeURIComponent(shop);
       iframe.style.width = "100%";
-      iframe.style.height = "100%";
+      iframe.style.height = "calc(100% - 56px)";
       iframe.style.border = "0";
       iframe.style.background = "white";
       panel.appendChild(iframe);
@@ -324,80 +335,236 @@ export async function PATCH(
       btn.style.border = "0";
       btn.style.cursor = "pointer";
       btn.style.boxShadow = "0 12px 28px rgba(0,0,0,0.20)";
-      btn.style.background = "#4f46e5";
+      btn.style.background = brandColor || "#4f46e5";
       btn.style.color = "#fff";
       btn.style.display = "flex";
       btn.style.alignItems = "center";
       btn.style.justifyContent = "center";
-      btn.style.fontFamily = "system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif";
+      btn.style.fontFamily = fontFamily;
       btn.style.fontWeight = "800";
       btn.style.letterSpacing = "-0.02em";
       btn.innerHTML = "Chat";
-
-      btn.addEventListener("click", function () {
-        openPanel();
-      });
-
+      btn.addEventListener("click", function () { openPanel(); });
       container.appendChild(btn);
     }
 
     function removeWidget() {
       var container = document.getElementById(containerId);
+      var panel = document.getElementById(panelId);
+      var backdrop = document.getElementById(backdropId);
       if (container && container.parentNode) container.parentNode.removeChild(container);
+      if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
+      if (backdrop && backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
     }
 
-    // Theme injection itself is the source of truth:
-    // - ON: this script is injected in theme.liquid (show button)
-    // - OFF: injected snippet is removed (button cannot render)
     removeWidget();
     upsertButton();
     ensurePanel();
   } catch (e) {}
 })();
 `.trimStart()
+}
 
-                    // Always upload/update the asset (safe & idempotent).
-                    const putAsset = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, assetKey, js)
-                    if (!putAsset.ok) {
-                        console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "put_asset", status: putAsset.status, text: putAsset.text })
-                    }
+async function syncStorefrontTheme(params: {
+    storeId: string
+    enabled: boolean
+    shopifyDomain: string
+    shopifyAccessToken: string
+    chatName: string
+    tagline: string
+    brandColor: string
+    fontFamily: string
+    logoUrl: string | null
+}) {
+    const apiVersion = "2024-01"
+    const cleanDomain = (params.shopifyDomain || "")
+        .trim()
+        .replace(/^https?:\/\//, "")
+        .replace(/\/$/, "")
+        .trim()
+    const accessToken = params.shopifyAccessToken
 
-                    const themeLiquid = await getThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey)
-                    if (!themeLiquid.ok) {
-                        console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "get_theme_liquid", status: themeLiquid.status, text: themeLiquid.text })
-                    } else {
-                        const updated = storefrontChatEnabled
-                            ? upsertThemeLiquidInjection(themeLiquid.data.value, assetFilename)
-                            : removeThemeLiquidInjection(themeLiquid.data.value)
+    if (!cleanDomain || !accessToken) {
+        console.warn("[STOREFRONT_CHAT_THEME_SYNC_SKIP]", {
+            storeId: params.storeId,
+            cleanDomain,
+            hasAccessToken: Boolean(accessToken),
+        })
+        return
+    }
 
-                        if (!updated.updated && (updated as any).error) {
-                            console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "patch_theme_liquid", error: (updated as any).error })
-                        } else if (updated.updated) {
-                            const putThemeLiquid = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey, updated.next)
-                            if (!putThemeLiquid.ok) {
-                                console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", { storeId, step: "put_theme_liquid", status: putThemeLiquid.status, text: putThemeLiquid.text })
-                            } else {
-                                console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId, enabled: storefrontChatEnabled, themeId })
-                            }
-                        } else {
-                            console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId, enabled: storefrontChatEnabled, themeId, changed: false })
-                        }
-                    }
-                }
-            } else {
-                console.warn("[STOREFRONT_CHAT_THEME_SYNC_SKIP]", {
-                    storeId,
-                    cleanDomain,
-                    hasAccessToken: Boolean(accessToken)
-                })
+    console.log("[STOREFRONT_CHAT_THEME_SYNC_START]", {
+        storeId: params.storeId,
+        enabled: params.enabled,
+        shop: cleanDomain,
+    })
+
+    const listLegacyTags = await fetch(
+        `https://${cleanDomain}/admin/api/${apiVersion}/script_tags.json?limit=250&fields=id,src`,
+        {
+            headers: {
+                "X-Shopify-Access-Token": accessToken,
+                "Content-Type": "application/json",
+            },
+        }
+    ).then((r) => r.json().catch(() => ({}))).catch(() => ({}))
+
+    const legacyTags: Array<{ id: number; src?: string }> = Array.isArray(listLegacyTags?.script_tags)
+        ? listLegacyTags.script_tags
+        : []
+    const legacyMatches = legacyTags.filter((t) => {
+        const src = typeof t?.src === "string" ? t.src : ""
+        return src.includes("/storefront-chat/widget-injector") || src.includes("/apps/juno-chat/widget-injector.js")
+    })
+    for (const tag of legacyMatches) {
+        if (!tag?.id) continue
+        await fetch(`https://${cleanDomain}/admin/api/${apiVersion}/script_tags/${tag.id}.json`, {
+            method: "DELETE",
+            headers: { "X-Shopify-Access-Token": accessToken },
+        }).catch(() => {})
+    }
+
+    const published = await getPublishedThemeId(cleanDomain, accessToken, apiVersion)
+    if (!published.ok) {
+        throw new Error(`Published theme fetch failed: ${published.status}`)
+    }
+
+    const themeId = published.data.themeId
+    const themeLiquidKey = "layout/theme.liquid"
+    const assetKey = "assets/juno-storefront-chat.js"
+    const assetFilename = "juno-storefront-chat.js"
+
+    const appBaseUrl = (
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.AUTH_URL ||
+        process.env.NEXTAUTH_URL ||
+        ""
+    ).trim().replace(/\/$/, "")
+
+    const js = buildStorefrontScript({
+        appBaseUrl,
+        chatName: params.chatName,
+        tagline: params.tagline,
+        brandColor: params.brandColor,
+        fontFamily: params.fontFamily,
+        logoUrl: params.logoUrl,
+    })
+
+    const putAsset = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, assetKey, js)
+    if (!putAsset.ok) {
+        throw new Error(`Asset update failed: ${putAsset.status}`)
+    }
+
+    const themeLiquid = await getThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey)
+    if (!themeLiquid.ok) {
+        throw new Error(`Theme liquid read failed: ${themeLiquid.status}`)
+    }
+
+    const updated = params.enabled
+        ? upsertThemeLiquidInjection(themeLiquid.data.value, assetFilename)
+        : removeThemeLiquidInjection(themeLiquid.data.value)
+    if (!updated.updated && (updated as any).error) {
+        throw new Error((updated as any).error)
+    }
+    if (updated.updated) {
+        const putThemeLiquid = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey, updated.next)
+        if (!putThemeLiquid.ok) {
+            throw new Error(`Theme liquid update failed: ${putThemeLiquid.status}`)
+        }
+    }
+
+    console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId: params.storeId, enabled: params.enabled, themeId })
+}
+
+export async function PATCH(
+    request: Request,
+    { params }: { params: Promise<{ storeId: string }> }
+) {
+    try {
+        const session = await auth()
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+
+        const { storeId } = await params
+        if (!storeId) {
+            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
+        }
+
+        const payload = await request.json().catch(() => ({}))
+        const data: Record<string, unknown> = (payload && typeof payload === "object") ? payload : {}
+
+        // Verify store belongs to the user
+        const store = await prisma.store.findFirst({
+            where: {
+                id: storeId,
+                userId: session.user.id
             }
-        } catch (scriptError) {
-            console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", scriptError)
+        })
+
+        if (!store) {
+            return NextResponse.json({ message: "Store not found" }, { status: 404 })
+        }
+
+        const nextEnabled = typeof data.storefrontChatEnabled === "boolean"
+            ? data.storefrontChatEnabled
+            : store.storefrontChatEnabled
+
+        const nextChatName = sanitizeShortText(data.storefrontChatName, store.storefrontChatName || DEFAULT_CHAT_NAME, 50)
+        const nextTagline = sanitizeShortText(data.storefrontChatTagline, store.storefrontChatTagline || DEFAULT_TAGLINE, 90)
+        const nextBrandColor = sanitizeColor(data.storefrontChatBrandColor ?? store.storefrontChatBrandColor)
+        const nextFont = sanitizeFont(data.storefrontChatFontFamily ?? store.storefrontChatFontFamily)
+        const nextLogoUrl = sanitizeLogoUrl(data.storefrontChatLogoUrl ?? store.storefrontChatLogoUrl)
+
+        const updatedStore = await prisma.store.update({
+            where: { id: storeId },
+            data: {
+                storefrontChatEnabled: nextEnabled,
+                storefrontChatName: nextChatName,
+                storefrontChatTagline: nextTagline,
+                storefrontChatBrandColor: nextBrandColor,
+                storefrontChatFontFamily: nextFont,
+                storefrontChatLogoUrl: nextLogoUrl,
+            },
+            select: {
+                storefrontChatEnabled: true,
+                storefrontChatName: true,
+                storefrontChatTagline: true,
+                storefrontChatBrandColor: true,
+                storefrontChatFontFamily: true,
+                storefrontChatLogoUrl: true,
+            }
+        })
+
+        // Explicit behavior change:
+        // - Enable: save only (no auto inject).
+        // - Disable: remove snippet immediately to hard-stop storefront widget.
+        if (!updatedStore.storefrontChatEnabled) {
+            try {
+                await syncStorefrontTheme({
+                    storeId,
+                    enabled: false,
+                    shopifyDomain: store.shopifyDomain,
+                    shopifyAccessToken: store.shopifyAccessToken,
+                    chatName: updatedStore.storefrontChatName || DEFAULT_CHAT_NAME,
+                    tagline: updatedStore.storefrontChatTagline || DEFAULT_TAGLINE,
+                    brandColor: updatedStore.storefrontChatBrandColor || DEFAULT_BRAND_COLOR,
+                    fontFamily: updatedStore.storefrontChatFontFamily || DEFAULT_FONT,
+                    logoUrl: updatedStore.storefrontChatLogoUrl || null,
+                })
+            } catch (scriptError) {
+                console.error("[STOREFRONT_CHAT_THEME_SYNC_ERR]", scriptError)
+            }
         }
 
         return NextResponse.json({
             success: true,
-            storefrontChatEnabled
+            storefrontChatEnabled: updatedStore.storefrontChatEnabled,
+            storefrontChatName: updatedStore.storefrontChatName,
+            storefrontChatTagline: updatedStore.storefrontChatTagline,
+            storefrontChatBrandColor: updatedStore.storefrontChatBrandColor,
+            storefrontChatFontFamily: updatedStore.storefrontChatFontFamily,
+            storefrontChatLogoUrl: updatedStore.storefrontChatLogoUrl,
         })
     } catch (error) {
         console.error("Error updating store settings:", error)
@@ -405,5 +572,68 @@ export async function PATCH(
             { message: "Failed to update store setting" },
             { status: 500 }
         )
+    }
+}
+
+/**
+ * POST /api/stores/[storeId]
+ * Inject storefront chat snippet + JS asset using saved customization.
+ */
+export async function POST(
+    _request: Request,
+    { params }: { params: Promise<{ storeId: string }> }
+) {
+    try {
+        const session = await auth()
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+
+        const { storeId } = await params
+        if (!storeId) {
+            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
+        }
+
+        const store = await prisma.store.findFirst({
+            where: {
+                id: storeId,
+                userId: session.user.id,
+            },
+            select: {
+                id: true,
+                storefrontChatEnabled: true,
+                storefrontChatName: true,
+                storefrontChatTagline: true,
+                storefrontChatBrandColor: true,
+                storefrontChatFontFamily: true,
+                storefrontChatLogoUrl: true,
+                shopifyDomain: true,
+                shopifyAccessToken: true,
+            },
+        })
+
+        if (!store) {
+            return NextResponse.json({ message: "Store not found" }, { status: 404 })
+        }
+        if (!store.storefrontChatEnabled) {
+            return NextResponse.json({ message: "Enable storefront chat first" }, { status: 400 })
+        }
+
+        await syncStorefrontTheme({
+            storeId: store.id,
+            enabled: true,
+            shopifyDomain: store.shopifyDomain,
+            shopifyAccessToken: store.shopifyAccessToken,
+            chatName: sanitizeShortText(store.storefrontChatName, DEFAULT_CHAT_NAME, 50),
+            tagline: sanitizeShortText(store.storefrontChatTagline, DEFAULT_TAGLINE, 90),
+            brandColor: sanitizeColor(store.storefrontChatBrandColor),
+            fontFamily: sanitizeFont(store.storefrontChatFontFamily),
+            logoUrl: sanitizeLogoUrl(store.storefrontChatLogoUrl),
+        })
+
+        return NextResponse.json({ success: true })
+    } catch (error) {
+        console.error("[STOREFRONT_CHAT_INJECT_ERR]", error)
+        return NextResponse.json({ message: "Failed to inject storefront chat" }, { status: 500 })
     }
 }

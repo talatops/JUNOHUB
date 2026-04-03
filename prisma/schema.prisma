@@ -109,6 +109,11 @@ model Store {
 
   // Customer-facing storefront widget (floating chat) enablement.
   storefrontChatEnabled Boolean @default(false)
+  storefrontChatName String?
+  storefrontChatTagline String?
+  storefrontChatBrandColor String?
+  storefrontChatFontFamily String?
+  storefrontChatLogoUrl String?
   
   // Relations
   connections      Connection[]

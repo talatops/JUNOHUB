@@ -26,6 +26,11 @@ export async function GET() {
                 onboardingComplete: true,
                 isActive: true,
                 storefrontChatEnabled: true,
+                storefrontChatName: true,
+                storefrontChatTagline: true,
+                storefrontChatBrandColor: true,
+                storefrontChatFontFamily: true,
+                storefrontChatLogoUrl: true,
                 createdAt: true
             },
             orderBy: {

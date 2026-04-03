@@ -73,3 +73,38 @@ export async function uploadSupplierProductImage(params: {
     return { key, url }
 }
 
+export async function uploadStorefrontChatLogo(params: {
+    vendorId: string
+    fileBuffer: Buffer
+    contentType?: string
+    originalName?: string
+}) {
+    if (!BUCKET) {
+        throw new Error("S3 bucket is not configured for storefront chat logo uploads")
+    }
+
+    const extensionFromType =
+        params.contentType && params.contentType.includes("/")
+            ? params.contentType.split("/")[1]
+            : undefined
+
+    const ext =
+        (params.originalName && params.originalName.split(".").pop()) ||
+        extensionFromType ||
+        "bin"
+
+    const key = `storefront-chat-logos/${params.vendorId}/${crypto.randomUUID()}.${ext}`
+
+    const command = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: params.fileBuffer,
+        ContentType: params.contentType
+    })
+
+    await s3Client.send(command)
+
+    const url = `https://${BUCKET}.s3.${REGION}.amazonaws.com/${key}`
+    return { key, url }
+}
+
