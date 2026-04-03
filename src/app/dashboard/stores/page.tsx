@@ -5,6 +5,7 @@ import { Store, Plus, Check, Loader2, AlertCircle, Building2, Trash2 } from "luc
 import AddStoreModal from "@/components/AddStoreModal"
 import DeleteStoreModal from "@/components/DeleteStoreModal"
 import StorefrontChatCustomizeModal, { type StorefrontChatCustomization } from "@/components/StorefrontChatCustomizeModal"
+import { useTheme } from "@/components/ThemeProvider"
 
 interface StoreData {
     id: string
@@ -38,6 +39,8 @@ export default function StoresPage() {
     const [customizeStoreId, setCustomizeStoreId] = useState<string | null>(null)
     const [injectingStoreId, setInjectingStoreId] = useState<string | null>(null)
     const [isAddModalOpen, setIsAddModalOpen] = useState(false)
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     /*
      * Alignment Fix Details:
      * - Use React `createPortal` to render the modal backdrop and content at the end of `document.body`.
@@ -261,17 +264,32 @@ export default function StoresPage() {
                     {stores.map((store) => (
                         <div
                             key={store.id}
-                            className={`bg-white/5 backdrop-blur-xl p-4 md:p-6 rounded-xl md:rounded-2xl border transition-all group relative ${store.isActive
-                                ? "border-indigo-500/30 bg-indigo-500/10"
-                                : "border-white/10 hover:bg-white/[0.07]"
-                                }`}
+                            className={`backdrop-blur-xl p-4 md:p-6 rounded-xl md:rounded-2xl border transition-all group relative ${
+                                store.isActive
+                                    ? isLight
+                                        ? "border-indigo-600/25 bg-indigo-600/5"
+                                        : "border-indigo-500/30 bg-indigo-500/10"
+                                    : isLight
+                                      ? "border-slate-200/70 bg-white/80 hover:bg-white/95"
+                                      : "border-white/10 hover:bg-white/[0.07]"
+                            }`}
                         >
                             <div className="flex items-start justify-between mb-3 md:mb-4">
-                                <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-indigo-500/20 border border-indigo-400/20 flex items-center justify-center shrink-0">
-                                    <Store className="w-5 h-5 md:w-6 md:h-6 text-indigo-400" />
+                                <div
+                                    className={`w-10 h-10 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center shrink-0 ${
+                                        isLight
+                                            ? "bg-indigo-100 border border-indigo-200"
+                                            : "bg-indigo-500/20 border border-indigo-400/20"
+                                    }`}
+                                >
+                                    <Store className={`w-5 h-5 md:w-6 md:h-6 ${isLight ? "text-indigo-700" : "text-indigo-400"}`} />
                                 </div>
                                 {store.isActive && (
-                                    <span className="px-2 md:px-2.5 py-1 bg-indigo-500/30 text-indigo-300 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border border-indigo-400/20">
+                                    <span
+                                        className={`px-2 md:px-2.5 py-1 rounded-full text-[9px] md:text-[10px] font-black uppercase tracking-wider flex items-center gap-1 border ${
+                                            isLight ? "bg-indigo-600/10 text-indigo-700 border-indigo-600/20" : "bg-indigo-500/30 text-indigo-300 border-indigo-400/20"
+                                        }`}
+                                    >
                                         <Check className="w-2.5 h-2.5 md:w-3 md:h-3" />
                                         Active
                                     </span>
@@ -279,17 +297,23 @@ export default function StoresPage() {
                             </div>
 
                             <div className="space-y-1.5 md:space-y-2 mb-3 md:mb-4">
-                                <h3 className="text-base md:text-lg font-black text-white truncate">{store.businessName}</h3>
-                                <p className="text-xs text-slate-400 font-medium truncate">{store.shopifyDomain}</p>
-                                <p className="text-[10px] text-slate-500">
+                                <h3 className={`text-base md:text-lg font-black truncate ${isLight ? "text-slate-900" : "text-white"}`}>
+                                    {store.businessName}
+                                </h3>
+                                <p className={`text-xs font-medium truncate ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                                    {store.shopifyDomain}
+                                </p>
+                                <p className={`text-[10px] ${isLight ? "text-slate-500" : "text-slate-500"}`}>
                                     Connected {new Date(store.createdAt).toLocaleDateString()}
                                 </p>
                             </div>
 
                             <div className="flex items-center justify-between gap-3 mb-3">
                                 <div className="min-w-0">
-                                    <p className="text-xs md:text-sm text-white font-bold truncate">Storefront Chat (Customers)</p>
-                                    <p className="text-[10px] md:text-[11px] text-slate-400">
+                                    <p className={`text-xs md:text-sm font-bold truncate ${isLight ? "text-slate-900" : "text-white"}`}>
+                                        Storefront Chat (Customers)
+                                    </p>
+                                    <p className={`text-[10px] md:text-[11px] ${isLight ? "text-slate-600" : "text-slate-400"}`}>
                                         Show chat widget on the storefront
                                     </p>
                                 </div>
@@ -313,7 +337,11 @@ export default function StoresPage() {
                                         <button
                                             onClick={() => handleSwitchStore(store.id)}
                                             disabled={switching === store.id}
-                                            className="flex-1 h-9 md:h-10 rounded-xl bg-white/10 text-white text-xs md:text-sm font-bold hover:bg-white/15 border border-white/10 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                            className={`flex-1 h-9 md:h-10 rounded-xl text-xs md:text-sm font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 ${
+                                                isLight
+                                                    ? "bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-600/20"
+                                                    : "bg-white/10 text-white hover:bg-white/15 border border-white/10"
+                                            }`}
                                         >
                                             {switching === store.id ? (
                                                 <>
@@ -328,18 +356,28 @@ export default function StoresPage() {
                                     <button
                                         onClick={() => openCustomize(store.id)}
                                         disabled={!store.storefrontChatEnabled || injectingStoreId === store.id}
-                                        className="h-9 md:h-10 px-3 rounded-xl bg-indigo-500/20 text-indigo-200 text-xs font-bold hover:bg-indigo-500/30 border border-indigo-400/30 transition-all disabled:opacity-50"
+                                        className={`h-9 md:h-10 px-3 rounded-xl text-xs font-bold transition-all disabled:opacity-50 ${
+                                            isLight
+                                                ? "bg-indigo-700 text-white hover:bg-indigo-800 border border-indigo-600/25"
+                                                : "bg-indigo-500/20 text-indigo-200 hover:bg-indigo-500/30 border border-indigo-400/30"
+                                        }`}
                                     >
                                         {injectingStoreId === store.id ? "Injecting..." : "Customize"}
                                     </button>
                                 </div>
                                 <button
                                     onClick={() => handleDeleteClick(store)}
-                                    className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-white/10 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shrink-0"
+                                    className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 shrink-0 ${
+                                        isLight ? "bg-red-50 border border-red-200 hover:bg-red-100 hover:border-red-300" : "bg-white/10 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30"
+                                    }`}
                                     title="Delete store"
                                     aria-label="Delete store"
                                 >
-                                    <Trash2 className="w-4 h-4 md:w-5 md:h-5 text-slate-400 group-hover:text-red-400 transition-colors" />
+                                    <Trash2
+                                        className={`w-4 h-4 md:w-5 md:h-5 ${
+                                            isLight ? "text-slate-500 group-hover:text-red-600" : "text-slate-400 group-hover:text-red-400"
+                                        } transition-colors`}
+                                    />
                                 </button>
                             </div>
                         </div>

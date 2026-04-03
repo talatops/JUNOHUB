@@ -146,6 +146,9 @@ function sanitizeLogoUrl(value: unknown) {
     if (typeof value !== "string") return null
     const v = value.trim()
     if (!v) return null
+    if (v.startsWith("/") && !v.includes("..")) {
+        return v.slice(0, 500)
+    }
     try {
         const parsed = new URL(v)
         if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null
@@ -153,6 +156,19 @@ function sanitizeLogoUrl(value: unknown) {
     } catch {
         return null
     }
+}
+
+/** Storefront script runs on Shopify origin; relative /uploads/... must become absolute JUNO app URLs. */
+function resolveLogoUrlForInject(appBaseUrl: string, logoUrl: string | null) {
+    if (!logoUrl) return null
+    const v = logoUrl.trim()
+    if (!v) return null
+    if (/^https?:\/\//i.test(v)) return v
+    if (v.startsWith("/") && !v.includes("..")) {
+        const base = appBaseUrl.replace(/\/$/, "")
+        return `${base}${v}`
+    }
+    return null
 }
 
 function buildStorefrontScript(params: {
@@ -332,18 +348,33 @@ function buildStorefrontScript(params: {
       btn.style.width = "56px";
       btn.style.height = "56px";
       btn.style.borderRadius = "16px";
-      btn.style.border = "0";
       btn.style.cursor = "pointer";
       btn.style.boxShadow = "0 12px 28px rgba(0,0,0,0.20)";
-      btn.style.background = brandColor || "#4f46e5";
-      btn.style.color = "#fff";
       btn.style.display = "flex";
       btn.style.alignItems = "center";
       btn.style.justifyContent = "center";
       btn.style.fontFamily = fontFamily;
       btn.style.fontWeight = "800";
       btn.style.letterSpacing = "-0.02em";
-      btn.innerHTML = "Chat";
+      btn.style.padding = "0";
+      btn.style.overflow = "hidden";
+      if (logoUrl) {
+        btn.style.background = "#ffffff";
+        btn.style.border = "2px solid " + (brandColor || "#4f46e5");
+        var fabImg = document.createElement("img");
+        fabImg.src = logoUrl;
+        fabImg.alt = chatName || "Chat";
+        fabImg.style.width = "36px";
+        fabImg.style.height = "36px";
+        fabImg.style.objectFit = "contain";
+        fabImg.style.display = "block";
+        btn.appendChild(fabImg);
+      } else {
+        btn.style.border = "0";
+        btn.style.background = brandColor || "#4f46e5";
+        btn.style.color = "#fff";
+        btn.innerHTML = "Chat";
+      }
       btn.addEventListener("click", function () { openPanel(); });
       container.appendChild(btn);
     }
@@ -447,7 +478,7 @@ async function syncStorefrontTheme(params: {
         tagline: params.tagline,
         brandColor: params.brandColor,
         fontFamily: params.fontFamily,
-        logoUrl: params.logoUrl,
+        logoUrl: resolveLogoUrlForInject(appBaseUrl, params.logoUrl),
     })
 
     const putAsset = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, assetKey, js)

@@ -179,16 +179,6 @@ export default function StorefrontChatWidgetPage() {
 
     return (
         <div className="w-screen h-screen overflow-hidden bg-white text-slate-900 flex flex-col">
-            <div className="p-3 border-b border-slate-200 bg-white flex items-center gap-3 flex-shrink-0">
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center text-indigo-700">
-                    <MessageSquare className="w-5 h-5" />
-                </div>
-                <div className="min-w-0">
-                    <p className="font-black text-sm truncate">JUNO Chat</p>
-                    <p className="text-[11px] text-slate-500">Ask about products</p>
-                </div>
-            </div>
-
             <div className="flex-1 overflow-y-auto p-4 bg-gradient-to-b from-white to-slate-50">
                 {sendError ? (
                     <div className="mb-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs font-medium">
