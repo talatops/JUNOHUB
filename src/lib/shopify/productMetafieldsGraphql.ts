@@ -8,15 +8,25 @@ export type CachedShopifyMetafield = {
     type: string
 }
 
+type GraphQLMetaobjectRef = {
+    displayName?: string | null
+} | null
+
+type GraphQLMetafieldNode = {
+    namespace?: string
+    key?: string
+    value?: string | null
+    type?: string
+    reference?: GraphQLMetaobjectRef
+    references?: {
+        nodes?: GraphQLMetaobjectRef[]
+    } | null
+}
+
 type GraphQLProductNode = {
     legacyResourceId?: string | number | null
     metafields?: {
-        nodes?: Array<{
-            namespace?: string
-            key?: string
-            value?: string | null
-            type?: string
-        } | null> | null
+        nodes?: Array<GraphQLMetafieldNode | null> | null
     } | null
 } | null
 
@@ -28,6 +38,39 @@ type GraphQLResponse = {
 const GRAPHQL_API_VERSION = "2024-10"
 /** Keep batches small to stay under GraphQL cost limits (many metafields per product). */
 const PRODUCT_IDS_PER_REQUEST = 35
+/** Max entries per list.metaobject_reference (taxonomy lists are usually small). */
+const METAFIELD_REFERENCES_FIRST = 50
+
+function displayNameFromRef(ref: GraphQLMetaobjectRef): string | undefined {
+    if (!ref || typeof ref !== "object") return undefined
+    const d = ref.displayName
+    if (typeof d !== "string") return undefined
+    const t = d.trim()
+    return t.length > 0 ? t : undefined
+}
+
+/**
+ * Shopify stores metaobject metafields as GID(s) in `value`. Replace with human-readable
+ * labels from GraphQL `reference` / `references` when present.
+ */
+function resolvedMetafieldValue(n: GraphQLMetafieldNode, raw: string | null, type: string): string | null {
+    if (raw === null) return null
+
+    if (type === "metaobject_reference") {
+        const label = displayNameFromRef(n.reference ?? null)
+        return label ?? raw
+    }
+
+    if (type === "list.metaobject_reference") {
+        const refNodes = n.references?.nodes
+        if (!Array.isArray(refNodes) || refNodes.length === 0) return raw
+        const labels = refNodes.map((r) => displayNameFromRef(r)).filter((x): x is string => Boolean(x))
+        if (labels.length === 0) return raw
+        return JSON.stringify(labels)
+    }
+
+    return raw
+}
 
 function toRows(metafields: NonNullable<GraphQLProductNode>["metafields"]): CachedShopifyMetafield[] {
     const nodes = metafields?.nodes
@@ -35,11 +78,13 @@ function toRows(metafields: NonNullable<GraphQLProductNode>["metafields"]): Cach
     const out: CachedShopifyMetafield[] = []
     for (const n of nodes) {
         if (!n || typeof n.namespace !== "string" || typeof n.key !== "string") continue
+        const type = typeof n.type === "string" ? n.type : "unknown"
+        const raw = n.value ?? null
         out.push({
             namespace: n.namespace,
             key: n.key,
-            value: n.value ?? null,
-            type: typeof n.type === "string" ? n.type : "unknown",
+            value: resolvedMetafieldValue(n, raw, type),
+            type,
         })
     }
     return out
@@ -76,6 +121,18 @@ export async function fetchProductMetafieldsMap(
                                 key
                                 value
                                 type
+                                reference {
+                                    ... on Metaobject {
+                                        displayName
+                                    }
+                                }
+                                references(first: ${METAFIELD_REFERENCES_FIRST}) {
+                                    nodes {
+                                        ... on Metaobject {
+                                            displayName
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
