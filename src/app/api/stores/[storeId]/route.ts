@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { auth } from "@/auth"
+import { auth } from "@/auth.vendor"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { storeSelectPatchStorefrontAi } from "@/lib/prisma/storeSelects"
@@ -547,17 +547,43 @@ export async function GET(
             return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
         }
 
-        const store = await prisma.store.findFirst({
-            where: { id: storeId, userId: session.user.id },
-            select: {
-                id: true,
-                businessName: true,
-                categoryMetadetailsEnabled: true,
-                aiModules: true,
-                modulePolicies: true,
-                sharedFieldAnswers: true,
-            },
-        })
+        type StoreGetRow = {
+            id: string
+            businessName: string
+            categoryMetadetailsEnabled: boolean
+            aiModules: unknown
+            modulePolicies?: unknown
+            sharedFieldAnswers?: unknown
+        }
+
+        let store: StoreGetRow | null = null
+        try {
+            store = await prisma.store.findFirst({
+                where: { id: storeId, userId: session.user.id },
+                select: {
+                    id: true,
+                    businessName: true,
+                    categoryMetadetailsEnabled: true,
+                    aiModules: true,
+                    modulePolicies: true,
+                    sharedFieldAnswers: true,
+                },
+            })
+        } catch (firstErr) {
+            console.warn(
+                "[STORE_GET] full select failed (run migrations if modulePolicies/sharedFieldAnswers are missing); retrying minimal",
+                firstErr,
+            )
+            store = await prisma.store.findFirst({
+                where: { id: storeId, userId: session.user.id },
+                select: {
+                    id: true,
+                    businessName: true,
+                    categoryMetadetailsEnabled: true,
+                    aiModules: true,
+                },
+            })
+        }
 
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
@@ -568,8 +594,8 @@ export async function GET(
             businessName: store.businessName,
             categoryMetadetailsEnabled: store.categoryMetadetailsEnabled,
             aiModules: store.aiModules,
-            modulePolicies: parseModulePoliciesJson(store.modulePolicies),
-            sharedFieldAnswers: parseSharedFieldAnswersJson(store.sharedFieldAnswers),
+            modulePolicies: parseModulePoliciesJson(store.modulePolicies ?? null),
+            sharedFieldAnswers: parseSharedFieldAnswersJson(store.sharedFieldAnswers ?? null),
         })
     } catch (error) {
         console.error("Error reading store settings:", error)

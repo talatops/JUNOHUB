@@ -128,8 +128,18 @@ export default function JunoEngineModulesPage() {
 
     const load = useCallback(async (storeId: string) => {
         const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}`)
-        if (!res.ok) throw new Error("Failed to load store settings")
-        const data = (await res.json()) as {
+        const raw = await res.json().catch(() => ({}))
+        const errBody = raw as { message?: string }
+        if (!res.ok) {
+            throw new Error(
+                typeof errBody.message === "string" && errBody.message.trim()
+                    ? errBody.message
+                    : res.status === 401
+                      ? "Sign in again to load store settings."
+                      : "Failed to load store settings",
+            )
+        }
+        const data = raw as {
             aiModules?: unknown
             sharedFieldAnswers?: unknown
             categoryMetadetailsEnabled?: boolean
@@ -852,7 +862,7 @@ export default function JunoEngineModulesPage() {
                     >
                         Widget appearance:{" "}
                         <Link
-                            href="/dashboard/storefront-chat"
+                            href="/dashboard/juno-engine/storefront-chat"
                             className="font-semibold text-indigo-500 hover:underline"
                         >
                             Storefront Chat Inbox

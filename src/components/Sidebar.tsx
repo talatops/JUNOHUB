@@ -16,6 +16,7 @@ import {
     Mail,
     Layers,
     HelpCircle,
+    MessageCircle,
     Store
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -77,6 +78,11 @@ const routes = [
         subRoutes: [
             { label: "Knowledge Base", href: "/dashboard/juno-engine/knowledge-base", icon: HelpCircle },
             { label: "Modules", href: "/dashboard/juno-engine/modules", icon: Layers },
+            {
+                label: "Storefront Chat",
+                href: "/dashboard/juno-engine/storefront-chat",
+                icon: MessageCircle,
+            },
             { label: "Tickets", href: "/dashboard/juno-engine/tickets", icon: Ticket },
             { label: "Flagged Emails", href: "/dashboard/juno-engine/flagged-email", icon: Flag },
             { label: "Gmail", href: "/dashboard/juno-engine/gmail-connect", icon: Mail },

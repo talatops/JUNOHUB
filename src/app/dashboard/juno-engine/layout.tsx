@@ -6,7 +6,8 @@ import {
     Flag,
     Mail,
     Layers,
-    HelpCircle
+    HelpCircle,
+    MessageCircle,
 } from "lucide-react"
 
 export default function JunoEngineLayout({
@@ -27,6 +28,11 @@ export default function JunoEngineLayout({
             label: "Modules",
             href: "/dashboard/juno-engine/modules",
             icon: Layers
+        },
+        {
+            label: "Storefront Chat",
+            href: "/dashboard/juno-engine/storefront-chat",
+            icon: MessageCircle
         },
         {
             label: "Tickets",
