@@ -115,6 +115,7 @@ export function LandingFooter() {
                                     name="email"
                                     type="email"
                                     required
+                                    maxLength={254}
                                     placeholder="Enter your email"
                                     className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-indigo-500 transition-colors flex-1"
                                 />

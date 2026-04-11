@@ -30,13 +30,33 @@ function compact(value: string, max = 420) {
     return `${value.slice(0, max - 1)}...`
 }
 
+function metafieldsForText(metafields: unknown): string {
+    if (!Array.isArray(metafields) || metafields.length === 0) return ""
+    const parts: string[] = []
+    for (const row of metafields) {
+        if (!row || typeof row !== "object") continue
+        const r = row as { namespace?: string; key?: string; value?: string | null }
+        const k = r.key
+        const v = r.value
+        if (!k || v === null || v === undefined || String(v).trim() === "") continue
+        const ns = r.namespace ? `${r.namespace}.` : ""
+        parts.push(`${ns}${k}: ${String(v).slice(0, 200)}`)
+    }
+    return parts.join(" | ")
+}
+
 function productPreview(product: any) {
     const variants = Array.isArray(product?.variants) ? product.variants : []
     const firstVariant = variants[0] || {}
     const price = firstVariant?.price ?? null
     const sku = firstVariant?.sku ?? null
+    const weight =
+        firstVariant?.weight !== undefined && firstVariant?.weight !== null
+            ? `${String(firstVariant.weight)}${firstVariant.weight_unit ? ` ${firstVariant.weight_unit}` : ""}`
+            : ""
     const inventory = firstVariant?.inventory_quantity ?? null
     const status = product?.status || "unknown"
+    const mfLine = metafieldsForText(product?.metafields)
 
     const bits = [
         `Title: ${product?.title || "Unknown"}`,
@@ -45,7 +65,9 @@ function productPreview(product: any) {
         `Status: ${status}`,
         price !== null && price !== undefined ? `Price: ${String(price)}` : "",
         sku ? `SKU: ${String(sku)}` : "",
+        weight ? `Weight: ${weight}` : "",
         inventory !== null && inventory !== undefined ? `Inventory: ${String(inventory)}` : "",
+        mfLine ? `Details: ${mfLine}` : "",
     ].filter(Boolean)
 
     return bits.join(" | ")
@@ -99,12 +121,13 @@ export async function getBlendedStorefrontContext(params: {
             status: true,
             variants: true,
             images: true,
+            metafields: true,
         },
     })
 
     const rankedProducts: RetrievedContextItem[] = (products || [])
         .map((prod: any) => {
-            const text = `${prod?.title || ""} ${prod?.vendor || ""} ${prod?.productType || ""}`
+            const text = `${prod?.title || ""} ${prod?.vendor || ""} ${prod?.productType || ""} ${metafieldsForText(prod?.metafields)}`
             const score = scoreByTerms(text, terms)
             return {
                 source: "PRODUCT",

@@ -3,6 +3,8 @@ import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
+import { productSyncRequestSchema } from "@/lib/api-schemas/business"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * GET /api/products/sync
@@ -82,15 +84,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const body = await req.json()
-        const { shopifyProductId, shopifyProductTitle, shopifyProductData, supplierId } = body
-
-        if (!shopifyProductId || !supplierId || !shopifyProductTitle) {
-            return NextResponse.json(
-                { message: "Product ID, title, and supplier ID are required" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = productSyncRequestSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { shopifyProductId, shopifyProductTitle, shopifyProductData, supplierId } = parsed.data
 
         // Get vendor's active store
         const vendorStore = await prisma.store.findFirst({
@@ -150,7 +149,7 @@ export async function POST(req: Request) {
                 storeId_supplierId_shopifyProductId: {
                     storeId: vendorStore.id,
                     supplierId: supplier.id,
-                    shopifyProductId: shopifyProductId.toString()
+                    shopifyProductId
                 }
             }
         })
@@ -211,7 +210,7 @@ export async function POST(req: Request) {
             data: {
                 storeId: vendorStore.id,
                 supplierId: supplier.id,
-                shopifyProductId: shopifyProductId.toString(),
+                shopifyProductId,
                 shopifyProductTitle,
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 shopifyProductData: shopifyProductData ? (shopifyProductData as any) : undefined,

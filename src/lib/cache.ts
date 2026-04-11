@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client"
 import { prisma } from "./prisma"
+import { fetchProductMetafieldsMap } from "@/lib/shopify/productMetafieldsGraphql"
 
 /** Minimal Shopify API shapes for cache updates */
 interface ShopifyProductRecord {
@@ -130,6 +131,28 @@ export async function getCachedCustomers(storeId: string) {
  */
 export async function updateProductCache(storeId: string, products: ShopifyProductRecord[]) {
     try {
+        const store = await prisma.store.findUnique({
+            where: { id: storeId },
+            select: { shopifyDomain: true, shopifyAccessToken: true },
+        })
+
+        let metafieldsByProductId = new Map<string, Prisma.InputJsonValue>()
+        if (store?.shopifyDomain && store?.shopifyAccessToken && products.length > 0) {
+            try {
+                const ids = products.map((p) => p.id)
+                const map = await fetchProductMetafieldsMap(
+                    store.shopifyDomain,
+                    store.shopifyAccessToken,
+                    ids,
+                )
+                for (const [pid, rows] of map) {
+                    metafieldsByProductId.set(pid, rows as Prisma.InputJsonValue)
+                }
+            } catch (e) {
+                console.error("[updateProductCache] Metafields GraphQL fetch failed:", e)
+            }
+        }
+
         // Delete existing cached products
         await prisma.cachedProduct.deleteMany({
             where: { storeId }
@@ -144,7 +167,9 @@ export async function updateProductCache(storeId: string, products: ShopifyProdu
             productType: product.product_type || null,
             status: product.status || null,
             variants: (product.variants || []) as import("@prisma/client").Prisma.InputJsonValue,
-            images: (product.images || []) as import("@prisma/client").Prisma.InputJsonValue
+            images: (product.images || []) as import("@prisma/client").Prisma.InputJsonValue,
+            metafields: (metafieldsByProductId.get(product.id.toString()) ??
+                []) as Prisma.InputJsonValue,
         }))
 
         await prisma.cachedProduct.createMany({
@@ -398,6 +423,28 @@ export async function updateCustomerCache(storeId: string, customers: ShopifyCus
  * Update a single product in cache (for webhook updates)
  */
 export async function updateSingleProduct(storeId: string, product: ShopifyProductRecord) {
+    const store = await prisma.store.findUnique({
+        where: { id: storeId },
+        select: { shopifyDomain: true, shopifyAccessToken: true },
+    })
+
+    let metafieldsPatch: Prisma.InputJsonValue | undefined
+    if (store?.shopifyDomain && store?.shopifyAccessToken) {
+        try {
+            const map = await fetchProductMetafieldsMap(
+                store.shopifyDomain,
+                store.shopifyAccessToken,
+                [product.id],
+            )
+            const rows = map.get(product.id.toString())
+            if (rows !== undefined) {
+                metafieldsPatch = rows as Prisma.InputJsonValue
+            }
+        } catch (e) {
+            console.error("[updateSingleProduct] Metafields fetch failed:", e)
+        }
+    }
+
     await prisma.cachedProduct.upsert({
         where: {
             shopifyProductId_storeId: {
@@ -414,6 +461,7 @@ export async function updateSingleProduct(storeId: string, product: ShopifyProdu
             status: product.status || null,
             variants: (product.variants || []) as Prisma.InputJsonValue,
             images: (product.images || []) as Prisma.InputJsonValue,
+            metafields: (metafieldsPatch ?? []) as Prisma.InputJsonValue,
             lastSyncedAt: new Date()
         },
         update: {
@@ -423,6 +471,7 @@ export async function updateSingleProduct(storeId: string, product: ShopifyProdu
             status: product.status || null,
             variants: (product.variants || []) as Prisma.InputJsonValue,
             images: (product.images || []) as Prisma.InputJsonValue,
+            ...(metafieldsPatch !== undefined ? { metafields: metafieldsPatch } : {}),
             lastSyncedAt: new Date()
         }
     })

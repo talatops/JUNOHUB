@@ -6,6 +6,7 @@ import { Mail, Lock, Loader2, User, ShoppingBag, Truck } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import Image from "next/image"
+import { authRegisterSchema } from "@/lib/validation"
 
 function SignupFormContent() {
     const [loading, setLoading] = useState(false)
@@ -42,6 +43,13 @@ function SignupFormContent() {
         const name = formData.get("name") as string
         const email = formData.get("email") as string
         const password = formData.get("password") as string
+
+        const precheck = authRegisterSchema.safeParse({ name, email, password, role })
+        if (!precheck.success) {
+            setError(precheck.error.issues[0]?.message ?? "Please check your details")
+            setLoading(false)
+            return
+        }
 
         try {
             const res = await fetch("/api/auth/register", {
@@ -151,6 +159,7 @@ function SignupFormContent() {
                                 name="name"
                                 type="text"
                                 required
+                                maxLength={100}
                                 placeholder="John Carter"
                                 className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all duration-200"
                             />
@@ -167,6 +176,7 @@ function SignupFormContent() {
                                 name="email"
                                 type="email"
                                 required
+                                maxLength={254}
                                 placeholder="john@example.com"
                                 className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all duration-200"
                             />
@@ -183,6 +193,7 @@ function SignupFormContent() {
                                 name="password"
                                 type="password"
                                 required
+                                maxLength={128}
                                 placeholder="••••••••"
                                 className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-11 pr-4 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50 transition-all duration-200"
                             />

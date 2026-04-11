@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { supplierConnectionStatusSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 /**
  * GET /api/supplier/vendors/[connectionId]
@@ -81,14 +82,12 @@ export async function PUT(
         }
 
         const { connectionId } = await params
-        const { status } = await req.json()
-
-        if (!status || !["CONNECTED", "REJECTED"].includes(status)) {
-            return NextResponse.json(
-                { message: "Valid status (CONNECTED or REJECTED) is required" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierConnectionStatusSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { status } = parsed.data
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({

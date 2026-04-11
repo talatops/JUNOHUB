@@ -1,0 +1,114 @@
+import { cleanShopifyDomain } from "@/lib/shopify/adminPing"
+
+/** One metafield row stored in CachedProduct.metafields JSON (category attributes + custom). */
+export type CachedShopifyMetafield = {
+    namespace: string
+    key: string
+    value: string | null
+    type: string
+}
+
+type GraphQLProductNode = {
+    legacyResourceId?: string | number | null
+    metafields?: {
+        nodes?: Array<{
+            namespace?: string
+            key?: string
+            value?: string | null
+            type?: string
+        } | null> | null
+    } | null
+} | null
+
+type GraphQLResponse = {
+    data?: { nodes?: GraphQLProductNode[] | null }
+    errors?: Array<{ message?: string }>
+}
+
+const GRAPHQL_API_VERSION = "2024-10"
+/** Keep batches small to stay under GraphQL cost limits (many metafields per product). */
+const PRODUCT_IDS_PER_REQUEST = 35
+
+function toRows(metafields: NonNullable<GraphQLProductNode>["metafields"]): CachedShopifyMetafield[] {
+    const nodes = metafields?.nodes
+    if (!Array.isArray(nodes)) return []
+    const out: CachedShopifyMetafield[] = []
+    for (const n of nodes) {
+        if (!n || typeof n.namespace !== "string" || typeof n.key !== "string") continue
+        out.push({
+            namespace: n.namespace,
+            key: n.key,
+            value: n.value ?? null,
+            type: typeof n.type === "string" ? n.type : "unknown",
+        })
+    }
+    return out
+}
+
+/**
+ * Fetches product metafields via Admin GraphQL (`nodes` query).
+ * Covers category / taxonomy metafields (often `shopify.*` keys) shown in Shopify admin.
+ */
+export async function fetchProductMetafieldsMap(
+    shopifyDomain: string,
+    accessToken: string,
+    productNumericIds: number[],
+): Promise<Map<string, CachedShopifyMetafield[]>> {
+    const result = new Map<string, CachedShopifyMetafield[]>()
+    const cleanDomain = cleanShopifyDomain(shopifyDomain)
+    if (!cleanDomain || !accessToken || productNumericIds.length === 0) {
+        return result
+    }
+
+    const url = `https://${cleanDomain}/admin/api/${GRAPHQL_API_VERSION}/graphql.json`
+
+    for (let i = 0; i < productNumericIds.length; i += PRODUCT_IDS_PER_REQUEST) {
+        const chunk = productNumericIds.slice(i, i + PRODUCT_IDS_PER_REQUEST)
+        const gidList = chunk.map((id) => `"gid://shopify/Product/${id}"`).join(", ")
+        const query = `
+            query ProductMetafieldsChunk {
+                nodes(ids: [${gidList}]) {
+                    ... on Product {
+                        legacyResourceId
+                        metafields(first: 250) {
+                            nodes {
+                                namespace
+                                key
+                                value
+                                type
+                            }
+                        }
+                    }
+                }
+            }
+        `
+
+        const res = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": accessToken,
+            },
+            body: JSON.stringify({ query }),
+        })
+
+        const json = (await res.json()) as GraphQLResponse
+        if (!res.ok) {
+            throw new Error(`Shopify GraphQL HTTP ${res.status}`)
+        }
+        if (json.errors?.length) {
+            throw new Error(json.errors.map((e) => e.message).filter(Boolean).join("; ") || "GraphQL error")
+        }
+
+        const nodes = json.data?.nodes
+        if (!Array.isArray(nodes)) continue
+
+        for (const node of nodes) {
+            if (!node || node.legacyResourceId == null) continue
+            const idStr = String(node.legacyResourceId)
+            result.set(idStr, toRows(node.metafields))
+        }
+    }
+
+    return result
+}

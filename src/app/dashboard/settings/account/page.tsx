@@ -1,9 +1,31 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
-import { User, Mail, Building, Save, Loader2, CheckCircle2, AlertCircle, Bell, BellOff } from "lucide-react"
+import {
+    User,
+    Mail,
+    Building,
+    Save,
+    Loader2,
+    CheckCircle2,
+    AlertCircle,
+    Bell,
+    BellOff,
+    KeyRound,
+    ChevronDown,
+} from "lucide-react"
 import { usePushNotifications } from "@/hooks/usePushNotifications"
+import { accountUpdateSchema, isStrongPassword } from "@/lib/validation"
+import { cn } from "@/lib/utils"
+
+type ActiveStoreMeta = {
+    id: string
+    businessName: string
+    shopifyDomain: string
+}
+
+const SHOPIFY_TOKEN_MAX = 4000
 
 export default function AccountSettingsPage() {
     const { data: session, update } = useSession()
@@ -19,26 +41,100 @@ export default function AccountSettingsPage() {
         confirmPassword: ""
     })
 
-    useEffect(() => {
-        // Fetch user's business name (from first store or user name)
-        const fetchBusinessName = async () => {
-            try {
-                const res = await fetch("/api/stores")
-                if (res.ok) {
-                    const data = await res.json()
-                    const activeStore = data.stores?.find((s: { isActive: boolean }) => s.isActive)
-                    if (activeStore?.businessName) {
-                        setFormData(prev => ({ ...prev, businessName: activeStore.businessName }))
-                    } else if (session?.user?.name) {
-                        setFormData(prev => ({ ...prev, businessName: session.user.name || "" }))
-                    }
-                }
-            } catch {
-                // Silent fail
+    const [activeStoreMeta, setActiveStoreMeta] = useState<ActiveStoreMeta | null>(null)
+    const [shopifyTokenOpen, setShopifyTokenOpen] = useState(false)
+    const [newShopifyToken, setNewShopifyToken] = useState("")
+    const [tokenLoading, setTokenLoading] = useState(false)
+    const [tokenSuccess, setTokenSuccess] = useState("")
+    const [tokenError, setTokenError] = useState("")
+
+    const refreshActiveStore = useCallback(async () => {
+        try {
+            const res = await fetch("/api/stores")
+            if (!res.ok) return
+            const data = await res.json()
+            const activeStore = data.stores?.find((s: { isActive: boolean }) => s.isActive) as
+                | {
+                      id?: string
+                      businessName?: string
+                      shopifyDomain?: string
+                      onboardingComplete?: boolean
+                  }
+                | undefined
+            if (activeStore?.businessName) {
+                setFormData((prev) => ({ ...prev, businessName: activeStore.businessName || "" }))
+            } else if (session?.user?.name) {
+                setFormData((prev) => ({ ...prev, businessName: session.user.name || "" }))
             }
+            if (
+                activeStore?.id &&
+                activeStore.shopifyDomain &&
+                activeStore.onboardingComplete
+            ) {
+                setActiveStoreMeta({
+                    id: activeStore.id,
+                    businessName: activeStore.businessName || "Store",
+                    shopifyDomain: activeStore.shopifyDomain,
+                })
+            } else {
+                setActiveStoreMeta(null)
+            }
+        } catch {
+            // Silent fail
         }
-        fetchBusinessName()
-    }, [session])
+    }, [session?.user?.name])
+
+    useEffect(() => {
+        void refreshActiveStore()
+    }, [refreshActiveStore])
+
+    const toggleShopifyTokenPanel = () => {
+        const next = !shopifyTokenOpen
+        setShopifyTokenOpen(next)
+        setTokenError("")
+        setTokenSuccess("")
+        if (next) void refreshActiveStore()
+    }
+
+    const saveShopifyAccessToken = async () => {
+        const trimmed = newShopifyToken.trim()
+        if (!trimmed) {
+            setTokenError("Paste your new Admin API access token.")
+            return
+        }
+        if (!activeStoreMeta) {
+            setTokenError("No connected Shopify store found for your active store.")
+            return
+        }
+        setTokenLoading(true)
+        setTokenError("")
+        setTokenSuccess("")
+        try {
+            const res = await fetch(
+                `/api/stores/${encodeURIComponent(activeStoreMeta.id)}/shopify-access-token`,
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ accessToken: trimmed }),
+                },
+            )
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                setTokenError(
+                    typeof data?.message === "string"
+                        ? data.message
+                        : "Could not update token. Try again.",
+                )
+                return
+            }
+            setTokenSuccess("Token saved and verified with Shopify.")
+            setNewShopifyToken("")
+        } catch {
+            setTokenError("Something went wrong. Try again.")
+        } finally {
+            setTokenLoading(false)
+        }
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -59,7 +155,7 @@ export default function AccountSettingsPage() {
                     setLoading(false)
                     return
                 }
-                if (formData.newPassword.length < 8) {
+                if (!isStrongPassword(formData.newPassword)) {
                     setError("New password must be at least 8 characters and include upper, lower, number and special character")
                     setLoading(false)
                     return
@@ -67,20 +163,27 @@ export default function AccountSettingsPage() {
             }
 
             const updateData: { businessName?: string; currentPassword?: string; newPassword?: string } = {}
-            
+
             if (formData.businessName) {
                 updateData.businessName = formData.businessName
             }
-            
+
             if (formData.newPassword) {
                 updateData.currentPassword = formData.currentPassword
                 updateData.newPassword = formData.newPassword
             }
 
+            const bodyCheck = accountUpdateSchema.safeParse(updateData)
+            if (!bodyCheck.success) {
+                setError(bodyCheck.error.issues[0]?.message ?? "Invalid input")
+                setLoading(false)
+                return
+            }
+
             const res = await fetch("/api/settings/account", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updateData)
+                body: JSON.stringify(bodyCheck.data),
             })
 
             if (!res.ok) {
@@ -149,6 +252,7 @@ export default function AccountSettingsPage() {
                         value={formData.businessName}
                         onChange={(e) => setFormData(prev => ({ ...prev, businessName: e.target.value }))}
                         placeholder="Enter your business name"
+                        maxLength={200}
                         className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                     />
                 </div>
@@ -167,6 +271,7 @@ export default function AccountSettingsPage() {
                                 value={formData.currentPassword}
                                 onChange={(e) => setFormData(prev => ({ ...prev, currentPassword: e.target.value }))}
                                 placeholder="Enter current password"
+                                maxLength={128}
                                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                             />
                         </div>
@@ -177,6 +282,7 @@ export default function AccountSettingsPage() {
                                 value={formData.newPassword}
                                 onChange={(e) => setFormData(prev => ({ ...prev, newPassword: e.target.value }))}
                                 placeholder="Enter new password"
+                                maxLength={128}
                                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                             />
                         </div>
@@ -187,6 +293,7 @@ export default function AccountSettingsPage() {
                                 value={formData.confirmPassword}
                                 onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                                 placeholder="Confirm new password"
+                                maxLength={128}
                                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                             />
                         </div>
@@ -213,6 +320,96 @@ export default function AccountSettingsPage() {
                     </button>
                 </div>
             </form>
+
+            {/* Shopify access token (collapsed by default — reinstall / new scopes) */}
+            {activeStoreMeta ? (
+                <div className="border-t border-white/10 pt-6">
+                    <button
+                        type="button"
+                        onClick={toggleShopifyTokenPanel}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left transition-colors hover:bg-white/[0.07]"
+                    >
+                        <span className="flex min-w-0 items-center gap-2">
+                            <KeyRound className="h-4 w-4 shrink-0 text-indigo-400" />
+                            <span className="min-w-0">
+                                <span className="block text-sm font-bold text-white">
+                                    Shopify access token
+                                </span>
+                                <span className="block truncate text-xs text-slate-500">
+                                    {activeStoreMeta.businessName} · {activeStoreMeta.shopifyDomain}
+                                </span>
+                            </span>
+                        </span>
+                        <ChevronDown
+                            className={cn(
+                                "h-4 w-4 shrink-0 text-slate-400 transition-transform",
+                                shopifyTokenOpen && "rotate-180",
+                            )}
+                        />
+                    </button>
+
+                    {shopifyTokenOpen ? (
+                        <div className="mt-3 space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-xs leading-relaxed text-slate-400">
+                                Reinstalled your app in Shopify or added API permissions? Shopify issues a
+                                new <strong className="text-slate-300">Admin API access token</strong>.
+                                Paste it here—your store domain stays the same; we verify the token with
+                                Shopify before saving.
+                            </p>
+                            {tokenSuccess ? (
+                                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400">
+                                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                                    {tokenSuccess}
+                                </div>
+                            ) : null}
+                            {tokenError ? (
+                                <div className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                                    <AlertCircle className="h-4 w-4 shrink-0" />
+                                    {tokenError}
+                                </div>
+                            ) : null}
+                            <div>
+                                <label className="mb-2 block text-xs font-medium text-slate-400">
+                                    New Admin API access token
+                                </label>
+                                <input
+                                    type="password"
+                                    autoComplete="off"
+                                    value={newShopifyToken}
+                                    maxLength={SHOPIFY_TOKEN_MAX}
+                                    onChange={(e) =>
+                                        setNewShopifyToken(
+                                            e.target.value.slice(0, SHOPIFY_TOKEN_MAX),
+                                        )
+                                    }
+                                    placeholder="shpat_…"
+                                    className="w-full rounded-lg border border-white/10 bg-white/5 px-4 py-2.5 font-mono text-sm text-white placeholder:text-slate-600 focus:border-indigo-500/50 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                />
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    type="button"
+                                    disabled={tokenLoading || !newShopifyToken.trim()}
+                                    onClick={() => void saveShopifyAccessToken()}
+                                    className="flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {tokenLoading ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            Verifying…
+                                        </>
+                                    ) : (
+                                        <>
+                                            <KeyRound className="h-4 w-4" />
+                                            Save token
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
 
             {/* Push notifications */}
             <div className="pt-6 border-t border-white/10">

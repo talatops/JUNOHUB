@@ -364,6 +364,7 @@ export default function SupplierProductsPage() {
                                 <input
                                     type="text"
                                     required
+                                    maxLength={500}
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
@@ -377,6 +378,7 @@ export default function SupplierProductsPage() {
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     rows={3}
+                                    maxLength={50_000}
                                     className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                                     placeholder="Product description"
                                 />
@@ -403,6 +405,7 @@ export default function SupplierProductsPage() {
                                         type="text"
                                         value={formData.sku}
                                         onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                        maxLength={200}
                                         className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                                         placeholder="SKU"
                                     />
@@ -428,6 +431,7 @@ export default function SupplierProductsPage() {
                                         type="url"
                                         value={formData.imageUrl}
                                         onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                                        maxLength={4000}
                                         className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500/50"
                                         placeholder="https://example.com/image.jpg"
                                     />

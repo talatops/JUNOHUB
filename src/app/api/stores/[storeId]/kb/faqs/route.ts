@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { embedBatch } from "@/lib/kb/openaiEmbeddings"
 import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
+import { kbFaqCreateSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function GET(
     _request: Request,
@@ -78,19 +79,12 @@ export async function POST(
             )
         }
 
-        const body = await request.json()
-        const { question, answer, tags } = body as {
-            question?: string
-            answer?: string
-            tags?: unknown
+        const raw = await request.json().catch(() => ({}))
+        const parsed = kbFaqCreateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
-
-        if (!question || !answer) {
-            return NextResponse.json(
-                { message: "Question and answer are required" },
-                { status: 400 },
-            )
-        }
+        const { question, answer, tags } = parsed.data
 
         const faq = await (prisma as any).faqItem.create({
             data: {

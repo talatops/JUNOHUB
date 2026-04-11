@@ -3,6 +3,7 @@ import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { onboardingCompleteSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(req: NextRequest) {
     try {
@@ -17,7 +18,11 @@ export async function POST(req: NextRequest) {
             )
         }
 
-        const body = await req.json()
+        const raw = await req.json().catch(() => ({}))
+        const parsed = onboardingCompleteSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
         const {
             businessName,
             businessEmail,
@@ -27,13 +32,8 @@ export async function POST(req: NextRequest) {
             domain,
             apiKey,
             apiSecret,
-            accessToken
-        } = body
-
-        // Validate required fields
-        if (!businessName || !domain || !accessToken) {
-            return NextResponse.json({ message: "Missing required onboarding data." }, { status: 400 })
-        }
+            accessToken,
+        } = parsed.data
 
         // Clean domain: remove protocol, trailing slashes, and trim whitespace
         const cleanDomain = domain.trim().replace(/^https?:\/\//, "").replace(/\/$/, "").trim()

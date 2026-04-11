@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { handleApiError } from '@/lib/errors'
+import { webPushSubscribeSchema, webPushUnsubscribeSchema } from '@/lib/api-schemas/notificationsPush'
+import { validationErrorResponse } from '@/lib/api-schemas/validate'
 
 export async function POST(req: Request) {
     try {
@@ -10,11 +12,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
         }
 
-        const subscription = await req.json()
-
-        if (!subscription || !subscription.endpoint || !subscription.keys) {
-            return NextResponse.json({ message: 'Invalid subscription data' }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = webPushSubscribeSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const subscription = parsed.data
 
         // Upsert the subscription
         await prisma.pushSubscription.upsert({
@@ -49,11 +52,12 @@ export async function DELETE(req: Request) {
             return NextResponse.json({ message: 'Unauthorized' }, { status: 401 })
         }
 
-        const { endpoint } = await req.json()
-
-        if (!endpoint) {
-            return NextResponse.json({ message: 'Endpoint is required' }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = webPushUnsubscribeSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { endpoint } = parsed.data
 
         await prisma.pushSubscription.delete({
             where: { endpoint }

@@ -1,26 +1,39 @@
 import { NextResponse } from "next/server"
 import { sendEmail, getEmailLogoUrl } from "@/lib/email"
 import { logger } from "@/lib/logger"
+import { applyRateLimit } from "@/lib/rate-limit"
+import { newsletterSubscribeSchema } from "@/lib/api-schemas/public"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
+import { escapeHtmlText } from "@/lib/sanitize/escapeHtml"
 
 // This is a simple mock-up of a newsletter subscription API
 // In a real app, you would save the email to a database (e.g., Prisma)
 export async function POST(req: Request) {
     try {
-        const { email } = await req.json()
-
-        if (!email || !email.includes("@")) {
+        const rate = await applyRateLimit(req, "public:newsletter", {
+            windowMs: 60_000,
+            maxRequests: 20,
+        })
+        if (!rate.success) {
             return NextResponse.json(
-                { message: "Invalid email address" },
-                { status: 400 }
+                { message: "Too many requests. Please try again later." },
+                { status: 429 },
             )
         }
+
+        const raw = await req.json().catch(() => ({}))
+        const parsed = newsletterSubscribeSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { email } = parsed.data
 
         // 1. In a production app, you would check if the email already exists
         // and then save it to your 'Newsletter' table.
         // For now, we'll proceed to sending the welcome email.
 
         const subject = "Welcome to the JUNO Newsletter! ⚡"
-        const emailHtml = generateNewsletterWelcomeHtml(email)
+        const emailHtml = generateNewsletterWelcomeHtml(escapeHtmlText(email))
 
         const result = await sendEmail({
             to: email,

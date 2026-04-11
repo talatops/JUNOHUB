@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react"
 import { usePathname } from "next/navigation"
 import { useSession } from "next-auth/react"
 import { useTheme } from "@/components/ThemeProvider"
@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { ChatAttachmentModal } from "@/components/chat/ChatAttachmentModal"
+import { CHAT_MESSAGE_CONTENT_MAX } from "@/lib/api-schemas/public"
 
 interface Contact {
     id: string
@@ -41,27 +42,6 @@ interface Message {
     kind?: "TEXT" | "PRODUCT" | "ORDER" | string | null
     attachment?: any
     createdAt: string
-}
-
-function AlertCircle(props: React.SVGProps<SVGSVGElement>) {
-    return (
-        <svg
-            {...props}
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-        >
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="8" x2="12" y2="12" />
-            <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-    )
 }
 
 type AttachOrder = {
@@ -287,8 +267,7 @@ export function ChatView() {
         setAttachOpen(false)
     }
 
-    const handleSendMessage = async (e: React.FormEvent) => {
-        e.preventDefault()
+    const sendMessage = async () => {
         if (!selectedContact) return
         const hasText = !!newMessage.trim()
         const hasAttachment = !!draftKind && !!draftAttachment
@@ -297,10 +276,10 @@ export function ChatView() {
         try {
             setSending(true)
             setSendError(null)
-            const payload: any = {
+            const payload: Record<string, unknown> = {
                 receiverId: selectedContact.id,
                 storeId: selectedContact.storeId,
-                content: newMessage
+                content: newMessage,
             }
             if (hasAttachment) {
                 payload.kind = draftKind
@@ -309,12 +288,12 @@ export function ChatView() {
             const res = await fetch("/api/chat/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
             })
 
             if (res.ok) {
                 const msg = await res.json()
-                const optimiticMsg: Message = {
+                const optimisticMsg: Message = {
                     id: msg.id,
                     senderId: msg.senderId,
                     receiverId: msg.receiverId,
@@ -322,14 +301,19 @@ export function ChatView() {
                     content: newMessage,
                     kind: msg.kind ?? "TEXT",
                     attachment: msg.attachment ?? null,
-                    createdAt: msg.createdAt
+                    createdAt: msg.createdAt,
                 }
-                setMessages(prev => [...prev, optimiticMsg])
+                setMessages((prev) => [...prev, optimisticMsg])
                 setNewMessage("")
                 setDraftKind(null)
                 setDraftAttachment(null)
             } else {
-                setSendError("Failed to send message. Please try again.")
+                const errJson = await res.json().catch(() => ({}))
+                const errMsg =
+                    typeof errJson?.message === "string"
+                        ? errJson.message
+                        : "Failed to send message. Please try again."
+                setSendError(errMsg)
             }
         } catch (error) {
             console.error("Send message error", error)
@@ -337,6 +321,11 @@ export function ChatView() {
         } finally {
             setSending(false)
         }
+    }
+
+    const handleSendMessage = (e: FormEvent) => {
+        e.preventDefault()
+        void sendMessage()
     }
 
     // Best-effort compatibility for legacy bracket-style chat messages.
@@ -461,7 +450,9 @@ export function ChatView() {
                             type="text"
                             placeholder="Find connections..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                                setSearchQuery(e.target.value)
+                            }
                             className={cn(
                                 "w-full pl-10 pr-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-medium",
                                 isLight ? "bg-slate-50 border border-slate-200 text-slate-900 placeholder:text-slate-400" : "bg-white/5 border border-white/10 text-white placeholder:text-slate-600"
@@ -916,11 +907,16 @@ export function ChatView() {
                                         rows={1}
                                         placeholder="Type a message..."
                                         value={newMessage}
-                                        onChange={(e) => setNewMessage(e.target.value)}
-                                        onKeyDown={(e) => {
+                                        maxLength={CHAT_MESSAGE_CONTENT_MAX}
+                                        onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                                            setNewMessage(
+                                                e.target.value.slice(0, CHAT_MESSAGE_CONTENT_MAX),
+                                            )
+                                        }
+                                        onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
                                             if (e.key === "Enter" && !e.shiftKey) {
                                                 e.preventDefault()
-                                                handleSendMessage(e)
+                                                void sendMessage()
                                             }
                                         }}
                                         className={cn(

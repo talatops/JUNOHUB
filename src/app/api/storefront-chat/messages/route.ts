@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { generateStorefrontReply } from "@/lib/ai/storefrontGroq"
-
-type StorefrontMessagePayload = {
-    shop: string
-    visitorId: string
-    content: string
-    customerEmail?: string | null
-}
+import { applyRateLimit } from "@/lib/rate-limit"
+import { storefrontChatPostSchema } from "@/lib/api-schemas/public"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 function normalizeShopDomain(input: string) {
     return input
@@ -29,34 +25,26 @@ function shopVariants(cleanDomain: string) {
 
 export async function POST(req: Request) {
     try {
+        const rate = await applyRateLimit(req, "public:storefront-chat", {
+            windowMs: 60_000,
+            maxRequests: 40,
+        })
+        if (!rate.success) {
+            return NextResponse.json(
+                { message: "Too many requests. Please try again later." },
+                { status: 429 },
+            )
+        }
+
         const p = prisma as any
-        const payload = (await req.json().catch(() => ({}))) as Partial<StorefrontMessagePayload>
-        const { shop, visitorId, content } = payload
+        const raw = await req.json().catch(() => ({}))
+        const parsed = storefrontChatPostSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { shop, visitorId, content: trimmedContent, customerEmail } = parsed.data
 
-        if (typeof shop !== "string" || !shop.trim()) {
-            return NextResponse.json({ message: "Missing shop" }, { status: 400 })
-        }
-        if (typeof visitorId !== "string" || !visitorId.trim()) {
-            return NextResponse.json({ message: "Missing visitorId" }, { status: 400 })
-        }
-        if (typeof content !== "string") {
-            return NextResponse.json({ message: "Missing content" }, { status: 400 })
-        }
-
-        const trimmedContent = content.trim()
-        const trimmedVisitorId = visitorId.trim()
         const normalizedShop = normalizeShopDomain(shop)
-
-        // Guardrails (v1): keep it small, avoid empty spam.
-        if (trimmedContent.length < 1) {
-            return NextResponse.json({ message: "Empty message" }, { status: 400 })
-        }
-        if (trimmedContent.length > 2000) {
-            return NextResponse.json({ message: "Message too long" }, { status: 400 })
-        }
-        if (trimmedVisitorId.length > 300) {
-            return NextResponse.json({ message: "Invalid visitorId" }, { status: 400 })
-        }
 
         const variants = shopVariants(normalizedShop)
         const stores = await p.store.findMany({
@@ -74,7 +62,7 @@ export async function POST(req: Request) {
 
         // Find or create conversation for this anonymous visitor.
         let conversation = await p.storefrontChatConversation.findFirst({
-            where: { storeId: store.id, visitorId: trimmedVisitorId },
+            where: { storeId: store.id, visitorId },
             select: { id: true }
         })
 
@@ -95,8 +83,8 @@ export async function POST(req: Request) {
             conversation = await p.storefrontChatConversation.create({
                 data: {
                     storeId: store.id,
-                    visitorId: trimmedVisitorId,
-                    customerEmail: payload.customerEmail ?? null
+                    visitorId,
+                    customerEmail: customerEmail ?? null,
                 },
                 select: { id: true }
             })
@@ -121,7 +109,7 @@ export async function POST(req: Request) {
         const ai = await generateStorefrontReply({
             storeId: store.id,
             query: trimmedContent,
-            visitorId: trimmedVisitorId,
+            visitorId,
             history: recentHistory.map((m: any) => ({
                 senderType: m.senderType,
                 content: m.content

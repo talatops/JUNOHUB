@@ -42,7 +42,8 @@ export async function GET() {
                     status: product.status,
                     variants: product.variants,
                     images: images,
-                    image: images.length > 0 ? { src: images[0].src } : null
+                    image: images.length > 0 ? { src: images[0].src } : null,
+                    metafields: product.metafields ?? null,
                 }
             })
             return NextResponse.json({

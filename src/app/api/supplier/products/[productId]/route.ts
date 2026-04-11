@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { supplierProductUpdateSchema } from "@/lib/api-schemas/business"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * PUT /api/supplier/products/[productId]
@@ -18,7 +20,12 @@ export async function PUT(
         }
 
         const { productId } = await params
-        const { title, description, price, sku, imageUrl, quantity } = await req.json()
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierProductUpdateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { title, description, price, sku, imageUrl, quantity } = parsed.data
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({
@@ -58,26 +65,33 @@ export async function PUT(
             // Update the shopifyProductData with new values (including optional supplier-specific quantity)
             const updatedData = {
                 ...(productSync.shopifyProductData || {}),
-                title: title || productSync.shopifyProductTitle,
-                body_html: description !== undefined ? description : (productSync.shopifyProductData?.body_html || ""),
-                variants: productSync.shopifyProductData?.variants?.map((v: any, idx: number) => ({
-                    ...v,
-                    price: idx === 0 && price !== undefined ? price.toString() : v.price,
-                    sku: idx === 0 && sku !== undefined ? sku : v.sku
-                })) || [],
-                image: imageUrl ? { src: imageUrl } : productSync.shopifyProductData?.image,
+                title: title ?? productSync.shopifyProductTitle,
+                body_html:
+                    description !== undefined
+                        ? description
+                        : productSync.shopifyProductData?.body_html || "",
+                variants:
+                    productSync.shopifyProductData?.variants?.map((v: any, idx: number) => ({
+                        ...v,
+                        price: idx === 0 && price !== undefined ? String(price) : v.price,
+                        sku: idx === 0 && sku !== undefined ? sku : v.sku,
+                    })) || [],
+                image:
+                    imageUrl != null && String(imageUrl).trim() !== ""
+                        ? { src: String(imageUrl).trim() }
+                        : productSync.shopifyProductData?.image,
                 supplier_quantity:
                     quantity !== undefined
                         ? quantity
-                        : productSync.shopifyProductData?.supplier_quantity
+                        : productSync.shopifyProductData?.supplier_quantity,
             }
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const updatedSync = await (prisma as any).productSync.update({
                 where: { id: syncId },
                 data: {
-                    shopifyProductTitle: title || productSync.shopifyProductTitle,
-                    shopifyProductData: updatedData
+                    shopifyProductTitle: title ?? productSync.shopifyProductTitle,
+                    shopifyProductData: updatedData,
                 }
             })
 
@@ -107,9 +121,12 @@ export async function PUT(
                 product: {
                     id: productId,
                     syncId,
-                    title: title || productSync.shopifyProductTitle,
+                    title: title ?? productSync.shopifyProductTitle,
                     description,
-                    price: price !== undefined ? parseFloat(price) : parseFloat(updatedData.variants?.[0]?.price || "0"),
+                    price:
+                        price !== undefined
+                            ? price
+                            : parseFloat(updatedData.variants?.[0]?.price || "0"),
                     sku,
                     imageUrl,
                     availableQuantity: updatedData.supplier_quantity,
@@ -133,11 +150,11 @@ export async function PUT(
         const product = await prisma.product.update({
             where: { id: productId },
             data: {
-                title: title || existingProduct.title,
+                title: title ?? existingProduct.title,
                 description: description !== undefined ? description : existingProduct.description,
-                price: price !== undefined ? parseFloat(price) : existingProduct.price,
+                price: price !== undefined ? price : existingProduct.price,
                 sku: sku !== undefined ? sku : existingProduct.sku,
-                imageUrl: imageUrl !== undefined ? imageUrl : existingProduct.imageUrl
+                imageUrl: imageUrl !== undefined ? imageUrl : existingProduct.imageUrl,
             }
         })
 

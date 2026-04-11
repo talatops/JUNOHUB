@@ -155,6 +155,8 @@ model CachedProduct {
   status            String?
   variants          Json     // Store variants as JSON
   images            Json     // Store images as JSON
+  /** Shopify product metafields (incl. category / taxonomy fields from admin) for automation & search. */
+  metafields        Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   lastSyncedAt      DateTime @default(now())

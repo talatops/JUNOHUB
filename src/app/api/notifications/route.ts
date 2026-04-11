@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { notificationsMarkReadSchema } from "@/lib/api-schemas/vendorMutations"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * GET /api/notifications
@@ -61,8 +63,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const body = await req.json()
-        const { notificationIds, markAllAsRead } = body
+        const raw = await req.json().catch(() => ({}))
+        const parsed = notificationsMarkReadSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { notificationIds, markAllAsRead } = parsed.data
 
         if (markAllAsRead) {
             // Mark all notifications as read for this user
@@ -80,26 +86,22 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "All notifications marked as read" })
         }
 
-        if (notificationIds && Array.isArray(notificationIds) && notificationIds.length > 0) {
-            // Mark specific notifications as read
+        if (notificationIds && notificationIds.length > 0) {
             await prisma.notification.updateMany({
                 where: {
                     id: { in: notificationIds },
-                    userId: session.user.id
+                    userId: session.user.id,
                 },
                 data: {
                     read: true,
-                    readAt: new Date()
-                }
+                    readAt: new Date(),
+                },
             })
 
             return NextResponse.json({ message: "Notifications marked as read" })
         }
 
-        return NextResponse.json(
-            { message: "Invalid request. Provide notificationIds array or markAllAsRead: true" },
-            { status: 400 }
-        )
+        return NextResponse.json({ message: "Invalid request" }, { status: 400 })
     } catch (error) {
         console.error("Error updating notifications:", error)
         return NextResponse.json(

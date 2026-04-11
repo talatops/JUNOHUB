@@ -268,11 +268,23 @@ function buildStorefrontScript(params: {
 
       var headerText = document.createElement("div");
       headerText.style.minWidth = "0";
-      headerText.innerHTML = "<div style=\\"font-size:13px;font-weight:800;color:#111827;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\">" +
-        String(chatName || "Chat") +
-        "</div><div style=\\"font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis\\">" +
-        String(tagline || "") +
-        "</div>";
+      var titleLine = document.createElement("div");
+      titleLine.style.fontSize = "13px";
+      titleLine.style.fontWeight = "800";
+      titleLine.style.color = "#111827";
+      titleLine.style.whiteSpace = "nowrap";
+      titleLine.style.overflow = "hidden";
+      titleLine.style.textOverflow = "ellipsis";
+      titleLine.textContent = String(chatName || "Chat");
+      var subLine = document.createElement("div");
+      subLine.style.fontSize = "11px";
+      subLine.style.color = "#64748b";
+      subLine.style.whiteSpace = "nowrap";
+      subLine.style.overflow = "hidden";
+      subLine.style.textOverflow = "ellipsis";
+      subLine.textContent = String(tagline || "");
+      headerText.appendChild(titleLine);
+      headerText.appendChild(subLine);
       header.appendChild(headerText);
       panel.appendChild(header);
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { decryptString } from "@/lib/encryption"
+import { mfaToggleSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(req: Request) {
     try {
@@ -10,7 +11,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { enabled } = await req.json()
+        const raw = await req.json().catch(() => ({}))
+        const parsed = mfaToggleSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { enabled } = parsed.data
 
         // Use raw query to check mfaSecret until Prisma client is fully regenerated
         const result = await prisma.$queryRaw<

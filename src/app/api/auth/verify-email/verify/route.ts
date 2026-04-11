@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { handleApiError } from "@/lib/errors"
+import { authVerifyEmailBodySchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(req: Request) {
     try {
@@ -13,15 +14,12 @@ export async function POST(req: Request) {
             )
         }
 
-        const body = await req.json()
-        const { token, email } = body
-
-        if (!token || !email) {
-            return NextResponse.json(
-                { message: "Token and email are required" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = authVerifyEmailBodySchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { token, email } = parsed.data
 
         // Verify token
         const verificationToken = await prisma.verificationToken.findUnique({

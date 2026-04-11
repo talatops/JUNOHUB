@@ -3,6 +3,8 @@ import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { junoTemplatePatchSchema } from "@/lib/api-schemas/vendorMutations"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 type TemplateRow = {
     id: string
@@ -130,11 +132,11 @@ export async function PUT(
             return NextResponse.json({ message: "Template not found" }, { status: 404 })
         }
 
-        const body = await req.json().catch(() => null)
-        if (!body) {
-            return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = junoTemplatePatchSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
-
         const {
             name,
             intent,
@@ -143,15 +145,7 @@ export async function PUT(
             body: templateBody,
             variables,
             isHtml,
-        } = body as {
-            name?: string
-            intent?: string
-            mood?: string
-            description?: string | null
-            body?: string
-            variables?: unknown
-            isHtml?: boolean
-        }
+        } = parsed.data
 
         const rows = await prisma.$queryRaw<TemplateRow[]>`
             UPDATE "Template"

@@ -68,16 +68,18 @@ export const KNOWLEDGE_TEMPLATE_FIELDS: {
     },
 ]
 
-const answerMax = 12_000
-const miscMax = 16_000
+/** Per-field answer cap (mirrored on structured KB form). */
+export const KNOWLEDGE_TEMPLATE_ANSWER_MAX = 12_000
+/** Misc notes cap. */
+export const KNOWLEDGE_TEMPLATE_MISC_MAX = 16_000
 
 export const knowledgeTemplatePutSchema = z.object({
     knowledgeBaseMode: z.enum(["STRUCTURED", "DOCUMENTS"]).optional(),
     confirmDestructiveSwitch: z.boolean().optional(),
     template: z
         .object({
-            answers: z.record(z.string().max(answerMax)).optional(),
-            misc: z.string().max(miscMax).optional(),
+            answers: z.record(z.string().max(KNOWLEDGE_TEMPLATE_ANSWER_MAX)).optional(),
+            misc: z.string().max(KNOWLEDGE_TEMPLATE_MISC_MAX).optional(),
         })
         .optional(),
 })

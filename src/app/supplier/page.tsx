@@ -257,7 +257,11 @@ export default function SupplierDashboardPage() {
                                     <Tooltip
                                         contentStyle={{ backgroundColor: "rgb(30 41 59)", border: "1px solid rgb(51 65 85)", borderRadius: "8px" }}
                                         labelStyle={{ color: "rgb(248 250 252)" }}
-                                        formatter={(value: number | undefined) => [value ?? 0, "Count"]}
+                                        formatter={(value) => {
+                                            const num =
+                                                typeof value === "number" ? value : Number(value)
+                                            return [Number.isFinite(num) ? num : 0, "Count"]
+                                        }}
                                     />
                                     <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                                         {[0, 1, 2, 3].map((i) => (

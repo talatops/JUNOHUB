@@ -3,6 +3,7 @@ import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
+import { onboardingShopifySchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(req: Request) {
     try {
@@ -17,19 +18,12 @@ export async function POST(req: Request) {
             )
         }
 
-        const {
-            businessName,
-            storeName,
-            domain,
-            apiKey,
-            apiSecret,
-            accessToken
-        } = await req.json()
-
-        // Basic validation
-        if (!businessName || !storeName || !domain || !apiKey || !apiSecret || !accessToken) {
-            return NextResponse.json({ message: "Missing required fields" }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = onboardingShopifySchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { businessName, storeName, domain, apiKey, apiSecret, accessToken } = parsed.data
 
         // Multi-store: create a new store; set as active if first store
         const existingCount = await prisma.store.count({ where: { userId: session.user.id } })

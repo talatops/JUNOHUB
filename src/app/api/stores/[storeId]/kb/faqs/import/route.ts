@@ -5,12 +5,7 @@ import { logger } from "@/lib/logger"
 import { embedBatch } from "@/lib/kb/openaiEmbeddings"
 import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 import type { FaqItem } from "@prisma/client"
-
-type FaqImportItem = {
-    question: string
-    answer: string
-    tags?: unknown
-}
+import { kbFaqImportArraySchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(
     request: Request,
@@ -46,7 +41,7 @@ export async function POST(
             )
         }
 
-        let items: FaqImportItem[] = []
+        let items: unknown[] = []
 
         const contentType = request.headers.get("content-type") || ""
         if (contentType.includes("application/json")) {
@@ -57,7 +52,7 @@ export async function POST(
                     { status: 400 },
                 )
             }
-            items = body as FaqImportItem[]
+            items = body
         } else if (contentType.includes("multipart/form-data")) {
             const formData = await request.formData()
             const file = formData.get("file")
@@ -76,7 +71,7 @@ export async function POST(
                         { status: 400 },
                     )
                 }
-                items = parsed as FaqImportItem[]
+                items = parsed
             } catch {
                 return NextResponse.json(
                     { message: "Invalid JSON in uploaded file" },
@@ -90,19 +85,14 @@ export async function POST(
             )
         }
 
-        const validItems = items.filter(
-            (item) => item.question && item.answer,
-        ) as FaqImportItem[]
-
-        if (!validItems.length) {
-            return NextResponse.json(
-                { message: "No valid FAQs to import" },
-                { status: 400 },
-            )
+        const validated = kbFaqImportArraySchema.safeParse(items)
+        if (!validated.success) {
+            return validationErrorResponse(validated.error)
         }
+        const validItems = validated.data
 
         const createdFaqs = await prisma.$transaction(
-            validItems.map((item: FaqImportItem) =>
+            validItems.map((item) =>
                 prisma.faqItem.create({
                     data: {
                         storeId: store.id,

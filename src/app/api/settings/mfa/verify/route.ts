@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { verify } from "otplib"
 import { decryptString } from "@/lib/encryption"
 import { applyRateLimit } from "@/lib/rate-limit"
+import { mfaSetupVerifySchema, validationErrorResponse } from "@/lib/api-schemas"
 
 export async function POST(req: Request) {
     try {
@@ -12,7 +13,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { code } = await req.json()
+        const raw = await req.json().catch(() => ({}))
+        const parsed = mfaSetupVerifySchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { code } = parsed.data
 
         // Rate limit MFA setup verification attempts per IP
         const rate = await applyRateLimit(req, "settings:mfa-verify")
@@ -20,13 +26,6 @@ export async function POST(req: Request) {
             return NextResponse.json(
                 { message: "Too many verification attempts. Please try again later." },
                 { status: 429 }
-            )
-        }
-
-        if (!code || typeof code !== "string") {
-            return NextResponse.json(
-                { message: "Verification code is required" },
-                { status: 400 }
             )
         }
 

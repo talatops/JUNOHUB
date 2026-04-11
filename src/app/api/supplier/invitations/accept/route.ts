@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { notifyInvitationAccepted } from "@/lib/notifications"
+import { supplierInvitationAcceptSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 /**
  * POST /api/supplier/invitations/accept
@@ -15,14 +16,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { token } = await req.json()
-
-        if (!token || typeof token !== "string") {
-            return NextResponse.json(
-                { message: "Invitation token is required" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierInvitationAcceptSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { token } = parsed.data
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({

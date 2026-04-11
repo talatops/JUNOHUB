@@ -6,6 +6,7 @@ import { sendEmail, generateInvitationEmailHtml } from "@/lib/email"
 import { notifyInvitationReceived } from "@/lib/notifications"
 import { getBaseUrl } from "@/lib/utils"
 import crypto from "crypto"
+import { vendorInviteDeleteSchema, vendorInvitePostSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 /**
  * DELETE /api/vendors/suppliers/[supplierId]/invite
@@ -23,8 +24,12 @@ export async function DELETE(
         }
 
         const { supplierId } = await params
-        const body = await req.json().catch(() => ({}))
-        const storeId = body.storeId // Optional: specific store to cancel, otherwise cancel all
+        const raw = await req.json().catch(() => ({}))
+        const parsed = vendorInviteDeleteSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const storeId = parsed.data.storeId ?? undefined
 
         // Get vendor's stores
         const vendorStores = await prisma.store.findMany({
@@ -101,8 +106,12 @@ export async function POST(
         }
 
         const { supplierId } = await params
-        const body = await req.json().catch(() => ({}))
-        const connectToAllStores = body.connectToAllStores === true
+        const raw = await req.json().catch(() => ({}))
+        const parsed = vendorInvitePostSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const connectToAllStores = parsed.data.connectToAllStores === true
 
         // Get vendor's stores
         const vendorStores = await prisma.store.findMany({

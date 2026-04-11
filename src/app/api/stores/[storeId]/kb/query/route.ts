@@ -5,14 +5,7 @@ import { logger } from "@/lib/logger"
 import { embedBatch } from "@/lib/kb/openaiEmbeddings"
 import { KB_EMBEDDING_PROVIDER } from "@/lib/kb/embeddingMeta"
 import { generateKbRagAnswer } from "@/lib/kb/kbAnswer"
-
-type QueryBody = {
-    query?: string
-    topK?: number
-    includeFaq?: boolean
-    includeDocuments?: boolean
-    includeStructured?: boolean
-}
+import { kbQuerySchema, validationErrorResponse } from "@/lib/api-schemas"
 
 type KnowledgeChunkRow = {
     id: string
@@ -48,14 +41,13 @@ export async function POST(
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
 
-        const body = (await request.json().catch(() => ({}))) as QueryBody
-        const question = body.query?.trim()
-        if (!question) {
-            return NextResponse.json(
-                { message: "Query is required" },
-                { status: 400 },
-            )
+        const raw = await request.json().catch(() => ({}))
+        const parsed = kbQuerySchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const body = parsed.data
+        const question = body.query
 
         const topK = Math.min(Math.max(body.topK ?? 8, 1), 20)
         const includeFaq = body.includeFaq ?? true

@@ -4,6 +4,8 @@ import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { randomUUID } from "crypto"
+import { junoTemplateCreateSchema } from "@/lib/api-schemas/vendorMutations"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 type TemplateRow = {
     id: string
@@ -122,28 +124,13 @@ export async function POST(req: Request) {
             )
         }
 
-        const body = await req.json().catch(() => null)
-        if (!body) {
-            return NextResponse.json({ message: "Invalid JSON body" }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = junoTemplateCreateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
-
         const { name, intent, mood, description, body: templateBody, variables, isHtml } =
-            body as {
-                name?: string
-                intent?: string
-                mood?: string
-                description?: string | null
-                body?: string
-                variables?: unknown
-                isHtml?: boolean
-            }
-
-        if (!name || !intent || !mood || !templateBody) {
-            return NextResponse.json(
-                { message: "Missing required fields (name, intent, mood, body)" },
-                { status: 400 },
-            )
-        }
+            parsed.data
 
         const id = randomUUID()
 

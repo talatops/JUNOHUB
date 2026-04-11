@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
+import { flaggedEmailCreateSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 async function getActiveStoreId(userId: string): Promise<string | null> {
     const user = await prisma.user.findUnique({
@@ -72,25 +73,14 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "No active store found" }, { status: 400 })
         }
 
-        const body = await req.json()
-        const { subject, from, reason, priority, messageId } = body as {
-            subject?: string
-            from?: string
-            reason?: string
-            priority?: "LOW" | "MEDIUM" | "HIGH"
-            messageId?: string
+        const raw = await req.json().catch(() => ({}))
+        const parsed = flaggedEmailCreateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { subject, from, reason, priority, messageId } = parsed.data
 
-        if (!subject || !from || !reason) {
-            return NextResponse.json(
-                { message: "subject, from, and reason are required" },
-                { status: 400 }
-            )
-        }
-
-        const priorityVal = priority && ["LOW", "MEDIUM", "HIGH"].includes(priority)
-            ? priority
-            : "MEDIUM"
+        const priorityVal = priority ?? "MEDIUM"
 
         const created = await prisma.flaggedEmail.create({
             data: {

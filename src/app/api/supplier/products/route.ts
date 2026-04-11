@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
+import { supplierProductCreateSchema } from "@/lib/api-schemas/business"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * GET /api/supplier/products
@@ -106,14 +108,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { title, description, price, sku, imageUrl } = await req.json()
-
-        if (!title || price === undefined) {
-            return NextResponse.json(
-                { message: "Title and price are required" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierProductCreateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { title, description, price, sku, imageUrl } = parsed.data
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({
@@ -128,10 +128,10 @@ export async function POST(req: Request) {
             data: {
                 supplierId: supplierProfile.id,
                 title,
-                description: description || null,
-                price: parseFloat(price),
-                sku: sku || null,
-                imageUrl: imageUrl || null
+                description: description?.trim() ? description : null,
+                price,
+                sku: sku?.trim() ? sku : null,
+                imageUrl: imageUrl?.trim() ? imageUrl : null,
             }
         })
 

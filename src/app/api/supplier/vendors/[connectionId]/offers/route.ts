@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { createNotification } from "@/lib/notifications"
+import { supplierOfferCreateSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 /**
  * GET /api/supplier/vendors/[connectionId]/offers
@@ -97,26 +98,12 @@ export async function POST(
         }
 
         const { connectionId } = await params
-        const body = await req.json()
-        const { productId, price, quantity } = body as {
-            productId?: string
-            price?: number
-            quantity?: number
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierOfferCreateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
-
-        if (!productId || price === undefined || quantity === undefined) {
-            return NextResponse.json(
-                { message: "productId, price and quantity are required" },
-                { status: 400 }
-            )
-        }
-
-        if (quantity <= 0 || price < 0) {
-            return NextResponse.json(
-                { message: "Price must be non-negative and quantity must be greater than zero" },
-                { status: 400 }
-            )
-        }
+        const { productId, price, quantity } = parsed.data
 
         const supplierProfile = await prisma.supplierProfile.findUnique({
             where: { userId: session.user.id }

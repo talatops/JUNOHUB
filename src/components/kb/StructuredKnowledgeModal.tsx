@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import {
     KNOWLEDGE_TEMPLATE_FIELDS,
+    KNOWLEDGE_TEMPLATE_ANSWER_MAX,
+    KNOWLEDGE_TEMPLATE_MISC_MAX,
     type KnowledgeTemplateFieldKey,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
@@ -286,11 +288,15 @@ export function StructuredKnowledgeModal({
                                         onChange={(e) =>
                                             setAnswers((a) => ({
                                                 ...a,
-                                                [field.key]: e.target.value,
+                                                [field.key]: e.target.value.slice(
+                                                    0,
+                                                    KNOWLEDGE_TEMPLATE_ANSWER_MAX,
+                                                ),
                                             }))
                                         }
                                         placeholder={field.placeholder}
                                         rows={3}
+                                        maxLength={KNOWLEDGE_TEMPLATE_ANSWER_MAX}
                                         className={cn(
                                             "w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[72px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
                                             isLight
@@ -320,9 +326,14 @@ export function StructuredKnowledgeModal({
                                 </p>
                                 <textarea
                                     value={misc}
-                                    onChange={(e) => setMisc(e.target.value)}
+                                    onChange={(e) =>
+                                        setMisc(
+                                            e.target.value.slice(0, KNOWLEDGE_TEMPLATE_MISC_MAX),
+                                        )
+                                    }
                                     placeholder="Optional…"
                                     rows={3}
+                                    maxLength={KNOWLEDGE_TEMPLATE_MISC_MAX}
                                     className={cn(
                                         "w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[72px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
                                         isLight

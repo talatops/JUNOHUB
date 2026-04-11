@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { supplierProfileUpsertSchema } from "@/lib/api-schemas/business"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * GET /api/supplier/profile
@@ -58,23 +60,24 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { companyName, description } = await req.json()
-
-        if (!companyName) {
-            return NextResponse.json({ message: "Company name is required" }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierProfileUpsertSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { companyName, description } = parsed.data
 
         // Upsert supplier profile
         const supplierProfile = await prisma.supplierProfile.upsert({
             where: { userId: session.user.id },
             update: {
                 companyName,
-                description: description || null
+                description: description?.trim() ? description : null,
             },
             create: {
                 userId: session.user.id,
                 companyName,
-                description: description || null
+                description: description?.trim() ? description : null,
             },
             include: {
                 user: {

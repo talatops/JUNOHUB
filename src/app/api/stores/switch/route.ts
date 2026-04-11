@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { storeSwitchSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 /**
  * POST /api/stores/switch
@@ -14,11 +15,12 @@ export async function POST(request: Request) {
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
 
-        const { storeId } = await request.json()
-
-        if (!storeId) {
-            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
+        const raw = await request.json().catch(() => ({}))
+        const parsed = storeSwitchSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { storeId } = parsed.data
 
         // Verify the store belongs to the user
         const store = await prisma.store.findFirst({

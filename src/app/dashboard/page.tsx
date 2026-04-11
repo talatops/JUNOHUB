@@ -289,7 +289,12 @@ export default function DashboardPage() {
                                         boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
                                         backdropFilter: isLight ? "none" : "blur(12px)",
                                     }}
-                                    formatter={(value: number | undefined) => [value !== undefined ? `$${value.toLocaleString()}` : "$0", "Revenue"]}
+                                    formatter={(value) => {
+                                        const num =
+                                            typeof value === "number" ? value : Number(value)
+                                        const v = Number.isFinite(num) ? num : 0
+                                        return [`$${v.toLocaleString()}`, "Revenue"]
+                                    }}
                                 />
                                 <Area
                                     type="monotone"

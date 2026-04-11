@@ -1,3 +1,4 @@
+// API / form validation governance: see docs/qa/pr-validation-checklist.md
 import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";

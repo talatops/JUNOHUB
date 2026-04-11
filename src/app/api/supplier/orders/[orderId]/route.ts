@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
+import { supplierOrderPatchSchema, validationErrorResponse } from "@/lib/api-schemas"
 
 async function getSupplierContext(userId: string) {
     const profile = await prisma.supplierProfile.findUnique({
@@ -398,13 +399,16 @@ export async function PATCH(
             return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
         }
         const { orderId } = await params
-        const body = await req.json()
+        const raw = await req.json().catch(() => ({}))
+        const parsed = supplierOrderPatchSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
+        }
+        const { fulfillmentStatus: fs, trackingNumber, trackingCompany, trackingUrl } = parsed.data
 
-        const fulfillmentStatus = normalizeFulfillmentStatus(body.fulfillmentStatus)
-
-        const trackingNumber = String(body.trackingNumber || "").trim() || null
-        const trackingCompany = String(body.trackingCompany || "").trim() || null
-        const trackingUrl = String(body.trackingUrl || "").trim() || null
+        const fulfillmentStatus = normalizeFulfillmentStatus(
+            fs === undefined || fs === null ? undefined : String(fs),
+        )
 
         const ctx = await getSupplierContext(session.user.id)
         if (!ctx) {

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { shopifyValidateSchema, validationErrorResponse } from "@/lib/api-schemas"
+import { cleanShopifyDomain } from "@/lib/shopify/adminPing"
 
 const TRANSIENT_ERROR_CODES = ["ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]
 const MAX_RETRIES = 3
@@ -16,15 +18,14 @@ function sleep(ms: number): Promise<void> {
 
 export async function POST(req: Request) {
     try {
-        const body = await req.json()
-        const { domain, accessToken } = body
-
-        if (!domain || !accessToken) {
-            return NextResponse.json({ message: "Store domain and access token are required." }, { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = shopifyValidateSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { domain, accessToken } = parsed.data
 
-        // Clean domain: remove protocol, trailing slashes, and trim whitespace
-        const cleanDomain = domain.trim().replace(/^https?:\/\//, "").replace(/\/$/, "").trim()
+        const cleanDomain = cleanShopifyDomain(domain)
 
         let lastError: unknown = null
 

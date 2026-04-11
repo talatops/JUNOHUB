@@ -2,6 +2,8 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { sumVariantInventoryQuantity } from "@/lib/products/shopifyInventorySum"
+import { productSyncDecisionSchema } from "@/lib/api-schemas/business"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 /**
  * PUT /api/products/sync/[syncId]
@@ -19,15 +21,12 @@ export async function PUT(
         }
 
         const { syncId } = await params
-        const body = await req.json()
-        const { action } = body // "accept" or "reject"
-
-        if (!action || !["accept", "reject"].includes(action)) {
-            return NextResponse.json(
-                { message: "Invalid action. Use 'accept' or 'reject'" },
-                { status: 400 }
-            )
+        const raw = await req.json().catch(() => ({}))
+        const parsed = productSyncDecisionSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+        const { action } = parsed.data
 
         // Get supplier profile
         const supplierProfile = await prisma.supplierProfile.findUnique({

@@ -7,6 +7,9 @@ import {
     hasChatConnectionForStore,
     resolveB2bChatPair,
 } from "@/lib/chat/chatThreadAccess"
+import { applyRateLimit } from "@/lib/rate-limit"
+import { chatMessagePostSchema } from "@/lib/api-schemas/public"
+import { validationErrorResponse } from "@/lib/api-schemas/validate"
 
 export async function POST(req: Request) {
     try {
@@ -15,16 +18,25 @@ export async function POST(req: Request) {
             return new NextResponse("Unauthorized", { status: 401 })
         }
 
-        const body = await req.json()
-        const { receiverId, content, kind, attachment, storeId: storeIdRaw } = body
-
-        if (!receiverId || typeof receiverId !== "string") {
-            return new NextResponse("Missing fields", { status: 400 })
+        const rate = await applyRateLimit(req, "chat:messages", {
+            windowMs: 60_000,
+            maxRequests: 120,
+        })
+        if (!rate.success) {
+            return NextResponse.json(
+                { message: "Too many requests. Please try again later." },
+                { status: 429 },
+            )
         }
 
-        if (!storeIdRaw || typeof storeIdRaw !== "string") {
-            return new NextResponse("Missing storeId", { status: 400 })
+        const raw = await req.json().catch(() => ({}))
+        const parsed = chatMessagePostSchema.safeParse(raw)
+        if (!parsed.success) {
+            return validationErrorResponse(parsed.error)
         }
+
+        const { receiverId, content, kind, attachment, storeId: storeIdRaw } = parsed.data
+        const normalizedKind = kind ?? "TEXT"
 
         const pair = await resolveB2bChatPair(session.user.id, receiverId)
         if (!pair) {
@@ -38,20 +50,6 @@ export async function POST(req: Request) {
         )
         if (!allowed) {
             return new NextResponse("Store not connected for this chat", { status: 403 })
-        }
-
-        const CHAT_KINDS = ["TEXT", "PRODUCT", "ORDER"] as const
-        const normalizedKind =
-            typeof kind === "string" && (CHAT_KINDS as readonly string[]).includes(kind) ? kind : "TEXT"
-
-        if (normalizedKind === "TEXT") {
-            if (content != null && typeof content !== "string") {
-                return new NextResponse("Invalid content", { status: 400 })
-            }
-        } else {
-            if (!attachment || typeof attachment !== "object") {
-                return new NextResponse("Missing attachment for typed message", { status: 400 })
-            }
         }
 
         const sessionUser = await prisma.user.findUnique({
@@ -75,7 +73,7 @@ export async function POST(req: Request) {
                 receiverId,
                 storeId: storeIdRaw,
                 kind: normalizedKind as any,
-                content: (typeof content === "string" ? content : "") as any,
+                content: content as any,
                 attachment: (normalizedKind === "TEXT" ? null : (attachment as any)) as any,
             } as any,
         })
