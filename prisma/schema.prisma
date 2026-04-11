@@ -124,7 +124,11 @@ model Store {
   categoryMetadetailsEnabled Boolean @default(false)
   /** Per-module AI enablement, e.g. { "FAQ": true, "ORDER_STATUS": true }. */
   aiModules           Json?
-  
+  /** FAQ-style policy text per L1 module for embeddings, e.g. { "ORDER_STATUS": "..." }. */
+  modulePolicies      Json?
+  /** Vendor Type-1 answers keyed by shared_field_id (sf_*); one value per key store-wide (§4.2). */
+  sharedFieldAnswers  Json?
+
   // Relations
   connections      Connection[]
   cachedProducts   CachedProduct[]

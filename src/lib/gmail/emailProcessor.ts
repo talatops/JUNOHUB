@@ -2,23 +2,13 @@ import { getGmailAccessToken } from "../gmail"
 import { logger } from "../logger"
 import { sendGmailReply } from "./emailService"
 import { prisma } from "../prisma"
-import { escapeHtmlForEmail, escapeTemplateContextForHtml, renderTemplate } from "@/lib/templates/simpleRenderer"
-import { classifyCustomerEmail } from "@/lib/ai/gmailGroq"
 import { screenInboundEmailForAbuse } from "@/lib/ai/gmailSafety"
-import {
-    buildOrderSummaryForEmail,
-    extractOrderNumberHints,
-    stripQuotedEmailTrailForHints,
-} from "@/lib/ai/gmailContext"
-import { looksLikeOffTopic, looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailOrderDisclosure"
 import { generateAutoReplyPreview } from "@/lib/gmail/autoReplyPreview"
 import {
     checkGmailAutoReplyRateLimits,
-    parseEnvFloat,
     releaseGmailInboundLease,
     tryAcquireGmailInboundLease,
 } from "@/lib/gmail/gmailAutoReplyGuards"
-import { findTemplateWithFallback, type TemplateRecord } from "@/lib/juno/templatesRepo"
 
 export type ProcessIncomingEmailResult = {
     success: boolean
@@ -50,128 +40,8 @@ function parseSenderAddress(fromHeader: string): string {
     return lone.toLowerCase()
 }
 
-/** Local-part of email, title-cased for greetings (templates use {{customer_name}}). */
-function greetingNameFromEmail(email: string): string {
-    const local = email.split("@")[0]?.trim() || ""
-    if (!local) return "there"
-    return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase()
-}
-
-function buildMinimalFallbackHtml(emailBody: string, storeName: string): string {
-    const safeSnippet = escapeHtmlForEmail(emailBody.replace(/<[^>]+>/g, "").slice(0, 400))
-    return `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
-                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
-                    <h1 style="margin: 0 0 12px; font-size: 20px; color: #e5e7eb;">Thanks for reaching out</h1>
-                    <p style="margin: 0 0 12px; color: #9ca3af;">
-                        We have received your message and our team will review it shortly.
-                    </p>
-                    <p style="margin: 0 0 16px; color: #9ca3af;">Summary of what you sent:</p>
-                    <blockquote style="margin: 0 0 20px; padding: 12px 16px; border-left: 3px solid #6366f1; background: #020617;">
-                        <p style="margin: 0; white-space: pre-wrap; color: #d1d5db; font-size: 14px;">
-${safeSnippet || "No additional message content was detected."}
-                        </p>
-                    </blockquote>
-                    <p style="margin: 0 0 8px; color: #9ca3af;">
-                        You can reply to this email if you have more details to share.
-                    </p>
-                    <p style="margin: 0; color: #e5e7eb;">
-                        Best regards,<br/>
-                        <span style="color: #a5b4fc;">${storeName} Support</span>
-                    </p>
-                </div>
-            </div>
-        `
-}
-
-/** When no template exists but we need an order # before sharing order rows. */
-function buildNeedOrderIdFallbackHtml(storeName: string, storeEmail: string): string {
-    const contact = storeEmail.trim()
-        ? `Reply with your order number, or email ${storeEmail}.`
-        : `Reply with your order number from your confirmation email.`
-    return `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
-                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
-                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
-                    <p style="margin: 0 0 12px; color: #9ca3af;">
-                        We didn&apos;t see an order number in your message. To look up the right order for <strong style="color:#e5e7eb;">${storeName}</strong>,
-                        please reply with your order number (for example <strong style="color:#e5e7eb;">#1002</strong> or <strong style="color:#e5e7eb;">1002</strong>) from your order confirmation.
-                    </p>
-                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
-                    <p style="margin: 16px 0 0; color: #e5e7eb;">
-                        Best regards,<br/>
-                        <span style="color: #a5b4fc;">${storeName} Support</span>
-                    </p>
-                </div>
-            </div>
-        `
-}
-
-/** When hints did not match cache — no unrelated order rows. */
-function buildHintUnmatchedFallbackHtml(storeName: string, storeEmail: string): string {
-    const contact = storeEmail.trim()
-        ? `Reply with the correct order number or email us at ${storeEmail}.`
-        : `Reply with the order number from your confirmation email.`
-    return `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
-                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
-                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
-                    <p style="margin: 0 0 12px; color: #9ca3af;">
-                        We could not match the order number in your message to an order on file for <strong style="color:#e5e7eb;">${storeName}</strong> under this email address.
-                        Please double-check the number or confirm the email you used when placing the order.
-                    </p>
-                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
-                    <p style="margin: 16px 0 0; color: #e5e7eb;">
-                        Best regards,<br/>
-                        <span style="color: #a5b4fc;">${storeName} Support</span>
-                    </p>
-                </div>
-            </div>
-        `
-}
-
-/** When no off_topic template exists — polite boundary, no order data. */
-function buildOffTopicFallbackHtml(storeName: string, storeEmail: string): string {
-    const contact = storeEmail.trim()
-        ? `If you have a question about an order from ${storeName}, reply with details or email us at ${storeEmail}.`
-        : `If you have a question about an order from ${storeName}, reply with your question and order number if you have one.`
-    return `
-            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
-                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
-                    <p style="margin: 0 0 12px; color: #e5e7eb;">Hello,</p>
-                    <p style="margin: 0 0 12px; color: #9ca3af;">
-                        This inbox only handles orders, products, shipping, returns, and billing for <strong style="color:#e5e7eb;">${storeName}</strong>.
-                        We can&apos;t answer unrelated requests (news, weather, other websites, or general topics).
-                    </p>
-                    <p style="margin: 0; color: #9ca3af;">${contact}</p>
-                    <p style="margin: 16px 0 0; color: #e5e7eb;">
-                        Best regards,<br/>
-                        <span style="color: #a5b4fc;">${storeName} Support</span>
-                    </p>
-                </div>
-            </div>
-        `
-}
-
-function renderFromTemplate(
-    template: TemplateRecord,
-    context: Record<string, string | number | boolean | null | undefined>
-): string {
-    const safeContext = escapeTemplateContextForHtml(context)
-    return template.isHtml
-        ? renderTemplate(template.body, safeContext)
-        : `
-                        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a;">
-                            <pre style="white-space: pre-wrap; margin: 0;">${renderTemplate(
-                                template.body,
-                                safeContext,
-                            )}</pre>
-                        </div>
-                    `
-}
-
 /**
- * Process an incoming email and generate an AI-assisted reply (Groq classification + templates).
+ * Process an incoming email and generate an AI-assisted reply (L1 orchestrator + fallbacks).
  */
 export async function processIncomingEmail(
     userId: string,

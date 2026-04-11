@@ -21,13 +21,5 @@ npx prisma db push --accept-data-loss
 echo "Regenerating Prisma Client..."
 npx prisma generate
 
-if [ "$RUN_TEMPLATE_SEED_ON_START" = "true" ]; then
-  echo "Seeding predefined email templates..."
-  # Run seed script; if it fails, log the error but continue starting the app
-  if ! npx tsx scripts/seed-templates.ts; then
-    echo "Template seeding failed, continuing without seeded templates."
-  fi
-fi
-
 echo "Starting application..."
 exec "$@"

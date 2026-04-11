@@ -34,7 +34,7 @@ function assertScenarioInvariants(s: Scenario, out: Awaited<ReturnType<typeof ge
         expect(isOffTopic, `${s.id}: off_topic`).toBe(true)
     }
 
-    // Order lines presence/absence (raw summary is the safest signal; template HTML varies).
+    // Order lines presence/absence (raw summary is the safest signal; HTML body varies by path).
     if (s.expect.expectOrderLines) {
         expect(out.orderSummaryRaw.trim().length, `${s.id}: orderSummaryRaw non-empty`).toBeGreaterThan(0)
     } else {
@@ -101,7 +101,6 @@ describe("gmail auto-reply scenarios (preview mode)", () => {
                     orderSummaryRaw: out.orderSummaryRaw,
                     orderSummaryForContext: out.orderSummaryForContext,
                     usedFallback: out.usedFallback,
-                    chosenTemplateId: out.chosenTemplateId,
                     html: out.html,
                 },
             })

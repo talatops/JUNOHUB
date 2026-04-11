@@ -1,16 +1,9 @@
 import "dotenv/config"
 import { prisma } from "@/lib/prisma"
-import { insertTemplate } from "@/lib/juno/templatesRepo"
-
-function requireEnv(name: string): string {
-    const v = process.env[name]
-    if (!v) throw new Error(`Missing required env var: ${name}`)
-    return v
-}
 
 async function main() {
     // This relies on Prisma using DATABASE_URL from env.test (loaded by the runner script).
-    // Create a minimal user + active store, plus a few templates and CachedOrder rows.
+    // Create a minimal user + active store and CachedOrder rows for L1 / Gmail preview tests.
     const userEmail = process.env.TEST_VENDOR_EMAIL || "vendor@example.com"
 
     const user = await prisma.user.upsert({
@@ -60,42 +53,6 @@ async function main() {
         where: { id: user.id },
         data: { activeStoreId: store.id },
     })
-
-    // Minimal templates so we get stable rendering without requiring a full catalog.
-    // These templates reference {{ticket_summary}} and {{order_summary}}.
-    const templateBody = `
-<div>
-  <p>Hello {{customer_name}},</p>
-  <p>{{ticket_summary}}</p>
-  <p>{{order_summary}}</p>
-  <p>— {{store_name}} Support</p>
-</div>
-`.trim()
-
-    const intents = [
-        ["general", "neutral"],
-        ["general", "happy"],
-        ["shipping_delay", "neutral"],
-        ["refund_request", "neutral"],
-        ["account_billing", "neutral"],
-        ["question", "neutral"],
-        ["off_topic", "neutral"],
-    ] as const
-
-    for (const [intent, mood] of intents) {
-        await insertTemplate({
-            storeId: store.id,
-            name: `Test template — ${intent}/${mood}`,
-            intent,
-            mood,
-            description: "Test harness template",
-            body: templateBody,
-            variables: { ticket_summary: true, order_summary: true },
-            isHtml: true,
-        }).catch(() => {
-            // If duplicate-ish templates exist, ignore; findTemplateWithFallback selects latest.
-        })
-    }
 
     const customerEmail = process.env.TEST_CUSTOMER_EMAIL || "customer@gmail.com"
 

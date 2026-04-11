@@ -1,5 +1,5 @@
 /**
- * Single source of truth for Gmail auto-reply intent/mood (aligned with seeds + JUNO templates UI).
+ * Gmail triage: intent/mood strings used by `classifyCustomerEmail` and auto-reply guardrails.
  */
 export const GMAIL_INTENTS = [
     "general",

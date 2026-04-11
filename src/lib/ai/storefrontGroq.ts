@@ -12,8 +12,9 @@ export async function generateStorefrontReply(params: {
     query: string
     visitorId: string
     history: HistoryMessage[]
-    categoryMetadetailsEnabled: boolean
     aiModulesJson: unknown
+    sharedFieldAnswersJson?: unknown
+    categoryMetadetailsEnabled?: boolean
     widgetVerifiedEmail: string | null
     widgetSessionExpiresAt: Date | null
     boundShopifyOrderId: string | null
@@ -25,8 +26,9 @@ export async function generateStorefrontReply(params: {
         query,
         visitorId,
         history,
-        categoryMetadetailsEnabled,
         aiModulesJson,
+        sharedFieldAnswersJson,
+        categoryMetadetailsEnabled,
         widgetVerifiedEmail,
         widgetSessionExpiresAt,
         boundShopifyOrderId,
@@ -38,8 +40,9 @@ export async function generateStorefrontReply(params: {
         storeName,
         message: query,
         history,
-        categoryMetadetailsEnabled,
         aiModulesJson,
+        sharedFieldAnswersJson,
+        categoryMetadetailsEnabled,
         widgetVerifiedEmail,
         widgetSessionExpiresAt,
         boundShopifyOrderId,

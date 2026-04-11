@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { storeSelectGmailL1Context } from "@/lib/prisma/storeSelects"
 import { logger } from "@/lib/logger"
-import { escapeHtmlForEmail, escapeTemplateContextForHtml, renderTemplate } from "@/lib/templates/simpleRenderer"
+import { escapeHtmlForEmail } from "@/lib/templates/simpleRenderer"
 import { classifyCustomerEmail, type ClassifyCustomerEmailResult } from "@/lib/ai/gmailGroq"
 import { screenInboundEmailForAbuse } from "@/lib/ai/gmailSafety"
 import {
@@ -11,16 +11,8 @@ import {
 } from "@/lib/ai/gmailContext"
 import { looksLikeOffTopic, looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailOrderDisclosure"
 import { parseEnvFloat } from "@/lib/gmail/gmailAutoReplyGuards"
-import { findTemplateWithFallback, type TemplateRecord } from "@/lib/juno/templatesRepo"
 import type { GmailClassification } from "@/lib/ai/gmailTaxonomy"
 import { runL1Orchestrator } from "@/lib/ai/orchestrator/runL1"
-
-/** Local-part of email, title-cased for greetings (templates use {{customer_name}}). */
-function greetingNameFromEmail(email: string): string {
-    const local = email.split("@")[0]?.trim() || ""
-    if (!local) return "there"
-    return local.charAt(0).toUpperCase() + local.slice(1).toLowerCase()
-}
 
 export function buildMinimalFallbackHtml(emailBody: string, storeName: string): string {
     const safeSnippet = escapeHtmlForEmail(emailBody.replace(/<[^>]+>/g, "").slice(0, 400))
@@ -49,7 +41,7 @@ ${safeSnippet || "No additional message content was detected."}
         `
 }
 
-/** When no template exists but we need an order # before sharing order rows. */
+/** Fallback when we need an order number before sharing order rows from cache. */
 export function buildNeedOrderIdFallbackHtml(storeName: string, storeEmail: string): string {
     const contact = storeEmail.trim()
         ? `Reply with your order number, or email ${storeEmail}.`
@@ -109,7 +101,7 @@ function buildL1HtmlEmail(plainBody: string, storeName: string): string {
         `
 }
 
-/** When no off_topic template exists — polite boundary, no order data. */
+/** Off-topic fallback: polite boundary, no order data. */
 export function buildOffTopicFallbackHtml(storeName: string, storeEmail: string): string {
     const contact = storeEmail.trim()
         ? `If you have a question about an order from ${storeName}, reply with details or email us at ${storeEmail}.`
@@ -130,23 +122,6 @@ export function buildOffTopicFallbackHtml(storeName: string, storeEmail: string)
                 </div>
             </div>
         `
-}
-
-function renderFromTemplate(
-    template: TemplateRecord,
-    context: Record<string, string | number | boolean | null | undefined>,
-): string {
-    const safeContext = escapeTemplateContextForHtml(context)
-    return template.isHtml
-        ? renderTemplate(template.body, safeContext)
-        : `
-                        <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a;">
-                            <pre style="white-space: pre-wrap; margin: 0;">${renderTemplate(
-                                template.body,
-                                safeContext,
-                            )}</pre>
-                        </div>
-                    `
 }
 
 export type AutoReplyPreviewInput = {
@@ -172,12 +147,11 @@ export type AutoReplyPreviewOutput = {
     orderSummaryRaw: string
     orderSummaryForContext: string
     ticketSummary: string
-    chosenTemplateId: string | null
     usedFallback: "none" | "off_topic" | "need_order_id" | "hint_unmatched" | "minimal"
     html: string
     flagged: boolean
     flaggedReason?: string
-    /** True when reply body came from the L1 orchestrator instead of templates. */
+    /** True when reply body came from the L1 orchestrator. */
     l1Used?: boolean
 }
 
@@ -213,7 +187,6 @@ export async function generateAutoReplyPreview(
             orderSummaryRaw: "",
             orderSummaryForContext: "",
             ticketSummary: "",
-            chosenTemplateId: null,
             usedFallback: "minimal",
             html: buildMinimalFallbackHtml(emailBody, storeName),
             flagged: true,
@@ -336,16 +309,6 @@ export async function generateAutoReplyPreview(
         orderSummaryForContext = orderSummaryRaw || noOrdersFallback
     }
 
-    const context: Record<string, string | number | boolean | null | undefined> = {
-        customer_name: greetingNameFromEmail(senderEmail),
-        customer_email: senderEmail,
-        subject: emailSubject,
-        store_name: storeName,
-        store_email: store?.email || "",
-        ticket_summary: ticketSummary,
-        order_summary: orderSummaryForContext,
-    }
-
     const skipL1Orchestrator =
         isOffTopic ||
         messageTooSparse ||
@@ -353,7 +316,6 @@ export async function generateAutoReplyPreview(
         hintUnmatched
 
     let html: string | null = null
-    let chosenTemplateId: string | null = null
     let l1Used = false
 
     if (!skipL1Orchestrator) {
@@ -364,8 +326,9 @@ export async function generateAutoReplyPreview(
                 storeName,
                 message: plainForAi,
                 history: [],
-                categoryMetadetailsEnabled: store?.categoryMetadetailsEnabled ?? false,
                 aiModulesJson: store?.aiModules ?? null,
+                sharedFieldAnswersJson: store?.sharedFieldAnswers ?? null,
+                categoryMetadetailsEnabled: store?.categoryMetadetailsEnabled,
                 emailFrom: senderEmail,
             })
             if (l1.text.trim().length > 0) {
@@ -374,22 +337,6 @@ export async function generateAutoReplyPreview(
             }
         } catch (e) {
             logger.error("generateAutoReplyPreview: L1 orchestrator failed", e)
-        }
-    }
-
-    if (!html) {
-        try {
-            const template = await findTemplateWithFallback(
-                input.storeId,
-                classification.intent,
-                classification.mood,
-            )
-            if (template) {
-                chosenTemplateId = template.id
-                html = renderFromTemplate(template, context)
-            }
-        } catch (e) {
-            logger.error("generateAutoReplyPreview: template load/render failed", e)
         }
     }
 
@@ -426,7 +373,6 @@ export async function generateAutoReplyPreview(
         orderSummaryRaw,
         orderSummaryForContext,
         ticketSummary,
-        chosenTemplateId,
         usedFallback,
         html,
         flagged: false,

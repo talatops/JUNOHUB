@@ -4,12 +4,11 @@ import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import {
     knowledgeTemplatePutSchema,
-    normalizeTemplateAnswers,
+    mergeTemplateAnswers,
     parseKnowledgeTemplateJson,
-    buildKnowledgeTemplateStored,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
-import { replaceStructuredKnowledgeChunks } from "@/lib/kb/structuredTemplateChunks"
+import { replaceStructuredKnowledgeChunksForStore } from "@/lib/kb/structuredTemplateChunks"
 import {
     deleteDocumentKbForStore,
     deleteFaqKbForStore,
@@ -172,35 +171,10 @@ export async function PUT(
             }
 
             const prev = parseKnowledgeTemplateJson(store.knowledgeTemplate)
-            const mergedAnswers = {
-                ...(prev?.legacyAnswers ?? {}),
-                ...normalizeTemplateAnswers(body.template.answers),
-            }
-            const mergedShared: Record<string, string> = {}
-            for (const [k, v] of Object.entries(prev?.sharedFields ?? {})) {
-                if (typeof v === "string" && v.trim()) {
-                    mergedShared[k] = v.trim()
-                }
-            }
-            if (body.template.sharedFields !== undefined) {
-                for (const [k, v] of Object.entries(body.template.sharedFields)) {
-                    if (typeof v === "string" && v.trim()) {
-                        mergedShared[k] = v.trim()
-                    } else {
-                        delete mergedShared[k]
-                    }
-                }
-            }
-            const misc =
-                body.template.misc !== undefined
-                    ? body.template.misc.trim() || undefined
-                    : prev?.misc
-
-            const stored: KnowledgeTemplateStored = buildKnowledgeTemplateStored({
-                answers: mergedAnswers as Record<string, string>,
-                sharedFields: mergedShared as Record<string, string>,
-                misc,
-            })
+            const stored: KnowledgeTemplateStored = mergeTemplateAnswers(
+                prev,
+                body.template.answers as Record<string, string> | undefined,
+            )
 
             const nextMode: KnowledgeBaseMode =
                 store.knowledgeBaseMode === "UNSET" ? "STRUCTURED" : store.knowledgeBaseMode
@@ -213,7 +187,7 @@ export async function PUT(
                 },
             })
 
-            await replaceStructuredKnowledgeChunks(store.id, stored)
+            await replaceStructuredKnowledgeChunksForStore(store.id)
         }
 
         const refreshed = await prisma.store.findFirst({

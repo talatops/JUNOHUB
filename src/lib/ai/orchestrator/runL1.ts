@@ -8,13 +8,17 @@ import {
     listOrdersForCustomerEmail,
     orderNeedsDisambiguation,
 } from "@/lib/ai/tools/orderTools"
+import { searchProductsForStore } from "@/lib/ai/tools/productTools"
 import {
-    getProductMetafieldsForL1,
-    searchProductsForStore,
-} from "@/lib/ai/tools/productTools"
-import { isModuleEnabled, parseAiModulesJson } from "@/lib/ai/orchestrator/aiModules"
+    isAutomationEnabled,
+    isModuleEnabled,
+    needsIdentityGate,
+    parseAiModulesJson,
+} from "@/lib/ai/orchestrator/aiModules"
 import { pillarForModule } from "@/lib/ai/orchestrator/manifests"
 import { routeCustomerIntent } from "@/lib/ai/orchestrator/intentRouter"
+import { formatSharedFieldsForModule } from "@/lib/ai/orchestrator/moduleThreeTypes"
+import { parseSharedFieldAnswersJson } from "@/lib/kb/sharedFieldAnswers"
 import type { L1Channel, L1Module, L1RunMeta } from "@/lib/ai/orchestrator/types"
 
 const GENERIC_NO_ORDER_EMAIL =
@@ -22,6 +26,18 @@ const GENERIC_NO_ORDER_EMAIL =
 
 const WIDGET_VERIFY_PROMPT =
     "To look up order details or account-specific information, please enter the email you used when placing your order. We will send you a one-time code to verify."
+
+const FAQ_DISABLED_FALLBACK =
+    "I don't know about this—please contact our support team for help."
+
+/** Transactional modules that load a single order row after verification + disambiguation. */
+const ORDER_DETAIL_MODULES: L1Module[] = [
+    "ORDER_STATUS",
+    "ORDER_SUMMARY",
+    "SHIPPING_TRACKING",
+    "ORDER_CANCEL",
+    "REFUND_STATUS",
+]
 
 function isWidgetSessionValid(
     verifiedEmail: string | null | undefined,
@@ -38,8 +54,11 @@ export type RunL1Input = {
     storeName: string
     message: string
     history: Array<{ senderType?: "CUSTOMER" | "AI"; role?: string; content: string }>
-    categoryMetadetailsEnabled: boolean
     aiModulesJson: unknown
+    /** Type-1 vendor answers keyed by sf_* (optional). */
+    sharedFieldAnswersJson?: unknown
+    /** DB flag; when set, overrides aiModules.CATEGORY_METADETAILS for metadetails tooling. */
+    categoryMetadetailsEnabled?: boolean
     emailFrom?: string | null
     widgetVerifiedEmail?: string | null
     widgetSessionExpiresAt?: Date | null
@@ -107,6 +126,7 @@ function ticketHandoffText(module: L1Module, storeName: string): string {
 
 export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result> {
     const modules = parseAiModulesJson(input.aiModulesJson)
+    const sharedAnswers = parseSharedFieldAnswersJson(input.sharedFieldAnswersJson)
     const retrieval = await getBlendedStorefrontContext({
         storeId: input.storeId,
         query: input.message,
@@ -119,13 +139,32 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
             : ""
 
     const routed = await routeCustomerIntent(input.message)
-    let module: L1Module = routed.module
-    if (!isModuleEnabled(modules, module)) {
-        module = "FAQ"
+    let activeModule: L1Module = routed.module
+    if (!isModuleEnabled(modules, activeModule)) {
+        activeModule = "FAQ"
+    }
+    if (!isModuleEnabled(modules, activeModule)) {
+        return {
+            text: FAQ_DISABLED_FALLBACK,
+            meta: {
+                module: "UNKNOWN",
+                pillar: "K",
+                usedTools: [],
+                kbHits: retrieval.kbCount,
+                productHits: retrieval.productCount,
+            },
+        }
     }
 
-    const pillar = pillarForModule(module)
+    const pillar = pillarForModule(activeModule)
+    const moduleFlags = modules[activeModule]
     const usedTools: string[] = []
+    const type1Facts = formatSharedFieldsForModule(activeModule, sharedAnswers)
+    const categoryMetadetailsOn =
+        input.categoryMetadetailsEnabled !== undefined &&
+        input.categoryMetadetailsEnabled !== null
+            ? Boolean(input.categoryMetadetailsEnabled)
+            : isModuleEnabled(modules, "CATEGORY_METADETAILS")
 
     let customerEmail: string | null = null
     if (input.channel === "email") {
@@ -136,14 +175,13 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    const needsFiber =
-        pillar === "T" || pillar === "X" || module === "CATEGORY_METADETAILS"
+    const needsFiber = needsIdentityGate(pillar, moduleFlags)
 
     if (input.channel === "widget" && needsFiber && !customerEmail) {
         return {
             text: WIDGET_VERIFY_PROMPT,
             meta: {
-                module,
+                module: activeModule,
                 pillar,
                 usedTools: [],
                 kbHits: retrieval.kbCount,
@@ -152,15 +190,11 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    if (
-        (pillar === "T" || pillar === "X") &&
-        input.channel === "email" &&
-        !customerEmail
-    ) {
+    if (needsFiber && input.channel === "email" && !customerEmail) {
         return {
             text: GENERIC_NO_ORDER_EMAIL,
             meta: {
-                module,
+                module: activeModule,
                 pillar,
                 usedTools,
                 kbHits: retrieval.kbCount,
@@ -169,9 +203,15 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    const ordersForEmail = customerEmail
-        ? await listOrdersForCustomerEmail(input.storeId, customerEmail)
-        : []
+    const shouldListOrders =
+        Boolean(customerEmail) &&
+        (pillar === "X" ||
+            (pillar === "T" && isAutomationEnabled(modules, activeModule, "verifiedLookup")))
+
+    const ordersForEmail =
+        customerEmail && shouldListOrders
+            ? await listOrdersForCustomerEmail(input.storeId, customerEmail)
+            : []
 
     if (
         (pillar === "T" || pillar === "X") &&
@@ -179,16 +219,32 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         customerEmail
     ) {
         const facts = [
+            type1Facts,
             kbContext ? `Knowledge:\n${kbContext}` : "",
             "No orders on file for this email in our cache.",
         ]
             .filter(Boolean)
             .join("\n\n")
-        if (pillar === "X") {
+        if (pillar === "X" && isAutomationEnabled(modules, activeModule, "ticket")) {
             return {
-                text: ticketHandoffText(module, input.storeName),
+                text: ticketHandoffText(activeModule, input.storeName),
                 meta: {
-                    module,
+                    module: activeModule,
+                    pillar,
+                    usedTools: ["ticket_intake"],
+                    kbHits: retrieval.kbCount,
+                    productHits: retrieval.productCount,
+                },
+            }
+        }
+        if (
+            pillar === "T" &&
+            isAutomationEnabled(modules, activeModule, "ticket")
+        ) {
+            return {
+                text: ticketHandoffText(activeModule, input.storeName),
+                meta: {
+                    module: activeModule,
                     pillar,
                     usedTools: ["ticket_intake"],
                     kbHits: retrieval.kbCount,
@@ -205,7 +261,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         return {
             text,
             meta: {
-                module,
+                module: activeModule,
                 pillar,
                 usedTools,
                 kbHits: retrieval.kbCount,
@@ -214,11 +270,15 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    if (pillar === "X" && ordersForEmail.length > 0) {
+    if (
+        pillar === "X" &&
+        ordersForEmail.length > 0 &&
+        isAutomationEnabled(modules, activeModule, "ticket")
+    ) {
         return {
-            text: ticketHandoffText(module, input.storeName),
+            text: ticketHandoffText(activeModule, input.storeName),
             meta: {
-                module,
+                module: activeModule,
                 pillar,
                 usedTools: ["ticket_intake"],
                 kbHits: retrieval.kbCount,
@@ -238,18 +298,17 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         orderNeedsDisambiguation(customerEmail, hintText, ordersForEmail)
 
     if (
-        (module === "ORDER_STATUS" ||
-            module === "ORDER_SUMMARY" ||
-            module === "SHIPPING_TRACKING") &&
+        ORDER_DETAIL_MODULES.includes(activeModule) &&
         customerEmail &&
         disambiguate &&
-        !input.boundShopifyOrderId
+        !input.boundShopifyOrderId &&
+        isAutomationEnabled(modules, activeModule, "verifiedLookup")
     ) {
         const list = formatOrderCandidatesForPrompt(ordersForEmail)
         return {
             text: `We found more than one order for your email. Which order do you mean?\n${list}\n\nReply with the order number (e.g. #1002).`,
             meta: {
-                module,
+                module: activeModule,
                 pillar,
                 usedTools: ["list_orders"],
                 kbHits: retrieval.kbCount,
@@ -261,9 +320,8 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     let orderFacts = ""
     if (
         customerEmail &&
-        (module === "ORDER_STATUS" ||
-            module === "ORDER_SUMMARY" ||
-            module === "SHIPPING_TRACKING")
+        ORDER_DETAIL_MODULES.includes(activeModule) &&
+        isAutomationEnabled(modules, activeModule, "verifiedLookup")
     ) {
         const detail = await getOrderDetailForVerifiedEmail(input.storeId, customerEmail, {
             shopifyOrderId: input.boundShopifyOrderId ?? undefined,
@@ -271,7 +329,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         })
         usedTools.push("get_order_detail")
         if (detail) {
-            orderFacts = [
+            const lines = [
                 `Order ${detail.orderNumber} (${detail.shopifyOrderId})`,
                 `Created: ${detail.shopifyCreatedAt ?? "unknown"}`,
                 `Financial: ${detail.financialStatus ?? "unknown"}`,
@@ -281,7 +339,18 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
                     ? `Tracking: ${detail.trackingCompany ?? ""} ${detail.trackingNumber ?? ""} ${detail.trackingUrl ?? ""}`.trim()
                     : "Tracking: not available in our cache yet.",
                 `Line items (JSON): ${JSON.stringify(detail.lineItems).slice(0, 4000)}`,
-            ].join("\n")
+            ]
+            if (activeModule === "ORDER_CANCEL") {
+                lines.push(
+                    "Context: customer asked about cancellation — use only the statuses above; do not claim the order was cancelled unless Facts show it.",
+                )
+            }
+            if (activeModule === "REFUND_STATUS") {
+                lines.push(
+                    "Context: customer asked about refund/payout status for this order — explain only what Financial/Fulfillment statuses imply; if unclear, say the team can confirm.",
+                )
+            }
+            orderFacts = lines.join("\n")
         } else {
             orderFacts =
                 "Order detail could not be loaded (missing order reference or no match for this email)."
@@ -289,11 +358,11 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     }
 
     let productFacts = ""
-    if (
-        module === "INVENTORY_STOCK" ||
-        module === "CATEGORY_METADETAILS" ||
-        module === "PRODUCT_FIT"
-    ) {
+    const runProductSearch =
+        (activeModule === "PRODUCT_FIT" &&
+            isAutomationEnabled(modules, activeModule, "knowledge")) ||
+        (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule))
+    if (runProductSearch) {
         const hits = await searchProductsForStore(input.storeId, input.message, 5)
         usedTools.push("search_products")
         if (hits.length) {
@@ -304,23 +373,19 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
                 )
                 .join("\n")
         }
-        if (module === "CATEGORY_METADETAILS" && input.categoryMetadetailsEnabled && hits[0]) {
-            const mf = await getProductMetafieldsForL1(
-                input.storeId,
-                hits[0].shopifyProductId,
-                true,
-            )
-            usedTools.push("product_metafields")
-            if (mf.metafieldsSummary) {
-                productFacts += `\n\nMetafield details (category/catalog):\n${mf.metafieldsSummary}`
-            }
-        } else if (module === "CATEGORY_METADETAILS" && !input.categoryMetadetailsEnabled) {
-            productFacts +=
-                "\n\n(Store has category metadetails disabled — use KB only for category facts.)"
+        if (activeModule === "PRODUCT_FIT" && categoryMetadetailsOn) {
+            usedTools.push("category_metadetails_enabled")
+            productFacts = [
+                productFacts,
+                "Store setting: category metadetails from the database are enabled for this shop when tooling provides them (use only if present in Facts).",
+            ]
+                .filter(Boolean)
+                .join("\n\n")
         }
     }
 
     const facts = [
+        type1Facts,
         kbContext ? `Knowledge:\n${kbContext}` : "",
         orderFacts ? `Order data:\n${orderFacts}` : "",
         productFacts ? `Product search:\n${productFacts}` : "",
@@ -338,7 +403,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     logger.info("[L1_ORCHESTRATOR]", {
         storeId: input.storeId,
         channel: input.channel,
-        module,
+        module: activeModule,
         pillar,
         usedTools,
     })
@@ -346,7 +411,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     return {
         text,
         meta: {
-            module,
+            module: activeModule,
             pillar,
             usedTools,
             kbHits: retrieval.kbCount,

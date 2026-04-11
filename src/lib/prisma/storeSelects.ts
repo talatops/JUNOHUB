@@ -11,8 +11,9 @@ export const storeSelectStorefrontChatApi = {
     id: true,
     storefrontChatEnabled: true,
     businessName: true,
-    categoryMetadetailsEnabled: true,
     aiModules: true,
+    categoryMetadetailsEnabled: true,
+    sharedFieldAnswers: true,
 } as const
 
 export const storeSelectDashboardStorefrontInbox = {
@@ -28,6 +29,7 @@ export const storeSelectGmailL1Context = {
     email: true,
     categoryMetadetailsEnabled: true,
     aiModules: true,
+    sharedFieldAnswers: true,
 } as const
 
 export const storeSelectPatchStorefrontAi = {
@@ -39,6 +41,8 @@ export const storeSelectPatchStorefrontAi = {
     storefrontChatLogoUrl: true,
     categoryMetadetailsEnabled: true,
     aiModules: true,
+    modulePolicies: true,
+    sharedFieldAnswers: true,
 } as const
 
 /** Session / OTP fields for L1 storefront replies */

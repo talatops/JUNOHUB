@@ -1,44 +1,64 @@
 import { describe, expect, it } from "vitest"
 import {
-    parseKnowledgeTemplateJson,
     buildKnowledgeTemplateStored,
+    mergeTemplateAnswers,
+    parseKnowledgeTemplateJson,
 } from "@/lib/kb/knowledgeTemplate"
 
-describe("parseKnowledgeTemplateJson", () => {
-    it("migrates v1 answers into legacyAnswers", () => {
+describe("knowledgeTemplate v3", () => {
+    it("migrates v1 answers into genericAnswers", () => {
         const parsed = parseKnowledgeTemplateJson({
+            answers: { brandVoice: "Hello" },
             version: 1,
-            answers: { brandVoice: "  Hello  " },
-            misc: "x",
-            updatedAt: "2020-01-01",
         })
-        expect(parsed?.version).toBe(2)
-        expect(parsed?.legacyAnswers.brandVoice).toBe("Hello")
-        expect(parsed?.sharedFields).toEqual({})
-        expect(parsed?.misc).toBe("x")
+        expect(parsed?.version).toBe(3)
+        expect(parsed?.genericAnswers.aiToneHowWeSound).toContain("Brand voice")
+        expect(parsed?.genericAnswers.aiToneHowWeSound).toContain("Hello")
     })
 
-    it("reads v2 sharedFields", () => {
+    it("migrates v2 legacyAnswers and drops sharedFields from template shape", () => {
         const parsed = parseKnowledgeTemplateJson({
             version: 2,
-            legacyAnswers: {},
-            sharedFields: { sf_brand_display_name: "Acme" },
+            legacyAnswers: { brandVoice: "X" },
+            sharedFields: { sf_brand_display_name: "ignored" },
+        })
+        expect(parsed?.version).toBe(3)
+        expect(parsed?.genericAnswers.aiToneHowWeSound).toContain("X")
+    })
+
+    it("reads v3 genericAnswers", () => {
+        const parsed = parseKnowledgeTemplateJson({
+            version: 3,
+            genericAnswers: { communicationFormality: "Casual" },
             updatedAt: "2020-01-01",
         })
-        expect(parsed?.sharedFields.sf_brand_display_name).toBe("Acme")
+        expect(parsed?.genericAnswers.communicationFormality).toBe("Casual")
     })
-})
 
-describe("buildKnowledgeTemplateStored", () => {
-    it("builds v2 payload", () => {
+    it("buildKnowledgeTemplateStored normalizes keys", () => {
         const s = buildKnowledgeTemplateStored({
-            answers: { brandVoice: "a" },
-            sharedFields: { sf_brand_display_name: "b" },
-            misc: "c",
+            answers: { aiToneHowWeSound: "  hi  ", unknown: "x" } as Record<string, string>,
         })
-        expect(s.version).toBe(2)
-        expect(s.legacyAnswers.brandVoice).toBe("a")
-        expect(s.sharedFields.sf_brand_display_name).toBe("b")
-        expect(s.misc).toBe("c")
+        expect(s.genericAnswers.aiToneHowWeSound).toBe("hi")
+        expect(s.genericAnswers).not.toHaveProperty("unknown")
+    })
+
+    it("mergeTemplateAnswers patches by key", () => {
+        const prev = parseKnowledgeTemplateJson({
+            version: 3,
+            genericAnswers: { aiToneHowWeSound: "a" },
+        })
+        const s = mergeTemplateAnswers(prev, { whenWeDoNotKnow: "b" })
+        expect(s.genericAnswers.aiToneHowWeSound).toBe("a")
+        expect(s.genericAnswers.whenWeDoNotKnow).toBe("b")
+    })
+
+    it("mergeTemplateAnswers clears when empty string sent for key", () => {
+        const prev = parseKnowledgeTemplateJson({
+            version: 3,
+            genericAnswers: { aiToneHowWeSound: "a" },
+        })
+        const s = mergeTemplateAnswers(prev, { aiToneHowWeSound: "  " })
+        expect(s.genericAnswers.aiToneHowWeSound).toBeUndefined()
     })
 })

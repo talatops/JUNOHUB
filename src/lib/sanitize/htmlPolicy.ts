@@ -1,7 +1,7 @@
 /**
  * HTML / rich-text policy (JUNOHUB)
  *
- * - **User-supplied HTML** (email templates, KB HTML mode, product body_html previews):
+ * - **User-supplied HTML** (KB HTML mode, product body_html previews, rich email bodies):
  *   Prefer storing as-is only when rendered through a strict sanitizer in a follow-up.
  *   For email footers and any interpolated user strings, use `escapeHtmlText` from `./escapeHtml`.
  * - **Widget script** (`src/app/api/stores/[storeId]/route.ts`):

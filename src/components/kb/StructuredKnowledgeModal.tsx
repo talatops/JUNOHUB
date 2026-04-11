@@ -3,21 +3,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import {
-    KNOWLEDGE_TEMPLATE_FIELDS,
+    STORE_VOICE_FIELDS,
     KNOWLEDGE_TEMPLATE_ANSWER_MAX,
-    KNOWLEDGE_TEMPLATE_MISC_MAX,
-    type KnowledgeTemplateFieldKey,
+    type StoreVoiceFieldKey,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
-import { sharedFieldsByGroup } from "@/lib/kb/sharedFieldCatalog"
 import { cn } from "@/lib/utils"
 import { Loader2, Save, X } from "lucide-react"
-
-type KbCounts = {
-    documents: number
-    faqs: number
-    structuredChunks: number
-}
 
 type StructuredKnowledgeModalProps = {
     open: boolean
@@ -41,23 +33,19 @@ export function StructuredKnowledgeModal({
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    const [answers, setAnswers] = useState<Record<KnowledgeTemplateFieldKey, string>>(
+    const [answers, setAnswers] = useState<Record<StoreVoiceFieldKey, string>>(
         () =>
-            KNOWLEDGE_TEMPLATE_FIELDS.reduce(
+            STORE_VOICE_FIELDS.reduce(
                 (acc, f) => {
                     acc[f.key] = ""
                     return acc
                 },
-                {} as Record<KnowledgeTemplateFieldKey, string>,
+                {} as Record<StoreVoiceFieldKey, string>,
             ),
     )
-    const [misc, setMisc] = useState("")
-    const [sharedFields, setSharedFields] = useState<Record<string, string>>({})
 
     const loadForm = useCallback(async () => {
-        const res = await fetch(
-            `/api/stores/${encodeURIComponent(storeId)}/knowledge-template`,
-        )
+        const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/knowledge-template`)
         if (!res.ok) return
         const data = (await res.json()) as {
             knowledgeTemplate: KnowledgeTemplateStored | null
@@ -65,22 +53,12 @@ export function StructuredKnowledgeModal({
         const tmpl = data.knowledgeTemplate
         setAnswers((prev) => {
             const next = { ...prev }
-            for (const f of KNOWLEDGE_TEMPLATE_FIELDS) {
-                const v = tmpl?.legacyAnswers?.[f.key]
+            for (const f of STORE_VOICE_FIELDS) {
+                const v = tmpl?.genericAnswers?.[f.key]
                 next[f.key] = typeof v === "string" ? v : ""
             }
             return next
         })
-        setMisc(typeof tmpl?.misc === "string" ? tmpl.misc : "")
-        if (tmpl?.sharedFields && typeof tmpl.sharedFields === "object") {
-            const sf: Record<string, string> = {}
-            for (const [k, v] of Object.entries(tmpl.sharedFields)) {
-                if (typeof v === "string") sf[k] = v
-            }
-            setSharedFields(sf)
-        } else {
-            setSharedFields({})
-        }
     }, [storeId])
 
     useEffect(() => {
@@ -132,8 +110,6 @@ export function StructuredKnowledgeModal({
         const payload: Record<string, unknown> = {
             template: {
                 answers,
-                sharedFields,
-                misc: misc.trim() || undefined,
             },
         }
 
@@ -146,14 +122,11 @@ export function StructuredKnowledgeModal({
                 ...payload,
                 ...(confirmDestructiveSwitch ? { confirmDestructiveSwitch: true } : {}),
             }
-            const res = await fetch(
-                `/api/stores/${encodeURIComponent(storeId)}/knowledge-template`,
-                {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(body),
-                },
-            )
+            const res = await fetch(`/api/stores/${encodeURIComponent(storeId)}/knowledge-template`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(body),
+            })
             const j = await res.json().catch(() => ({}))
             if (res.status === 400 && j.code === "CONFIRM_REQUIRED") {
                 const ok = window.confirm(
@@ -203,7 +176,7 @@ export function StructuredKnowledgeModal({
             <div
                 className={cn(
                     "relative flex min-h-0 w-full max-h-[92vh] flex-col rounded-t-2xl border sm:mx-4 sm:max-h-[90vh] sm:rounded-2xl",
-                    "sm:max-w-3xl lg:max-w-4xl",
+                    "sm:max-w-lg lg:max-w-xl",
                     panelClass,
                 )}
                 onClick={(e) => e.stopPropagation()}
@@ -222,7 +195,7 @@ export function StructuredKnowledgeModal({
                                 isLight ? "text-slate-900" : "text-white",
                             )}
                         >
-                            Structured store profile
+                            Store voice for AI
                         </h2>
                         <p
                             className={cn(
@@ -230,8 +203,8 @@ export function StructuredKnowledgeModal({
                                 isLight ? "text-slate-500" : "text-slate-400",
                             )}
                         >
-                            Answers are embedded for AI retrieval. Skip any field you
-                            don&apos;t need.
+                            A few basics about tone and boundaries. Per-topic policies live under{" "}
+                            <span className="font-semibold">JUNO Engine → AI modules</span>.
                         </p>
                     </div>
                     <button
@@ -277,7 +250,7 @@ export function StructuredKnowledgeModal({
                                 </div>
                             )}
 
-                            {KNOWLEDGE_TEMPLATE_FIELDS.map((field) => (
+                            {STORE_VOICE_FIELDS.map((field) => (
                                 <div key={field.key}>
                                     <label
                                         className={cn(
@@ -318,133 +291,6 @@ export function StructuredKnowledgeModal({
                                     />
                                 </div>
                             ))}
-
-                            <div
-                                className={cn(
-                                    "rounded-xl border p-4 space-y-4",
-                                    isLight
-                                        ? "border-slate-200 bg-slate-50/80"
-                                        : "border-white/10 bg-white/[0.03]",
-                                )}
-                            >
-                                <div>
-                                    <p
-                                        className={cn(
-                                            "text-sm font-bold",
-                                            isLight ? "text-slate-900" : "text-white",
-                                        )}
-                                    >
-                                        Extended policy fields (AI automation)
-                                    </p>
-                                    <p
-                                        className={cn(
-                                            "text-[11px] mt-1",
-                                            isLight ? "text-slate-500" : "text-slate-500",
-                                        )}
-                                    >
-                                        Optional detailed answers mapped to support playbooks. Same
-                                        fields can power multiple modules.
-                                    </p>
-                                </div>
-                                {Object.entries(sharedFieldsByGroup()).map(([group, fields]) => {
-                                    if (!fields.length) return null
-                                    return (
-                                        <details
-                                            key={group}
-                                            className={cn(
-                                                "rounded-lg border overflow-hidden",
-                                                isLight
-                                                    ? "border-slate-200 bg-white"
-                                                    : "border-white/10 bg-slate-950/40",
-                                            )}
-                                        >
-                                            <summary
-                                                className={cn(
-                                                    "cursor-pointer px-3 py-2 text-xs font-black uppercase tracking-widest",
-                                                    isLight
-                                                        ? "text-slate-700 bg-slate-100"
-                                                        : "text-slate-300 bg-white/5",
-                                                )}
-                                            >
-                                                {group.replace(/_/g, " ")}
-                                            </summary>
-                                            <div className="p-3 space-y-4">
-                                                {fields.map((field) => (
-                                                    <div key={field.id}>
-                                                        <label
-                                                            className={cn(
-                                                                "block text-xs font-semibold",
-                                                                isLight
-                                                                    ? "text-slate-800"
-                                                                    : "text-slate-200",
-                                                            )}
-                                                        >
-                                                            {field.label}
-                                                        </label>
-                                                        <textarea
-                                                            value={sharedFields[field.id] ?? ""}
-                                                            onChange={(e) =>
-                                                                setSharedFields((prev) => ({
-                                                                    ...prev,
-                                                                    [field.id]: e.target.value.slice(
-                                                                        0,
-                                                                        KNOWLEDGE_TEMPLATE_ANSWER_MAX,
-                                                                    ),
-                                                                }))
-                                                            }
-                                                            placeholder={field.placeholder}
-                                                            rows={2}
-                                                            maxLength={KNOWLEDGE_TEMPLATE_ANSWER_MAX}
-                                                            className={cn(
-                                                                "mt-1 w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[56px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
-                                                                isLight
-                                                                    ? "bg-white border-slate-200 text-slate-900"
-                                                                    : "bg-slate-950/50 border-white/10 text-white placeholder:text-slate-500",
-                                                            )}
-                                                        />
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </details>
-                                    )
-                                })}
-                            </div>
-
-                            <div>
-                                <label
-                                    className={cn(
-                                        "block text-sm font-semibold",
-                                        isLight ? "text-slate-900" : "text-white",
-                                    )}
-                                >
-                                    Anything else?
-                                </label>
-                                <p
-                                    className={cn(
-                                        "text-[11px] mt-0.5 mb-1.5",
-                                        isLight ? "text-slate-500" : "text-slate-500",
-                                    )}
-                                >
-                                    Extra notes customers should know.
-                                </p>
-                                <textarea
-                                    value={misc}
-                                    onChange={(e) =>
-                                        setMisc(
-                                            e.target.value.slice(0, KNOWLEDGE_TEMPLATE_MISC_MAX),
-                                        )
-                                    }
-                                    placeholder="Optional…"
-                                    rows={3}
-                                    maxLength={KNOWLEDGE_TEMPLATE_MISC_MAX}
-                                    className={cn(
-                                        "w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[72px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
-                                        isLight
-                                            ? "bg-slate-50 border-slate-200 text-slate-900 placeholder:text-slate-400"
-                                            : "bg-slate-950/50 border-white/10 text-white placeholder:text-slate-500",
-                                    )}
-                                />
-                            </div>
                         </div>
 
                         <div

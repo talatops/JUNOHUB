@@ -3,6 +3,13 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
 import { storeSelectPatchStorefrontAi } from "@/lib/prisma/storeSelects"
+import { modulePoliciesBodySchema, parseModulePoliciesJson } from "@/lib/kb/modulePolicies"
+import {
+    parseSharedFieldAnswersJson,
+    sharedFieldAnswersBodySchema,
+    sharedFieldAnswersPayload,
+} from "@/lib/kb/sharedFieldAnswers"
+import { replaceStructuredKnowledgeChunksForStore } from "@/lib/kb/structuredTemplateChunks"
 import {
     getPublishedThemeId,
     getThemeAsset,
@@ -521,6 +528,55 @@ async function syncStorefrontTheme(params: {
     console.log("[STOREFRONT_CHAT_THEME_SYNC_OK]", { storeId: params.storeId, enabled: params.enabled, themeId })
 }
 
+/**
+ * GET /api/stores/[storeId]
+ * Read storefront + L1 AI settings for the authenticated vendor.
+ */
+export async function GET(
+    _request: Request,
+    { params }: { params: Promise<{ storeId: string }> },
+) {
+    try {
+        const session = await auth()
+        if (!session?.user?.id) {
+            return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
+        }
+
+        const { storeId } = await params
+        if (!storeId) {
+            return NextResponse.json({ message: "Store ID is required" }, { status: 400 })
+        }
+
+        const store = await prisma.store.findFirst({
+            where: { id: storeId, userId: session.user.id },
+            select: {
+                id: true,
+                businessName: true,
+                categoryMetadetailsEnabled: true,
+                aiModules: true,
+                modulePolicies: true,
+                sharedFieldAnswers: true,
+            },
+        })
+
+        if (!store) {
+            return NextResponse.json({ message: "Store not found" }, { status: 404 })
+        }
+
+        return NextResponse.json({
+            id: store.id,
+            businessName: store.businessName,
+            categoryMetadetailsEnabled: store.categoryMetadetailsEnabled,
+            aiModules: store.aiModules,
+            modulePolicies: parseModulePoliciesJson(store.modulePolicies),
+            sharedFieldAnswers: parseSharedFieldAnswersJson(store.sharedFieldAnswers),
+        })
+    } catch (error) {
+        console.error("Error reading store settings:", error)
+        return NextResponse.json({ message: "Failed to read store" }, { status: 500 })
+    }
+}
+
 export async function PATCH(
     request: Request,
     { params }: { params: Promise<{ storeId: string }> }
@@ -582,6 +638,39 @@ export async function PATCH(
             updatePayload.aiModules = data.aiModules as Prisma.InputJsonValue
         }
 
+        let reembedStructured = false
+        if (data.modulePolicies !== undefined) {
+            const parsed = modulePoliciesBodySchema.safeParse(data.modulePolicies)
+            if (!parsed.success) {
+                return NextResponse.json(
+                    { message: "Invalid modulePolicies", issues: parsed.error.flatten() },
+                    { status: 400 },
+                )
+            }
+            const normalized = parseModulePoliciesJson(parsed.data)
+            updatePayload.modulePolicies =
+                Object.keys(normalized).length === 0
+                    ? Prisma.JsonNull
+                    : (normalized as Prisma.InputJsonValue)
+            reembedStructured = true
+        }
+
+        if (data.sharedFieldAnswers !== undefined) {
+            const parsed = sharedFieldAnswersBodySchema.safeParse(data.sharedFieldAnswers)
+            if (!parsed.success) {
+                return NextResponse.json(
+                    { message: "Invalid sharedFieldAnswers", issues: parsed.error.flatten() },
+                    { status: 400 },
+                )
+            }
+            const normalized = sharedFieldAnswersPayload(parsed.data)
+            updatePayload.sharedFieldAnswers =
+                Object.keys(normalized).length === 0
+                    ? Prisma.JsonNull
+                    : (normalized as Prisma.InputJsonValue)
+            reembedStructured = true
+        }
+
         const updatedStore = await prisma.store.update({
             where: { id: storeId },
             data: updatePayload,
@@ -609,6 +698,14 @@ export async function PATCH(
             }
         }
 
+        if (reembedStructured) {
+            try {
+                await replaceStructuredKnowledgeChunksForStore(storeId)
+            } catch (e) {
+                console.error("[MODULE_POLICIES_REEMBED_ERR]", e)
+            }
+        }
+
         return NextResponse.json({
             success: true,
             storefrontChatEnabled: updatedStore.storefrontChatEnabled,
@@ -619,6 +716,8 @@ export async function PATCH(
             storefrontChatLogoUrl: updatedStore.storefrontChatLogoUrl,
             categoryMetadetailsEnabled: updatedStore.categoryMetadetailsEnabled,
             aiModules: updatedStore.aiModules,
+            modulePolicies: parseModulePoliciesJson(updatedStore.modulePolicies),
+            sharedFieldAnswers: parseSharedFieldAnswersJson(updatedStore.sharedFieldAnswers),
         })
     } catch (error) {
         console.error("Error updating store settings:", error)

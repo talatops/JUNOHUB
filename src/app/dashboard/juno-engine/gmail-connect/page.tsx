@@ -198,7 +198,10 @@ function GmailConnectContent() {
                                     <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
                                     <div>
                                         <p className="text-sm font-bold text-white">Auto Responses</p>
-                                        <p className="text-xs text-slate-400 mt-1">Send automated replies using templates</p>
+                                        <p className="text-xs text-slate-400 mt-1">
+                                            Send automated replies using L1 AI and your knowledge base (configure
+                                            under JUNO Engine → Modules)
+                                        </p>
                                     </div>
                                 </div>
                             </div>

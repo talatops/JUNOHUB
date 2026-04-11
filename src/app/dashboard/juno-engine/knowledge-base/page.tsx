@@ -133,7 +133,7 @@ export default function KnowledgeBasePage() {
 
     const modeLabel =
         knowledgeBaseMode === "STRUCTURED"
-            ? "Structured profile"
+            ? "Store voice (structured)"
             : knowledgeBaseMode === "DOCUMENTS"
               ? "Documents & FAQs"
               : "Not chosen yet"
@@ -155,8 +155,9 @@ export default function KnowledgeBasePage() {
                         isLight ? "text-slate-500" : "text-slate-400",
                     )}
                 >
-                    One source of truth per store for AI: either a guided profile or
-                    uploaded docs & FAQs—not both.
+                    Store voice lives here; per-topic policies and automation toggles live under{" "}
+                    <span className="font-semibold">JUNO Engine → AI modules</span>. Or use uploaded
+                    docs &amp; FAQs—not both with structured mode.
                 </p>
             </div>
 
@@ -244,7 +245,7 @@ export default function KnowledgeBasePage() {
                                             isLight ? "text-slate-900" : "text-white",
                                         )}
                                     >
-                                        Structured profile
+                                        Store voice
                                     </p>
                                     <p
                                         className={cn(
@@ -252,7 +253,7 @@ export default function KnowledgeBasePage() {
                                             isLight ? "text-slate-500" : "text-slate-400",
                                         )}
                                     >
-                                        Guided questions · opens in a panel
+                                        Tone &amp; boundaries · policies in AI modules
                                     </p>
                                 </div>
                                 <ChevronRight
@@ -349,13 +350,13 @@ export default function KnowledgeBasePage() {
                                 isLight ? "text-slate-500" : "text-slate-500",
                             )}
                         >
-                            You&apos;re on a structured profile. Open{" "}
+                            You&apos;re on store voice (structured). Open{" "}
                             <button
                                 type="button"
                                 onClick={() => setStructuredOpen(true)}
                                 className="font-semibold text-indigo-500 hover:underline"
                             >
-                                Structured profile
+                                Store voice
                             </button>{" "}
                             to edit, or choose{" "}
                             <button
@@ -377,7 +378,7 @@ export default function KnowledgeBasePage() {
                         isLight={isLight}
                         onSaved={async () => {
                             await loadKb(activeStoreId!)
-                            setToast("Structured profile saved and embedded.")
+                            setToast("Store voice saved and embedded.")
                         }}
                     />
 

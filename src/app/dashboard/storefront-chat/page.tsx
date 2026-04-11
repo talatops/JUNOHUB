@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { storeSelectDashboardStorefrontInbox } from "@/lib/prisma/storeSelects"
 import { auth } from "@/auth.vendor"
 import { redirect } from "next/navigation"
-import { StorefrontAiSettingsCard } from "@/components/storefront/StorefrontAiSettingsCard"
+import Link from "next/link"
 
 export default async function StorefrontChatInboxPage() {
     const session = await auth()
@@ -73,10 +73,16 @@ export default async function StorefrontChatInboxPage() {
                 </div>
             </div>
 
-            <StorefrontAiSettingsCard
-                storeId={store.id}
-                initialCategoryMetadetailsEnabled={store.categoryMetadetailsEnabled}
-            />
+            <p className="text-sm text-slate-400">
+                L1 AI modules and catalog metafields:{" "}
+                <Link
+                    href="/dashboard/juno-engine/modules"
+                    className="font-semibold text-indigo-400 hover:underline"
+                >
+                    JUNO Engine → Modules
+                </Link>
+                .
+            </p>
 
             {sorted.length === 0 ? (
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-slate-300">

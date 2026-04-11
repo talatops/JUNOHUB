@@ -619,12 +619,11 @@ You can paste this into **variables** metadata in the UI if your editor supports
 - **Intent/mood:** Groq classifies the incoming message (`classifyCustomerEmail` in `src/lib/ai/gmailGroq.ts`). Returns `source: "groq" \| "fallback"` when the API or JSON parse fails (defaults to `general` + `neutral`).  
 - **Sensitive-topic heuristic:** `looksLikeSensitiveOrderTopic` in `src/lib/ai/gmailOrderDisclosure.ts` aligns disclosure with shipping/refund/billing wording when the classifier misses.  
 - **Hints:** `stripQuotedEmailTrailForHints` + `extractOrderNumberHints` in `src/lib/ai/gmailContext.ts` reduce false hints from quoted threads.  
-- **Reply body:** `processIncomingEmail` in `src/lib/gmail/emailProcessor.ts` loads a template with `findTemplateWithFallback` and renders `{{variables}}`. **No** `generateReplyAndTemplateFields` / **no** auto-`insertTemplate` from Gmail.  
-- Templates are keyed by `storeId` + `intent` + `mood` (see `src/lib/juno/templatesRepo.ts`).  
+- **Reply body:** `processIncomingEmail` calls `generateAutoReplyPreview` (`src/lib/gmail/autoReplyPreview.ts`): L1 orchestrator when guardrails allow, else built-in fallback HTML. Vendor-editable DB templates and `generateReplyAndTemplateFields` were removed.  
 - **Order context:** `buildOrderSummaryForEmail` reads **CachedOrder** only; keep cache in sync with Shopify.  
-- **Fallback HTML:** `buildOffTopicFallbackHtml`, `buildNeedOrderIdFallbackHtml`, `buildHintUnmatchedFallbackHtml`, or `buildMinimalFallbackHtml` if no template matches.  
+- **Fallback HTML:** `buildOffTopicFallbackHtml`, `buildNeedOrderIdFallbackHtml`, `buildHintUnmatchedFallbackHtml`, or `buildMinimalFallbackHtml` when L1 is skipped or returns empty.  
 - **Abuse / idempotency:** Per-sender caps via `EmailLog` (`checkGmailAutoReplyGuards`); duplicate inbound Gmail `message` ids use `GmailInboundAutoReply` so the same message is not auto-replied twice. Env: `GMAIL_AUTO_REPLY_MAX_PER_SENDER_PER_HOUR` (default 15), `GMAIL_AUTO_REPLY_BURST_MAX_PER_10MIN` (default 6); set to `0` to disable that cap.
 
 ---
 
-*Generated for JUNOHUB — intents/moods aligned with `src/lib/ai/gmailTaxonomy.ts` and `prisma/schema.prisma` `Template` model.*
+*Historical doc: intents/moods still align with `src/lib/ai/gmailTaxonomy.ts`. The `Template` table may exist in older DBs but is no longer used by the Gmail reply path.*

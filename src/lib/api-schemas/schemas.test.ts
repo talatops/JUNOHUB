@@ -13,11 +13,7 @@ import {
     supplierProfileUpsertSchema,
     productSyncDecisionSchema,
 } from "./business"
-import {
-    junoTemplateCreateSchema,
-    junoTemplatePatchSchema,
-    notificationsMarkReadSchema,
-} from "./vendorMutations"
+import { notificationsMarkReadSchema } from "./vendorMutations"
 import { webPushSubscribeSchema, webPushUnsubscribeSchema } from "./notificationsPush"
 import {
     authVerifyMfaSchema,
@@ -121,26 +117,6 @@ describe("productSyncDecisionSchema", () => {
     it("only allows accept/reject", () => {
         expect(productSyncDecisionSchema.safeParse({ action: "accept" }).success).toBe(true)
         expect(productSyncDecisionSchema.safeParse({ action: "hold" }).success).toBe(false)
-    })
-})
-
-describe("junoTemplateCreateSchema", () => {
-    it("requires core fields", () => {
-        expect(
-            junoTemplateCreateSchema.safeParse({
-                name: "N",
-                intent: "i",
-                mood: "m",
-                body: "b",
-            }).success,
-        ).toBe(true)
-        expect(junoTemplateCreateSchema.safeParse({ name: "N" }).success).toBe(false)
-    })
-})
-
-describe("junoTemplatePatchSchema", () => {
-    it("allows partial body", () => {
-        expect(junoTemplatePatchSchema.safeParse({ body: "x" }).success).toBe(true)
     })
 })
 

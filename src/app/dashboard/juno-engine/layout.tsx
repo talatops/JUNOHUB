@@ -5,7 +5,7 @@ import {
     Ticket,
     Flag,
     Mail,
-    FileText,
+    Layers,
     HelpCircle
 } from "lucide-react"
 
@@ -24,9 +24,9 @@ export default function JunoEngineLayout({
             icon: HelpCircle
         },
         {
-            label: "Templates",
-            href: "/dashboard/juno-engine/email-templates",
-            icon: FileText
+            label: "Modules",
+            href: "/dashboard/juno-engine/modules",
+            icon: Layers
         },
         {
             label: "Tickets",

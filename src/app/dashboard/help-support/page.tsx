@@ -58,7 +58,7 @@ const faqs: FAQItem[] = [
     {
         id: "5",
         question: "What is JUNO Engine?",
-        answer: "JUNO Engine is our communication and support infrastructure. It includes ticket management, email flagging, Gmail integration, and email templates to help you manage customer communications efficiently.",
+        answer: "JUNO Engine is our communication and support infrastructure. It includes ticket views from email activity, email flagging, Gmail integration, and L1 AI replies driven by your knowledge base and module settings (JUNO Engine → Modules).",
         category: "general"
     },
     {

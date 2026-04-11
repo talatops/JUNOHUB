@@ -3,63 +3,91 @@ import { logger } from "@/lib/logger"
 import { embedBatch } from "@/lib/kb/openaiEmbeddings"
 import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 import {
-    KNOWLEDGE_TEMPLATE_FIELDS,
+    STORE_VOICE_FIELDS,
+    parseKnowledgeTemplateJson,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
-import { SHARED_FIELD_CATALOG } from "@/lib/kb/sharedFieldCatalog"
+import { parseModulePoliciesJson } from "@/lib/kb/modulePolicies"
+import { parseSharedFieldAnswersJson } from "@/lib/kb/sharedFieldAnswers"
+import { L1_MODULE_CUSTOMER_LABEL } from "@/lib/ai/orchestrator/vendorModuleGroups"
+import { SHARED_FIELD_SHORT_LABEL } from "@/lib/ai/orchestrator/moduleThreeTypes"
+import type { L1Module } from "@/lib/ai/orchestrator/types"
 
-export async function replaceStructuredKnowledgeChunks(
-    storeId: string,
-    stored: KnowledgeTemplateStored,
-) {
+/**
+ * Rebuild STRUCTURED knowledge chunks from the store's v3 template + modulePolicies + sharedFieldAnswers.
+ * Clears STRUCTURED rows when the store is not in STRUCTURED mode.
+ */
+export async function replaceStructuredKnowledgeChunksForStore(storeId: string) {
     await prisma.$executeRawUnsafe(
         `DELETE FROM "KnowledgeChunk" WHERE "storeId" = $1 AND "sourceType"::text = 'STRUCTURED'`,
         storeId,
     )
+
+    const store = await prisma.store.findFirst({
+        where: { id: storeId },
+        select: {
+            knowledgeBaseMode: true,
+            knowledgeTemplate: true,
+            modulePolicies: true,
+            sharedFieldAnswers: true,
+        },
+    })
+
+    if (!store || store.knowledgeBaseMode !== "STRUCTURED") {
+        return
+    }
+
+    const stored: KnowledgeTemplateStored =
+        parseKnowledgeTemplateJson(store.knowledgeTemplate) ?? {
+            version: 3,
+            genericAnswers: {},
+            updatedAt: new Date().toISOString(),
+        }
+
+    const modulePolicies = parseModulePoliciesJson(store.modulePolicies)
+    const sharedFieldAnswers = parseSharedFieldAnswersJson(store.sharedFieldAnswers)
 
     const rows: {
         content: string
         metadata: ReturnType<typeof kbEmbeddingMetadata>
     }[] = []
 
-    for (const field of KNOWLEDGE_TEMPLATE_FIELDS) {
-        const text = stored.legacyAnswers[field.key]
+    for (const field of STORE_VOICE_FIELDS) {
+        const text = stored.genericAnswers[field.key]
         if (text?.trim()) {
             rows.push({
                 content: `Q: ${field.label}\nA: ${text.trim()}`,
                 metadata: kbEmbeddingMetadata({
                     sourceKey: field.key,
-                    moduleCode: "LEGACY",
+                    moduleCode: "ALL",
                     fieldId: field.key,
                 }),
             })
         }
     }
 
-    const catalogById = new Map(SHARED_FIELD_CATALOG.map((f) => [f.id, f]))
-    for (const [id, text] of Object.entries(stored.sharedFields)) {
-        const trimmed = text?.trim()
-        if (!trimmed) continue
-        const def = catalogById.get(id)
-        const label = def?.label ?? id
-        const moduleCode = def?.group ?? "FAQ"
+    for (const [mod, text] of Object.entries(modulePolicies) as [L1Module, string][]) {
+        if (!text?.trim()) continue
+        const title = L1_MODULE_CUSTOMER_LABEL[mod] ?? mod
         rows.push({
-            content: `Q: ${label}\nA: ${trimmed}`,
+            content: `Q: ${title} (store policy)\nA: ${text.trim()}`,
             metadata: kbEmbeddingMetadata({
-                sourceKey: id,
-                moduleCode,
-                fieldId: id,
+                sourceKey: `policy_${mod}`,
+                moduleCode: mod,
+                fieldId: `policy_${mod}`,
             }),
         })
     }
 
-    if (stored.misc?.trim()) {
+    for (const [fieldId, text] of Object.entries(sharedFieldAnswers)) {
+        if (!text?.trim()) continue
+        const lab = SHARED_FIELD_SHORT_LABEL[fieldId] || fieldId
         rows.push({
-            content: `Q: Anything else customers should know\nA: ${stored.misc.trim()}`,
+            content: `Q: ${lab} (${fieldId})\nA: ${text.trim()}`,
             metadata: kbEmbeddingMetadata({
-                sourceKey: "misc",
+                sourceKey: fieldId,
                 moduleCode: "ALL",
-                fieldId: "misc",
+                fieldId,
             }),
         })
     }

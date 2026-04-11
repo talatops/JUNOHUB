@@ -14,7 +14,7 @@ import {
     Ticket,
     Flag,
     Mail,
-    FileText,
+    Layers,
     HelpCircle,
     Store
 } from "lucide-react"
@@ -76,7 +76,7 @@ const routes = [
         color: "text-cyan-500",
         subRoutes: [
             { label: "Knowledge Base", href: "/dashboard/juno-engine/knowledge-base", icon: HelpCircle },
-            { label: "Templates", href: "/dashboard/juno-engine/email-templates", icon: FileText },
+            { label: "Modules", href: "/dashboard/juno-engine/modules", icon: Layers },
             { label: "Tickets", href: "/dashboard/juno-engine/tickets", icon: Ticket },
             { label: "Flagged Emails", href: "/dashboard/juno-engine/flagged-email", icon: Flag },
             { label: "Gmail", href: "/dashboard/juno-engine/gmail-connect", icon: Mail },

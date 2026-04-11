@@ -2,7 +2,7 @@ import nodemailer from "nodemailer"
 import { logger } from "@/lib/logger"
 import { getBaseUrl } from "@/lib/utils"
 
-/** Returns the absolute URL for the JUNO logo (for use in email templates) */
+/** Returns the absolute URL for the JUNO logo (for use in outbound HTML emails) */
 export function getEmailLogoUrl(): string {
     return `${getBaseUrl()}/icon.png`
 }

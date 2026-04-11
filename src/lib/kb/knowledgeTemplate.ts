@@ -1,8 +1,53 @@
 import { z } from "zod"
-import { SHARED_FIELD_IDS } from "@/lib/kb/sharedFieldCatalog"
 
-/** Six fixed prompts + optional misc (open-ended). Legacy v1. */
-export const KNOWLEDGE_TEMPLATE_FIELD_KEYS = [
+/**
+ * Minimal “store voice” fields for structured KB mode (v3).
+ * Per-topic policies live under AI modules (modulePolicies on Store).
+ */
+export const STORE_VOICE_FIELD_KEYS = [
+    "aiToneHowWeSound",
+    "communicationFormality",
+    "phrasesAndPromisesToAvoid",
+    "whenWeDoNotKnow",
+] as const
+
+export type StoreVoiceFieldKey = (typeof STORE_VOICE_FIELD_KEYS)[number]
+
+export const STORE_VOICE_FIELDS: {
+    key: StoreVoiceFieldKey
+    label: string
+    description: string
+    placeholder: string
+}[] = [
+    {
+        key: "aiToneHowWeSound",
+        label: "How should the AI sound?",
+        description: "Tone, personality, and how you want customers to feel when they read replies.",
+        placeholder:
+            "e.g. Warm and helpful; short sentences; we say “we” and sound human, not robotic…",
+    },
+    {
+        key: "communicationFormality",
+        label: "Formality level",
+        description: "How formal or casual the assistant should be.",
+        placeholder: "e.g. Professional but friendly; avoid slang; or casual and upbeat…",
+    },
+    {
+        key: "phrasesAndPromisesToAvoid",
+        label: "Words or promises to avoid",
+        description: "Things the AI must not say (legal, brand, or operational).",
+        placeholder: "e.g. Never guarantee delivery dates; don’t say “free” unless…",
+    },
+    {
+        key: "whenWeDoNotKnow",
+        label: "When we’re not sure",
+        description: "How the assistant should behave when the answer isn’t in your policies or data.",
+        placeholder: "e.g. Say we’re not sure and invite them to email support with their order #…",
+    },
+]
+
+/** @deprecated Use STORE_VOICE_FIELD_KEYS — kept for migrating old DB JSON */
+const LEGACY_TEMPLATE_FIELD_KEYS = [
     "brandVoice",
     "shippingReturns",
     "sizingFit",
@@ -11,79 +56,27 @@ export const KNOWLEDGE_TEMPLATE_FIELD_KEYS = [
     "differentiators",
 ] as const
 
-export type KnowledgeTemplateFieldKey = (typeof KNOWLEDGE_TEMPLATE_FIELD_KEYS)[number]
+const LEGACY_LABELS: Record<(typeof LEGACY_TEMPLATE_FIELD_KEYS)[number], string> = {
+    brandVoice: "Brand voice",
+    shippingReturns: "Shipping & returns",
+    sizingFit: "Sizing & fit",
+    materialsCare: "Materials & care",
+    policies: "Policies",
+    differentiators: "What makes you different",
+}
 
-export const KNOWLEDGE_TEMPLATE_FIELDS: {
-    key: KnowledgeTemplateFieldKey
-    label: string
-    description: string
-    placeholder: string
-}[] = [
-    {
-        key: "brandVoice",
-        label: "Brand voice and personality",
-        description:
-            "How should your store sound? Tone, formality, phrases to use or avoid, and what makes your brand feel human.",
-        placeholder:
-            "e.g. Friendly and upbeat; we say “we” and avoid slang; we’re optimistic but never pushy…",
-    },
-    {
-        key: "shippingReturns",
-        label: "Shipping, returns, and exchanges",
-        description:
-            "Regions you ship to, typical timelines, costs, return windows, and how customers start a return.",
-        placeholder:
-            "e.g. US & Canada; 3–5 business days standard; free over $75; 30-day returns via portal…",
-    },
-    {
-        key: "sizingFit",
-        label: "Sizing and fit",
-        description:
-            "Fit notes, size guides, model references, and how customers should choose a size.",
-        placeholder:
-            "e.g. True to size; relaxed fit on hoodies; see size chart on each product page…",
-    },
-    {
-        key: "materialsCare",
-        label: "Materials, care, and quality",
-        description:
-            "Fabrics, ingredients, durability, care instructions, and sustainability claims you stand behind.",
-        placeholder:
-            "e.g. 100% organic cotton; machine wash cold; hang dry; OEKO-TEX where noted…",
-    },
-    {
-        key: "policies",
-        label: "Policies customers ask about",
-        description:
-            "Warranty, price adjustments, pre-orders, backorders, subscriptions, or limits worth stating clearly.",
-        placeholder:
-            "e.g. 1-year defect warranty; no price matching; pre-orders ship when noted on the product…",
-    },
-    {
-        key: "differentiators",
-        label: "What makes your store special",
-        description:
-            "Differentiators, origin story, craftsmanship, community, or anything that sets you apart from competitors.",
-        placeholder:
-            "e.g. Small-batch, made in Portland; we donate 1% to ocean cleanup; limited seasonal drops…",
-    },
-]
-
-/** Per-field answer cap (mirrored on structured KB form). */
 export const KNOWLEDGE_TEMPLATE_ANSWER_MAX = 12_000
-/** Misc notes cap. */
-export const KNOWLEDGE_TEMPLATE_MISC_MAX = 16_000
 
-const sharedFieldsRecordSchema = z
+const genericAnswersRecordSchema = z
     .record(z.string().max(KNOWLEDGE_TEMPLATE_ANSWER_MAX))
     .optional()
     .superRefine((val, ctx) => {
         if (!val) return
         for (const k of Object.keys(val)) {
-            if (!SHARED_FIELD_IDS.has(k)) {
+            if (!STORE_VOICE_FIELD_KEYS.includes(k as StoreVoiceFieldKey)) {
                 ctx.addIssue({
                     code: z.ZodIssueCode.custom,
-                    message: `Unknown shared field id: ${k}`,
+                    message: `Unknown template field: ${k}`,
                 })
             }
         }
@@ -94,39 +87,40 @@ export const knowledgeTemplatePutSchema = z.object({
     confirmDestructiveSwitch: z.boolean().optional(),
     template: z
         .object({
-            answers: z.record(z.string().max(KNOWLEDGE_TEMPLATE_ANSWER_MAX)).optional(),
-            /** Expanded sf_* vendor policy fields (v2). */
-            sharedFields: sharedFieldsRecordSchema,
-            misc: z.string().max(KNOWLEDGE_TEMPLATE_MISC_MAX).optional(),
+            /** v3 generic store-voice answers only */
+            answers: genericAnswersRecordSchema,
         })
         .optional(),
 })
 
-/** Normalized template for storage + embedding (v2). */
+/** Normalized template for storage + embedding (v3). */
 export type KnowledgeTemplateStored = {
-    version: 2
-    /** Legacy six-field answers (optional once migrated to shared fields). */
-    legacyAnswers: Partial<Record<KnowledgeTemplateFieldKey, string>>
-    /** Spec-aligned shared_field_id values. */
-    sharedFields: Partial<Record<string, string>>
-    misc?: string
+    version: 3
+    genericAnswers: Partial<Record<StoreVoiceFieldKey, string>>
     updatedAt: string
 }
 
-/** v1 shape as persisted historically */
-type KnowledgeTemplateV1 = {
+type KnowledgeTemplateV2File = {
     version?: number
-    answers?: Partial<Record<KnowledgeTemplateFieldKey, string>>
+    legacyAnswers?: Record<string, string>
+    sharedFields?: Record<string, string>
     misc?: string
     updatedAt?: string
 }
 
-export function normalizeTemplateAnswers(
+type KnowledgeTemplateV1 = {
+    version?: number
+    answers?: Record<string, string>
+    misc?: string
+    updatedAt?: string
+}
+
+function normalizeGenericAnswers(
     raw: Record<string, string> | undefined,
-): Partial<Record<KnowledgeTemplateFieldKey, string>> {
+): Partial<Record<StoreVoiceFieldKey, string>> {
     if (!raw) return {}
-    const out: Partial<Record<KnowledgeTemplateFieldKey, string>> = {}
-    for (const key of KNOWLEDGE_TEMPLATE_FIELD_KEYS) {
+    const out: Partial<Record<StoreVoiceFieldKey, string>> = {}
+    for (const key of STORE_VOICE_FIELD_KEYS) {
         const v = raw[key]
         if (typeof v === "string" && v.trim()) {
             out[key] = v.trim()
@@ -135,71 +129,119 @@ export function normalizeTemplateAnswers(
     return out
 }
 
-function normalizeSharedFields(
-    raw: Record<string, string> | undefined,
-): Partial<Record<string, string>> {
-    if (!raw) return {}
-    const out: Partial<Record<string, string>> = {}
-    for (const [k, v] of Object.entries(raw)) {
-        if (!SHARED_FIELD_IDS.has(k)) continue
-        if (typeof v === "string" && v.trim()) {
-            out[k] = v.trim()
+function migrateLegacySixFieldsToGeneric(
+    legacy: Record<string, string> | undefined,
+): Partial<Record<StoreVoiceFieldKey, string>> {
+    if (!legacy) return {}
+    const parts: string[] = []
+    for (const key of LEGACY_TEMPLATE_FIELD_KEYS) {
+        const t = legacy[key]?.trim()
+        if (t) {
+            parts.push(`${LEGACY_LABELS[key]}:\n${t}`)
         }
     }
-    return out
+    if (!parts.length) return {}
+    return { aiToneHowWeSound: parts.join("\n\n---\n\n") }
 }
 
 /**
- * Coerce DB JSON to KnowledgeTemplateStored v2.
- * Migrates v1 `{ version: 1, answers }` into legacyAnswers.
+ * Coerce DB JSON to KnowledgeTemplateStored v3.
+ * Migrates v1 answers, v2 legacyAnswers/sharedFields (sharedFields discarded from template).
  */
 export function parseKnowledgeTemplateJson(json: unknown): KnowledgeTemplateStored | null {
     if (json == null || typeof json !== "object") return null
     const o = json as Record<string, unknown>
-    const ver = o.version === 2 ? 2 : 1
+    const ver = o.version === 3 ? 3 : o.version === 2 ? 2 : 1
 
-    if (ver === 2) {
-        const legacy = normalizeTemplateAnswers(
-            o.legacyAnswers as Record<string, string> | undefined,
-        )
-        const sharedRaw = o.sharedFields
-        const shared =
-            sharedRaw && typeof sharedRaw === "object" && !Array.isArray(sharedRaw)
-                ? normalizeSharedFields(sharedRaw as Record<string, string>)
+    if (ver === 3) {
+        const gen = o.genericAnswers
+        const genericAnswers =
+            gen && typeof gen === "object" && !Array.isArray(gen)
+                ? normalizeGenericAnswers(gen as Record<string, string>)
                 : {}
-        const misc =
-            typeof o.misc === "string" && o.misc.trim() ? o.misc.trim() : undefined
         return {
-            version: 2,
-            legacyAnswers: legacy,
-            sharedFields: shared,
-            misc,
+            version: 3,
+            genericAnswers,
             updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : new Date().toISOString(),
         }
     }
 
+    if (ver === 2) {
+        const v2 = o as KnowledgeTemplateV2File
+        const legacyRaw = v2.legacyAnswers
+        const fromLegacy =
+            legacyRaw && typeof legacyRaw === "object" && !Array.isArray(legacyRaw)
+                ? migrateLegacySixFieldsToGeneric(legacyRaw as Record<string, string>)
+                : {}
+        const gen = o.genericAnswers
+        const explicit =
+            gen && typeof gen === "object" && !Array.isArray(gen)
+                ? normalizeGenericAnswers(gen as Record<string, string>)
+                : {}
+        const misc = typeof v2.misc === "string" && v2.misc.trim() ? v2.misc.trim() : ""
+        const merged: Partial<Record<StoreVoiceFieldKey, string>> = { ...fromLegacy, ...explicit }
+        if (misc) {
+            const prev = merged.whenWeDoNotKnow ?? ""
+            merged.whenWeDoNotKnow = [prev, `Additional notes:\n${misc}`]
+                .filter(Boolean)
+                .join("\n\n")
+        }
+        return {
+            version: 3,
+            genericAnswers: merged,
+            updatedAt: v2.updatedAt || new Date().toISOString(),
+        }
+    }
+
     const v1 = o as KnowledgeTemplateV1
-    const legacy = normalizeTemplateAnswers(v1.answers as Record<string, string> | undefined)
-    const misc = v1.misc?.trim() || undefined
+    const legacy = v1.answers as Record<string, string> | undefined
+    const misc = v1.misc?.trim() || ""
+    const fromLegacy = migrateLegacySixFieldsToGeneric(legacy)
+    if (misc) {
+        const prev = fromLegacy.whenWeDoNotKnow ?? ""
+        fromLegacy.whenWeDoNotKnow = [prev, `Additional notes:\n${misc}`]
+            .filter(Boolean)
+            .join("\n\n")
+    }
     return {
-        version: 2,
-        legacyAnswers: legacy,
-        sharedFields: {},
-        misc,
+        version: 3,
+        genericAnswers: fromLegacy,
         updatedAt: v1.updatedAt || new Date().toISOString(),
     }
 }
 
 export function buildKnowledgeTemplateStored(input: {
     answers?: Record<string, string>
-    sharedFields?: Record<string, string>
-    misc?: string
 }): KnowledgeTemplateStored {
     return {
-        version: 2,
-        legacyAnswers: normalizeTemplateAnswers(input.answers),
-        sharedFields: normalizeSharedFields(input.sharedFields),
-        misc: input.misc?.trim() || undefined,
+        version: 3,
+        genericAnswers: normalizeGenericAnswers(input.answers),
+        updatedAt: new Date().toISOString(),
+    }
+}
+
+/** Merge PUT answers onto previous template (v3). */
+export function mergeTemplateAnswers(
+    prev: KnowledgeTemplateStored | null,
+    answers: Record<string, string> | undefined,
+): KnowledgeTemplateStored {
+    const base = prev?.genericAnswers ?? {}
+    const next = { ...base }
+    if (answers) {
+        for (const key of STORE_VOICE_FIELD_KEYS) {
+            if (key in answers) {
+                const v = answers[key]
+                if (typeof v === "string" && v.trim()) {
+                    next[key] = v.trim()
+                } else {
+                    delete next[key]
+                }
+            }
+        }
+    }
+    return {
+        version: 3,
+        genericAnswers: next,
         updatedAt: new Date().toISOString(),
     }
 }
