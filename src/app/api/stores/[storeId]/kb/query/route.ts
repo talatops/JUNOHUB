@@ -2,20 +2,22 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
-import { chatCompletion } from "@/lib/kb/bedrockChat"
+import { embedBatch } from "@/lib/kb/openaiEmbeddings"
+import { KB_EMBEDDING_PROVIDER } from "@/lib/kb/embeddingMeta"
+import { generateKbRagAnswer } from "@/lib/kb/kbAnswer"
 
 type QueryBody = {
     query?: string
     topK?: number
     includeFaq?: boolean
     includeDocuments?: boolean
+    includeStructured?: boolean
 }
 
 type KnowledgeChunkRow = {
     id: string
     content: string
-    sourceType: "DOCUMENT" | "FAQ"
+    sourceType: "DOCUMENT" | "FAQ" | "STRUCTURED"
     documentId: string | null
     faqItemId: string | null
     metadata: unknown
@@ -58,10 +60,14 @@ export async function POST(
         const topK = Math.min(Math.max(body.topK ?? 8, 1), 20)
         const includeFaq = body.includeFaq ?? true
         const includeDocuments = body.includeDocuments ?? true
+        const includeStructured = body.includeStructured ?? true
 
-        if (!includeFaq && !includeDocuments) {
+        if (!includeFaq && !includeDocuments && !includeStructured) {
             return NextResponse.json(
-                { message: "At least one of FAQs or Documents must be included" },
+                {
+                    message:
+                        "At least one of FAQs, documents, or structured knowledge must be included",
+                },
                 { status: 400 },
             )
         }
@@ -74,14 +80,18 @@ export async function POST(
             )
         }
 
-        const filters: string[] = ['"storeId" = $1']
-        if (includeFaq && !includeDocuments) {
-            filters.push(`"sourceType" = 'FAQ'`)
-        } else if (!includeFaq && includeDocuments) {
-            filters.push(`"sourceType" = 'DOCUMENT'`)
-        }
+        const sourceTypes: string[] = []
+        if (includeFaq) sourceTypes.push("'FAQ'")
+        if (includeDocuments) sourceTypes.push("'DOCUMENT'")
+        if (includeStructured) sourceTypes.push("'STRUCTURED'")
 
-        const whereClause = filters.length ? `WHERE ${filters.join(" AND ")}` : ""
+        const filters: string[] = [
+            '"storeId" = $1',
+            `"sourceType" IN (${sourceTypes.join(", ")})`,
+            `COALESCE(("metadata"::jsonb->>'provider'), '') = '${KB_EMBEDDING_PROVIDER}'`,
+        ]
+
+        const whereClause = `WHERE ${filters.join(" AND ")}`
 
         const chunks = await prisma.$queryRawUnsafe<KnowledgeChunkRow[]>(
             `
@@ -113,7 +123,9 @@ export async function POST(
             const label =
                 chunk.sourceType === "FAQ"
                     ? `FAQ #${index + 1}`
-                    : `Document chunk #${index + 1}`
+                    : chunk.sourceType === "STRUCTURED"
+                      ? `Store profile #${index + 1}`
+                      : `Document chunk #${index + 1}`
             return `${label} (similarity: ${chunk.similarity.toFixed(2)}):\n${
                 chunk.content
             }`
@@ -123,23 +135,21 @@ export async function POST(
 
         const systemPrompt =
             "You are an AI assistant helping answer customer and vendor questions for a specific store.\n" +
-            "Use ONLY the provided context from the store's documents and FAQs.\n" +
+            "Use ONLY the provided context from the store's documents, FAQs, and structured store profile.\n" +
             "If the answer is not clearly present in the context, say that you do not know.\n" +
             "Be concise and helpful.\n"
 
         const userMessage = `Context:\n${context}\n\nQuestion:\n${question}`
 
-        let answer: string
-        try {
-            answer = await chatCompletion(userMessage, {
-                systemPrompt,
-                maxTokens: 512,
-            })
-        } catch (error) {
-            logger.error("Bedrock RAG answer error", error)
+        const { text: answer, source } = await generateKbRagAnswer(userMessage, {
+            systemPrompt,
+            maxTokens: 512,
+        })
+
+        if (source === "none") {
             return NextResponse.json(
-                { message: "Failed to generate answer from Bedrock" },
-                { status: 500 },
+                { message: "Failed to generate an answer" },
+                { status: 502 },
             )
         }
 
@@ -161,4 +171,3 @@ export async function POST(
         )
     }
 }
-

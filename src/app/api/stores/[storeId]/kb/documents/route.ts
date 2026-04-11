@@ -40,6 +40,23 @@ export async function POST(
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
 
+        if (store.knowledgeBaseMode === "STRUCTURED") {
+            return NextResponse.json(
+                {
+                    message:
+                        "Document upload is disabled while using structured knowledge. Switch to document-based knowledge in Settings → Knowledge base.",
+                },
+                { status: 409 },
+            )
+        }
+
+        if (store.knowledgeBaseMode === "UNSET") {
+            await prisma.store.update({
+                where: { id: store.id },
+                data: { knowledgeBaseMode: "DOCUMENTS" },
+            })
+        }
+
         const formData = await request.formData()
         const file = formData.get("file")
 

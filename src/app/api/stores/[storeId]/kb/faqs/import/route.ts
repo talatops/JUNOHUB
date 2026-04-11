@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
+import { embedBatch } from "@/lib/kb/openaiEmbeddings"
+import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 import type { FaqItem } from "@prisma/client"
 
 type FaqImportItem = {
@@ -33,6 +34,16 @@ export async function POST(
 
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
+        }
+
+        if (store.knowledgeBaseMode === "STRUCTURED") {
+            return NextResponse.json(
+                {
+                    message:
+                        "FAQ import is disabled while using structured knowledge. Switch to document-based knowledge in Settings.",
+                },
+                { status: 409 },
+            )
         }
 
         let items: FaqImportItem[] = []
@@ -135,6 +146,7 @@ export async function POST(
                     {
                         question: faq.question,
                         answer: faq.answer,
+                        ...kbEmbeddingMetadata(),
                     } as unknown as object,
                 )
             }),

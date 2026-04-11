@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useTheme } from "@/components/ThemeProvider"
 import { cn } from "@/lib/utils"
 
@@ -17,9 +18,17 @@ type KnowledgeDocument = {
 
 type DocumentsSectionProps = {
     storeId: string
+    locked?: boolean
+    lockedMessage?: string
+    settingsHref?: string
 }
 
-export function DocumentsSection({ storeId }: DocumentsSectionProps) {
+export function DocumentsSection({
+    storeId,
+    locked = false,
+    lockedMessage = "This store uses structured knowledge. Switch to Documents & FAQs above or edit your structured profile.",
+    settingsHref = "/dashboard/juno-engine/knowledge-base#kb-source",
+}: DocumentsSectionProps) {
     const { theme } = useTheme()
     const isLight = theme === "light"
     const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
@@ -118,6 +127,27 @@ export function DocumentsSection({ storeId }: DocumentsSectionProps) {
 
     return (
         <div className="space-y-4">
+            {locked && (
+                <div
+                    className={cn(
+                        "rounded-xl border px-4 py-3 text-sm",
+                        isLight
+                            ? "border-amber-200 bg-amber-50 text-amber-900"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-100",
+                    )}
+                >
+                    <p>{lockedMessage}</p>
+                    <Link
+                        href={settingsHref}
+                        className={cn(
+                            "mt-2 inline-block text-xs font-bold underline",
+                            isLight ? "text-indigo-600" : "text-indigo-300",
+                        )}
+                    >
+                        Knowledge base
+                    </Link>
+                </div>
+            )}
             <div className="flex items-center justify-between">
                 <div>
                     <h3 className={cn("text-lg font-semibold", isLight ? "text-slate-900" : "text-white")}>
@@ -127,14 +157,21 @@ export function DocumentsSection({ storeId }: DocumentsSectionProps) {
                         Upload PDFs or DOCX files to power AI answers.
                     </p>
                 </div>
-                <label className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-sm font-medium text-white cursor-pointer transition-colors shadow-sm">
+                <label
+                    className={cn(
+                        "inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors shadow-sm",
+                        locked
+                            ? "bg-slate-500 cursor-not-allowed opacity-60"
+                            : "bg-indigo-600 hover:bg-indigo-700 cursor-pointer",
+                    )}
+                >
                     <span>{isUploading ? "Uploading..." : "Upload document"}</span>
                     <input
                         type="file"
                         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         className="hidden"
                         onChange={handleUpload}
-                        disabled={isUploading}
+                        disabled={isUploading || locked}
                     />
                 </label>
             </div>
@@ -204,7 +241,8 @@ export function DocumentsSection({ storeId }: DocumentsSectionProps) {
                                     <button
                                         type="button"
                                         onClick={() => void handleDelete(doc.id)}
-                                        className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                                        disabled={locked}
+                                        className="p-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                                         title="Delete document"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -114,6 +114,11 @@ model Store {
   storefrontChatBrandColor String?
   storefrontChatFontFamily String?
   storefrontChatLogoUrl String?
+
+  /** Primary knowledge source: structured questionnaire vs uploaded documents (mutually exclusive). */
+  knowledgeBaseMode   KnowledgeBaseMode @default(UNSET)
+  /** Saved structured KB answers (version, per-field text, misc). Embedded as STRUCTURED chunks. */
+  knowledgeTemplate   Json?
   
   // Relations
   connections      Connection[]
@@ -485,6 +490,13 @@ enum KnowledgeDocumentStatus {
 enum KnowledgeChunkSourceType {
   DOCUMENT
   FAQ
+  STRUCTURED
+}
+
+enum KnowledgeBaseMode {
+  UNSET
+  STRUCTURED
+  DOCUMENTS
 }
 
 model KnowledgeDocument {

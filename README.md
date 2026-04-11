@@ -16,7 +16,8 @@
   <img src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white" alt="Next.js" />
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/AWS%20Bedrock-232F3E?logo=amazonaws&logoColor=white" alt="AWS Bedrock" />
+  <img src="https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white" alt="OpenAI" />
+  <img src="https://img.shields.io/badge/Groq-F55036?logo=groq&logoColor=white" alt="Groq" />
   <img src="https://img.shields.io/badge/Gmail%20API-EA4335?logo=gmail&logoColor=white" alt="Gmail API" />
   <img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/NextAuth-000000?logo=nextdotjs&logoColor=white" alt="NextAuth" />
@@ -51,7 +52,7 @@ Everything runs inside a single Next.js App Router project (frontend + backend +
    - [JUNOCHAT & AI](#future-enhancements-for-junochat--ai)
 6. [Local Development](#local-development)
 7. [Docker & Deployment](#docker--deployment)
-8. [AWS Bedrock & AI Setup](#aws-bedrock--ai-setup)
+8. [OpenAI, Groq & AI Setup](#openai-groq--ai-setup)
 9. [Prisma & Database](#prisma--database)
 10. [License](#license)
 
@@ -74,7 +75,7 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
   - Edit synced product price/quantity **per vendor** with inline controls.
 
 - Both sides are supported by:
-  - **JUNOCHAT** – an AI assistant powered by AWS Bedrock (Titan + Claude) that can answer questions based on the knowledge base and FAQs.
+  - **JUNOCHAT** – an AI assistant powered by **OpenAI** (embeddings + chat where configured) and **Groq** (fast chat for storefront widget, Gmail flows, and KB fallback) that can answer questions using the knowledge base, FAQs, and store context.
   - A **Juno Engine** area for Gmail and ticketing workflows.
 
 ---
@@ -167,9 +168,10 @@ JUNO centralizes communication and operations between **vendors** (Shopify store
 
 JUNOCHAT (a.k.a. Juno Engine chat) is the AI layer that:
 
-- Uses **AWS Bedrock**:
-  - **Amazon Titan Text Embeddings V2** for vector embeddings.
-  - **Anthropic Claude 3 Haiku** for chat and knowledge‑base answers.
+- Uses **OpenAI** and **Groq**:
+  - **OpenAI** (`text-embedding-3-small`, etc.) for knowledge‑base **embeddings** stored in Postgres/pgvector.
+  - **OpenAI** (`gpt-4o-mini` by default, configurable) for **KB “Ask”** answers when `OPENAI_API_KEY` is set.
+  - **Groq** for **storefront widget** replies, **Gmail** classification/safety/preview flows, and **KB fallback** if OpenAI chat fails.
 - Supports:
   - FAQ ingestion and retrieval.
   - Knowledge document upload + chunking.
@@ -217,7 +219,7 @@ JUNOCHAT (a.k.a. Juno Engine chat) is the AI layer that:
 - **Background / Integrations**:
   - Gmail APIs (OAuth)
   - Shopify APIs (orders, products, inventory)
-  - AWS Bedrock (Titan embeddings + Claude 3 Haiku chat)
+  - OpenAI (embeddings + optional chat) and Groq (chat / classification)
 - **Deployment**: Docker + GitHub Actions → AWS EC2
 
 ---
@@ -277,7 +279,7 @@ JUNOCHAT (a.k.a. Juno Engine chat) is the AI layer that:
 **How JUNO helps:**
 
 - **JUNOCHAT + Juno Engine**:
-  - Ingest FAQs and internal docs into a vectorized knowledge base (via Bedrock embeddings).
+  - Ingest FAQs and internal docs into a vectorized knowledge base (via OpenAI embeddings).
   - Answer questions using **RAG** against that knowledge.
   - Integrate with Gmail so tickets and AI context live in the same place.
 
@@ -307,9 +309,9 @@ Copy `.env.example` (or the variables listed below) into a local `.env` file and
 - `SMTP_SECURE`
 - `SMTP_USER`
 - `SMTP_PASSWORD`
-- `AWS_ACCESS_KEY_ID` (for AWS Bedrock)
-- `AWS_SECRET_ACCESS_KEY` (for AWS Bedrock)
-- `AWS_REGION` (default: `us-east-1`)
+- `OPENAI_API_KEY` (embeddings + KB chat; optional `OPENAI_CHAT_MODEL`, `OPENAI_EMBEDDING_MODEL`, `OPENAI_EMBEDDING_DIMENSIONS`)
+- `GROQ_API_KEY` (storefront chat, Gmail AI helpers, KB chat fallback; optional `GROQ_MODEL`)
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / `AWS_REGION` (if you use S3 or other AWS services—not required for AI-only local dev)
 - `ADMIN_EMAIL`
 - `ADMIN_PASSWORD`
 
@@ -376,51 +378,34 @@ This gives you a sharp deployment with an automatic rollback path.
 
 ---
 
-## AWS Bedrock & AI Setup
+## OpenAI, Groq & AI Setup
 
-The knowledge base and JUNOCHAT features use AWS Bedrock for AI‑powered embeddings and chat completion.
+### OpenAI (embeddings + KB answers)
 
-### Prerequisites
-
-1. **AWS Account**: Create an account at `https://aws.amazon.com/`
-2. **Enable Bedrock Access**: 
-   - Go to `https://console.aws.amazon.com/bedrock/`
-   - Navigate to **Model access**
-   - Request access to:
-     - **Amazon Titan Text Embeddings V2** (for embeddings)
-     - **Anthropic Claude 3 Haiku** (for chat completion)
-
-### IAM Setup
-
-Create an IAM user or role with Bedrock permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": ["bedrock:InvokeModel"],
-      "Resource": [
-        "arn:aws:bedrock:*::foundation-model/amazon.titan-embed-text-v2:0",
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
-      ]
-    }
-  ]
-}
-```
-
-Create access keys for that user and add them to `.env`:
+1. Create an API key in the [OpenAI dashboard](https://platform.openai.com/).
+2. Add to `.env`:
 
 ```bash
-AWS_ACCESS_KEY_ID="your-access-key-id"
-AWS_SECRET_ACCESS_KEY="your-secret-access-key"
-AWS_REGION="us-east-1"  # or your preferred region
+OPENAI_API_KEY="sk-..."
+# Optional overrides:
+# OPENAI_EMBEDDING_MODEL="text-embedding-3-small"
+# OPENAI_EMBEDDING_DIMENSIONS="1024"
+# OPENAI_CHAT_MODEL="gpt-4o-mini"
 ```
 
-### Database Migration & Re‑Embedding
+Embeddings are used when indexing knowledge documents, FAQs, and the structured store profile. KB **Ask** uses OpenAI chat first, then falls back to Groq.
 
-After setting up AWS Bedrock:
+### Groq (storefront chat, Gmail helpers, KB fallback)
+
+1. Create an API key at [Groq Console](https://console.groq.com/).
+2. Add to `.env`:
+
+```bash
+GROQ_API_KEY="gsk_..."
+# Optional: GROQ_MODEL="llama-3.1-8b-instant"
+```
+
+### Database migration & re‑embedding
 
 1. Apply Prisma migrations:
 
@@ -428,17 +413,13 @@ After setting up AWS Bedrock:
 npx prisma migrate deploy
 ```
 
-2. Re‑embed existing knowledge base data:
+2. After changing embedding provider or dimensions, re‑embed:
 
 ```bash
 npm run re-embed-knowledge-base
 ```
 
-This script:
-
-- Reads all existing `KnowledgeChunk` records.
-- Generates new embeddings using Titan V2.
-- Updates the database in batches to avoid rate limiting.
+This regenerates vectors and tags chunk metadata with `provider: openai` (required for KB similarity search filters).
 
 ---
 

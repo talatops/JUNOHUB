@@ -1,40 +1,37 @@
 #!/usr/bin/env tsx
 /**
- * Re-embedding script for Knowledge Base
- * 
- * This script re-embeds all existing KnowledgeChunk records using AWS Bedrock
- * Titan Text Embeddings V2 (1024 dimensions) to replace Gemini embeddings (1536 dimensions).
- * 
- * Usage:
- *   npm run re-embed-knowledge-base
- *   or
- *   tsx scripts/re-embed-knowledge-base.ts
+ * Re-embed all KnowledgeChunk rows with OpenAI (text-embedding-3-small @ 1024 dims)
+ * and tag metadata with provider openai (required for KB vector search filters).
+ *
+ * Usage: npm run re-embed-knowledge-base
  */
 
 import { prisma } from "../src/lib/prisma"
-import { embedBatch } from "../src/lib/kb/bedrockEmbeddings"
+import { embedBatch } from "../src/lib/kb/openaiEmbeddings"
+import {
+    kbEmbeddingMetadata,
+    KB_EMBEDDING_DIMENSIONS,
+} from "../src/lib/kb/embeddingMeta"
 import { logger } from "../src/lib/logger"
 
-// AWS Bedrock Titan V2 limit: 2000 requests/minute
-// Use smaller batches with delays to stay under limit
-const BATCH_SIZE = 10 // Process chunks in smaller batches to avoid rate limits
+const BATCH_SIZE = 32
 
-interface KnowledgeChunk {
+interface KnowledgeChunkRow {
     id: string
     content: string
     storeId: string
+    metadata: unknown
 }
 
 async function reEmbedKnowledgeBase() {
     try {
-        logger.info("Starting knowledge base re-embedding process...")
+        logger.info("Starting knowledge base re-embedding (OpenAI)...")
 
-        // Fetch all knowledge chunks
-        const sql = `SELECT "id", "content", "storeId"
+        const sql = `SELECT "id", "content", "storeId", "metadata"
             FROM "KnowledgeChunk"
             WHERE "content" IS NOT NULL AND "content" != ''
             ORDER BY "createdAt" ASC`
-        const chunks = await prisma.$queryRawUnsafe<KnowledgeChunk[]>(sql)
+        const chunks = await prisma.$queryRawUnsafe<KnowledgeChunkRow[]>(sql)
 
         if (chunks.length === 0) {
             logger.info("No knowledge chunks found to re-embed.")
@@ -47,7 +44,6 @@ async function reEmbedKnowledgeBase() {
         let failed = 0
         const totalBatches = Math.ceil(chunks.length / BATCH_SIZE)
 
-        // Process in batches
         for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
             const batch = chunks.slice(i, i + BATCH_SIZE)
             const batchNumber = Math.floor(i / BATCH_SIZE) + 1
@@ -57,8 +53,7 @@ async function reEmbedKnowledgeBase() {
             )
 
             try {
-                // Generate embeddings for this batch
-                const texts = batch.map((chunk: KnowledgeChunk) => chunk.content)
+                const texts = batch.map((c) => c.content)
                 const embeddings = await embedBatch(texts)
 
                 if (embeddings.length !== batch.length) {
@@ -69,60 +64,55 @@ async function reEmbedKnowledgeBase() {
                     continue
                 }
 
-                // Update each chunk with its new embedding
-                const updatePromises = batch.map(async (chunk: KnowledgeChunk, index: number) => {
-                    const embedding = embeddings[index]
+                await Promise.all(
+                    batch.map(async (chunk, index) => {
+                        const embedding = embeddings[index]
 
-                    if (!embedding || embedding.length === 0) {
-                        logger.warn(
-                            `Skipping chunk ${chunk.id}: empty embedding generated`,
-                        )
-                        failed++
-                        return
-                    }
-
-                    if (embedding.length !== 1024) {
-                        logger.warn(
-                            `Chunk ${chunk.id}: embedding dimension is ${embedding.length}, expected 1024`,
-                        )
-                        // Pad or truncate to 1024
-                        if (embedding.length < 1024) {
-                            embedding.push(...new Array(1024 - embedding.length).fill(0))
-                        } else {
-                            embedding.splice(1024)
+                        if (!embedding || embedding.length === 0) {
+                            logger.warn(`Skipping chunk ${chunk.id}: empty embedding`)
+                            failed++
+                            return
                         }
-                    }
 
-                    try {
-                        await prisma.$executeRawUnsafe(
-                            `
-                            UPDATE "KnowledgeChunk"
-                            SET "embedding" = $1::vector(1024),
-                                "updatedAt" = NOW()
-                            WHERE "id" = $2
-                        `,
-                            `[${embedding.join(",")}]`,
-                            chunk.id,
-                        )
-                        processed++
-                    } catch (error) {
-                        logger.error(`Failed to update chunk ${chunk.id}:`, error)
-                        failed++
-                    }
-                })
+                        if (embedding.length !== KB_EMBEDDING_DIMENSIONS) {
+                            logger.error(
+                                `Chunk ${chunk.id}: expected ${KB_EMBEDDING_DIMENSIONS} dims, got ${embedding.length}`,
+                            )
+                            failed++
+                            return
+                        }
 
-                await Promise.all(updatePromises)
+                        const prevMeta =
+                            chunk.metadata &&
+                            typeof chunk.metadata === "object" &&
+                            !Array.isArray(chunk.metadata)
+                                ? (chunk.metadata as Record<string, unknown>)
+                                : {}
+                        const nextMeta = {
+                            ...prevMeta,
+                            ...kbEmbeddingMetadata(),
+                        }
 
-                logger.info(
-                    `Batch ${batchNumber} completed. Processed: ${processed}, Failed: ${failed}`,
+                        try {
+                            await prisma.$executeRawUnsafe(
+                                `
+                                UPDATE "KnowledgeChunk"
+                                SET "embedding" = $1::vector,
+                                    "metadata" = $2::jsonb,
+                                    "updatedAt" = NOW()
+                                WHERE "id" = $3
+                            `,
+                                `[${embedding.join(",")}]`,
+                                JSON.stringify(nextMeta),
+                                chunk.id,
+                            )
+                            processed++
+                        } catch (error) {
+                            logger.error(`Failed to update chunk ${chunk.id}:`, error)
+                            failed++
+                        }
+                    }),
                 )
-
-                // Add delay between batches to avoid rate limiting
-                // With 2s delay per request + batch processing, we need extra time between batches
-                if (i + BATCH_SIZE < chunks.length) {
-                    // Wait 5 seconds between batches to ensure we stay under 2000 req/min limit
-                    await new Promise((resolve) => setTimeout(resolve, 5000))
-                }
             } catch (error) {
                 logger.error(`Error processing batch ${batchNumber}:`, error)
                 failed += batch.length
@@ -140,7 +130,6 @@ async function reEmbedKnowledgeBase() {
     }
 }
 
-// Run the script
 if (require.main === module) {
     reEmbedKnowledgeBase()
         .then(() => {

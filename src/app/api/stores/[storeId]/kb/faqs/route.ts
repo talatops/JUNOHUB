@@ -2,7 +2,8 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
+import { embedBatch } from "@/lib/kb/openaiEmbeddings"
+import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 
 export async function GET(
     _request: Request,
@@ -67,6 +68,16 @@ export async function POST(
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
 
+        if (store.knowledgeBaseMode === "STRUCTURED") {
+            return NextResponse.json(
+                {
+                    message:
+                        "Manual FAQs are disabled while using structured knowledge. Switch to document-based knowledge in Settings to add FAQs.",
+                },
+                { status: 409 },
+            )
+        }
+
         const body = await request.json()
         const { question, answer, tags } = body as {
             question?: string
@@ -115,6 +126,7 @@ export async function POST(
                 {
                     question,
                     answer,
+                    ...kbEmbeddingMetadata(),
                 } as unknown as object,
             )
         }

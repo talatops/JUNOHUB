@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { embedBatch } from "@/lib/kb/bedrockEmbeddings"
+import { embedBatch } from "@/lib/kb/openaiEmbeddings"
+import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 import type { TextChunk } from "@/lib/kb/documentProcessing"
 
 export async function indexDocumentChunks(chunks: TextChunk[]) {
@@ -17,6 +18,10 @@ export async function indexDocumentChunks(chunks: TextChunk[]) {
     const values = chunks.map((chunk, idx) => {
         const embedding = embeddings[idx]
         const vectorLiteral = embedding.length ? `'[${embedding.join(",")}]'` : "NULL"
+        const metadata = {
+            ...chunk.metadata,
+            ...kbEmbeddingMetadata(),
+        }
 
         return prisma.$executeRawUnsafe(
             `
@@ -37,7 +42,7 @@ export async function indexDocumentChunks(chunks: TextChunk[]) {
             chunk.storeId,
             chunk.documentId,
             chunk.content,
-            chunk.metadata as unknown as object,
+            metadata as unknown as object,
         )
     })
 

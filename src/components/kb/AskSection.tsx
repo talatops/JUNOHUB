@@ -10,7 +10,7 @@ type AskSectionProps = {
 
 type Source = {
     id: string
-    type: "DOCUMENT" | "FAQ"
+    type: "DOCUMENT" | "FAQ" | "STRUCTURED"
     documentId: string | null
     faqId: string | null
     similarity: number
@@ -22,6 +22,7 @@ export function AskSection({ storeId }: AskSectionProps) {
     const [query, setQuery] = useState("")
     const [includeFaq, setIncludeFaq] = useState(true)
     const [includeDocuments, setIncludeDocuments] = useState(true)
+    const [includeStructured, setIncludeStructured] = useState(true)
     const [answer, setAnswer] = useState<string | null>(null)
     const [sources, setSources] = useState<Source[]>([])
     const [isLoading, setIsLoading] = useState(false)
@@ -48,6 +49,7 @@ export function AskSection({ storeId }: AskSectionProps) {
                         query: query.trim(),
                         includeFaq,
                         includeDocuments,
+                        includeStructured,
                     }),
                 },
             )
@@ -75,8 +77,8 @@ export function AskSection({ storeId }: AskSectionProps) {
             <div>
                 <h3 className={cn("text-lg font-semibold", isLight ? "text-slate-900" : "text-white")}>Ask JUNO</h3>
                 <p className={cn("text-xs", isLight ? "text-slate-500" : "text-slate-400")}>
-                    Ask questions across your store&apos;s documents and FAQs. The
-                    AI will answer using only your knowledge base.
+                    Ask questions across documents, FAQs, and your structured store profile.
+                    The AI uses only your knowledge base.
                 </p>
             </div>
 
@@ -105,7 +107,7 @@ export function AskSection({ storeId }: AskSectionProps) {
                     )}
                 />
                 <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4 text-xs">
+                    <div className="flex flex-wrap items-center gap-4 text-xs">
                         <label className={cn(
                             "inline-flex items-center gap-2 cursor-pointer transition-colors",
                             isLight ? "text-slate-600 hover:text-slate-900" : "text-slate-400 hover:text-white"
@@ -119,6 +121,20 @@ export function AskSection({ storeId }: AskSectionProps) {
                                 }
                             />
                             <span className="font-medium">Use documents</span>
+                        </label>
+                        <label className={cn(
+                            "inline-flex items-center gap-2 cursor-pointer transition-colors",
+                            isLight ? "text-slate-600 hover:text-slate-900" : "text-slate-400 hover:text-white"
+                        )}>
+                            <input
+                                type="checkbox"
+                                className="rounded border-slate-300 bg-white text-indigo-600 focus:ring-indigo-500/20"
+                                checked={includeStructured}
+                                onChange={(e) =>
+                                    setIncludeStructured(e.target.checked)
+                                }
+                            />
+                            <span className="font-medium">Use structured profile</span>
                         </label>
                         <label className={cn(
                             "inline-flex items-center gap-2 cursor-pointer transition-colors",
@@ -178,7 +194,9 @@ export function AskSection({ storeId }: AskSectionProps) {
                                         )}>
                                             {source.type === "FAQ"
                                                 ? "FAQ"
-                                                : "Document"}
+                                                : source.type === "STRUCTURED"
+                                                  ? "Profile"
+                                                  : "Document"}
                                         </span>
                                         <span className={isLight ? "text-slate-500" : "text-slate-400"}>
                                             Source #{index + 1}

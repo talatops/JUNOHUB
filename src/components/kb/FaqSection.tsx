@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import Link from "next/link"
 import { useTheme } from "@/components/ThemeProvider"
 import { cn } from "@/lib/utils"
 
@@ -14,9 +15,17 @@ type FaqItem = {
 
 type FaqSectionProps = {
     storeId: string
+    locked?: boolean
+    lockedMessage?: string
+    settingsHref?: string
 }
 
-export function FaqSection({ storeId }: FaqSectionProps) {
+export function FaqSection({
+    storeId,
+    locked = false,
+    lockedMessage = "Manual FAQs are disabled while using structured knowledge. Switch mode using the cards above.",
+    settingsHref = "/dashboard/juno-engine/knowledge-base#kb-source",
+}: FaqSectionProps) {
     const { theme } = useTheme()
     const isLight = theme === "light"
     const [faqs, setFaqs] = useState<FaqItem[]>([])
@@ -167,6 +176,27 @@ export function FaqSection({ storeId }: FaqSectionProps) {
 
     return (
         <div className="space-y-4">
+            {locked && (
+                <div
+                    className={cn(
+                        "rounded-xl border px-4 py-3 text-sm",
+                        isLight
+                            ? "border-amber-200 bg-amber-50 text-amber-900"
+                            : "border-amber-500/30 bg-amber-500/10 text-amber-100",
+                    )}
+                >
+                    <p>{lockedMessage}</p>
+                    <Link
+                        href={settingsHref}
+                        className={cn(
+                            "mt-2 inline-block text-xs font-bold underline",
+                            isLight ? "text-indigo-600" : "text-indigo-300",
+                        )}
+                    >
+                        Knowledge base
+                    </Link>
+                </div>
+            )}
             <div className="flex items-center justify-between">
                 <div>
                     <h3 className={cn("text-lg font-semibold", isLight ? "text-slate-900" : "text-white")}>FAQs</h3>
@@ -175,12 +205,18 @@ export function FaqSection({ storeId }: FaqSectionProps) {
                         trusted answers.
                     </p>
                 </div>
-                <label className={cn(
-                    "inline-flex items-center px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors border shadow-sm",
-                    isLight
-                        ? "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
-                        : "bg-slate-800/80 hover:bg-slate-800 border-white/10 text-slate-100 shadow-xl"
-                )}>
+                <label
+                    className={cn(
+                        "inline-flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors border shadow-sm",
+                        locked
+                            ? isLight
+                                ? "opacity-50 cursor-not-allowed bg-white border-slate-200 text-slate-400"
+                                : "opacity-50 cursor-not-allowed bg-slate-800/80 border-white/10 text-slate-500"
+                            : isLight
+                              ? "cursor-pointer bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                              : "cursor-pointer bg-slate-800/80 hover:bg-slate-800 border-white/10 text-slate-100 shadow-xl",
+                    )}
+                >
                     <span>
                         {isImporting ? "Importing..." : "Import from JSON file"}
                     </span>
@@ -189,7 +225,7 @@ export function FaqSection({ storeId }: FaqSectionProps) {
                         accept="application/json"
                         className="hidden"
                         onChange={handleImport}
-                        disabled={isImporting}
+                        disabled={isImporting || locked}
                     />
                 </label>
             </div>
@@ -204,6 +240,7 @@ export function FaqSection({ storeId }: FaqSectionProps) {
                 onSubmit={handleAddFaq}
                 className={cn(
                     "border rounded-xl p-4 space-y-4 transition-all",
+                    locked && "opacity-50 pointer-events-none",
                     isLight ? "bg-white border-slate-100 shadow-sm" : "bg-slate-900/40 border-white/5 backdrop-blur-sm"
                 )}
             >
