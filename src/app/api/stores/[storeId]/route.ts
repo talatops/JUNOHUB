@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { Prisma } from "@prisma/client"
+import { storeSelectPatchStorefrontAi } from "@/lib/prisma/storeSelects"
 import {
     getPublishedThemeId,
     getThemeAsset,
@@ -559,24 +561,31 @@ export async function PATCH(
         const nextFont = sanitizeFont(data.storefrontChatFontFamily ?? store.storefrontChatFontFamily)
         const nextLogoUrl = sanitizeLogoUrl(data.storefrontChatLogoUrl ?? store.storefrontChatLogoUrl)
 
+        const updatePayload: Prisma.StoreUpdateInput = {
+            storefrontChatEnabled: nextEnabled,
+            storefrontChatName: nextChatName,
+            storefrontChatTagline: nextTagline,
+            storefrontChatBrandColor: nextBrandColor,
+            storefrontChatFontFamily: nextFont,
+            storefrontChatLogoUrl: nextLogoUrl,
+        }
+
+        if (typeof data.categoryMetadetailsEnabled === "boolean") {
+            updatePayload.categoryMetadetailsEnabled = data.categoryMetadetailsEnabled
+        }
+        if (
+            data.aiModules !== undefined &&
+            typeof data.aiModules === "object" &&
+            data.aiModules !== null &&
+            !Array.isArray(data.aiModules)
+        ) {
+            updatePayload.aiModules = data.aiModules as Prisma.InputJsonValue
+        }
+
         const updatedStore = await prisma.store.update({
             where: { id: storeId },
-            data: {
-                storefrontChatEnabled: nextEnabled,
-                storefrontChatName: nextChatName,
-                storefrontChatTagline: nextTagline,
-                storefrontChatBrandColor: nextBrandColor,
-                storefrontChatFontFamily: nextFont,
-                storefrontChatLogoUrl: nextLogoUrl,
-            },
-            select: {
-                storefrontChatEnabled: true,
-                storefrontChatName: true,
-                storefrontChatTagline: true,
-                storefrontChatBrandColor: true,
-                storefrontChatFontFamily: true,
-                storefrontChatLogoUrl: true,
-            }
+            data: updatePayload,
+            select: storeSelectPatchStorefrontAi,
         })
 
         // Explicit behavior change:
@@ -608,6 +617,8 @@ export async function PATCH(
             storefrontChatBrandColor: updatedStore.storefrontChatBrandColor,
             storefrontChatFontFamily: updatedStore.storefrontChatFontFamily,
             storefrontChatLogoUrl: updatedStore.storefrontChatLogoUrl,
+            categoryMetadetailsEnabled: updatedStore.categoryMetadetailsEnabled,
+            aiModules: updatedStore.aiModules,
         })
     } catch (error) {
         console.error("Error updating store settings:", error)

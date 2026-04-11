@@ -6,6 +6,7 @@ import {
     KNOWLEDGE_TEMPLATE_FIELDS,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
+import { SHARED_FIELD_CATALOG } from "@/lib/kb/sharedFieldCatalog"
 
 export async function replaceStructuredKnowledgeChunks(
     storeId: string,
@@ -16,23 +17,50 @@ export async function replaceStructuredKnowledgeChunks(
         storeId,
     )
 
-    const rows: { content: string; metadata: ReturnType<typeof kbEmbeddingMetadata> }[] =
-        []
+    const rows: {
+        content: string
+        metadata: ReturnType<typeof kbEmbeddingMetadata>
+    }[] = []
 
     for (const field of KNOWLEDGE_TEMPLATE_FIELDS) {
-        const text = stored.answers[field.key]
+        const text = stored.legacyAnswers[field.key]
         if (text?.trim()) {
             rows.push({
                 content: `Q: ${field.label}\nA: ${text.trim()}`,
-                metadata: kbEmbeddingMetadata({ sourceKey: field.key }),
+                metadata: kbEmbeddingMetadata({
+                    sourceKey: field.key,
+                    moduleCode: "LEGACY",
+                    fieldId: field.key,
+                }),
             })
         }
+    }
+
+    const catalogById = new Map(SHARED_FIELD_CATALOG.map((f) => [f.id, f]))
+    for (const [id, text] of Object.entries(stored.sharedFields)) {
+        const trimmed = text?.trim()
+        if (!trimmed) continue
+        const def = catalogById.get(id)
+        const label = def?.label ?? id
+        const moduleCode = def?.group ?? "FAQ"
+        rows.push({
+            content: `Q: ${label}\nA: ${trimmed}`,
+            metadata: kbEmbeddingMetadata({
+                sourceKey: id,
+                moduleCode,
+                fieldId: id,
+            }),
+        })
     }
 
     if (stored.misc?.trim()) {
         rows.push({
             content: `Q: Anything else customers should know\nA: ${stored.misc.trim()}`,
-            metadata: kbEmbeddingMetadata({ sourceKey: "misc" }),
+            metadata: kbEmbeddingMetadata({
+                sourceKey: "misc",
+                moduleCode: "ALL",
+                fieldId: "misc",
+            }),
         })
     }
 

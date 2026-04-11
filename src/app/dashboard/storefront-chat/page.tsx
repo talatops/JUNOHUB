@@ -1,8 +1,10 @@
 "use server"
 
 import { prisma } from "@/lib/prisma"
+import { storeSelectDashboardStorefrontInbox } from "@/lib/prisma/storeSelects"
 import { auth } from "@/auth.vendor"
 import { redirect } from "next/navigation"
+import { StorefrontAiSettingsCard } from "@/components/storefront/StorefrontAiSettingsCard"
 
 export default async function StorefrontChatInboxPage() {
     const session = await auth()
@@ -11,11 +13,9 @@ export default async function StorefrontChatInboxPage() {
         redirect("/login")
     }
 
-    const p = prisma as any
-
     const stores = await prisma.store.findMany({
         where: { userId: session.user.id, onboardingComplete: true },
-        select: { id: true, businessName: true, shopifyDomain: true, isActive: true }
+        select: storeSelectDashboardStorefrontInbox,
     })
 
     const store = stores.find((s) => s.isActive) ?? stores[0]
@@ -24,7 +24,7 @@ export default async function StorefrontChatInboxPage() {
         redirect("/onboarding")
     }
 
-    const conversations = await p.storefrontChatConversation.findMany({
+    const conversations = await prisma.storefrontChatConversation.findMany({
         where: { storeId: store.id },
         orderBy: { updatedAt: "desc" },
         take: 25,
@@ -33,7 +33,7 @@ export default async function StorefrontChatInboxPage() {
 
     const conversationIds = conversations.map((c: { id: string }) => c.id)
 
-    const messages = await p.storefrontChatMessage.findMany({
+    const messages = await prisma.storefrontChatMessage.findMany({
         where: conversationIds.length ? { conversationId: { in: conversationIds } } : undefined,
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -72,6 +72,11 @@ export default async function StorefrontChatInboxPage() {
                     </p>
                 </div>
             </div>
+
+            <StorefrontAiSettingsCard
+                storeId={store.id}
+                initialCategoryMetadetailsEnabled={store.categoryMetadetailsEnabled}
+            />
 
             {sorted.length === 0 ? (
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-slate-300">

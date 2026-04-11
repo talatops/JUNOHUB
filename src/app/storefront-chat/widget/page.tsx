@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { MessageSquare, Send } from "lucide-react"
+import { Send } from "lucide-react"
 
 type WidgetMessage = {
     id: string
@@ -33,6 +33,13 @@ export default function StorefrontChatWidgetPage() {
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState<string | null>(null)
     const [loadingHistory, setLoadingHistory] = useState(false)
+
+    const [verifyEmail, setVerifyEmail] = useState("")
+    const [otpCode, setOtpCode] = useState("")
+    const [otpSending, setOtpSending] = useState(false)
+    const [otpBusy, setOtpBusy] = useState(false)
+    const [otpMessage, setOtpMessage] = useState<string | null>(null)
+    const [sessionUntil, setSessionUntil] = useState<string | null>(null)
 
     const composerRef = useRef<HTMLTextAreaElement | null>(null)
     const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -121,6 +128,65 @@ export default function StorefrontChatWidgetPage() {
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
     }, [messages])
+
+    const sendOtp = async () => {
+        if (!shop || !visitorId) return
+        const email = verifyEmail.trim()
+        if (!email) {
+            setOtpMessage("Enter your email first.")
+            return
+        }
+        try {
+            setOtpMessage(null)
+            setOtpSending(true)
+            const res = await fetch("/api/storefront-chat/otp/request", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shop, visitorId, email }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(data?.message || "Could not send code")
+            }
+            setOtpMessage("Check your inbox for a 6-digit code.")
+        } catch (e: unknown) {
+            setOtpMessage(e instanceof Error ? e.message : "Failed to send code")
+        } finally {
+            setOtpSending(false)
+        }
+    }
+
+    const verifyOtp = async () => {
+        if (!shop || !visitorId) return
+        const email = verifyEmail.trim()
+        const code = otpCode.trim()
+        if (!email || !/^\d{6}$/.test(code)) {
+            setOtpMessage("Enter email and 6-digit code.")
+            return
+        }
+        try {
+            setOtpMessage(null)
+            setOtpBusy(true)
+            const res = await fetch("/api/storefront-chat/otp/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shop, visitorId, email, code }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error(data?.message || "Invalid code")
+            }
+            setSessionUntil(
+                typeof data.sessionExpiresAt === "string" ? data.sessionExpiresAt : null,
+            )
+            setOtpCode("")
+            setOtpMessage("Verified. You can ask about your orders for about one hour.")
+        } catch (e: unknown) {
+            setOtpMessage(e instanceof Error ? e.message : "Verification failed")
+        } finally {
+            setOtpBusy(false)
+        }
+    }
 
     const send = async () => {
         if (!shop || !visitorId) return
@@ -222,7 +288,64 @@ export default function StorefrontChatWidgetPage() {
                 )}
             </div>
 
-            <div className="p-3 border-t border-slate-200 bg-white flex-shrink-0">
+            <div className="p-3 border-t border-slate-200 bg-white flex-shrink-0 space-y-3">
+                <details className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-bold text-slate-700">
+                        Order help — verify your email
+                    </summary>
+                    <div className="mt-2 space-y-2">
+                        <p className="text-[11px] text-slate-500">
+                            For order status and account-specific questions, enter the email you used
+                            at checkout. We&apos;ll send a one-time code.
+                        </p>
+                        <input
+                            type="email"
+                            value={verifyEmail}
+                            onChange={(e) => setVerifyEmail(e.target.value)}
+                            placeholder="you@example.com"
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
+                        />
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => void sendOtp()}
+                                disabled={otpSending}
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-800 text-white disabled:opacity-50"
+                            >
+                                {otpSending ? "Sending…" : "Send code"}
+                            </button>
+                        </div>
+                        <div className="flex gap-2 items-center">
+                            <input
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={6}
+                                value={otpCode}
+                                onChange={(e) =>
+                                    setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                                }
+                                placeholder="000000"
+                                className="w-28 border border-slate-200 rounded-lg px-2 py-1.5 text-sm tracking-widest"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => void verifyOtp()}
+                                disabled={otpBusy}
+                                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white disabled:opacity-50"
+                            >
+                                {otpBusy ? "…" : "Verify"}
+                            </button>
+                        </div>
+                        {otpMessage ? (
+                            <p className="text-[11px] text-slate-600">{otpMessage}</p>
+                        ) : null}
+                        {sessionUntil ? (
+                            <p className="text-[10px] text-slate-400">
+                                Session active until {new Date(sessionUntil).toLocaleString()}
+                            </p>
+                        ) : null}
+                    </div>
+                </details>
                 <div className="flex items-end gap-2">
                     <textarea
                         ref={composerRef}

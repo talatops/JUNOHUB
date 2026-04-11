@@ -346,6 +346,10 @@ export async function processIncomingEmail(
             const replySubject = emailSubject.startsWith("Re:") ? emailSubject : `Re: ${emailSubject}`
 
             replied = true
+            const autoTrigger =
+                preview.l1Used === true
+                    ? "AI_L1_REPLY"
+                    : options?.replyTrigger ?? "GMAIL_WEBHOOK"
             const result = await sendGmailReply(
                 userId,
                 senderEmail,
@@ -355,7 +359,7 @@ export async function processIncomingEmail(
                 {
                     storeId,
                     isAutomated: true,
-                    trigger: options?.replyTrigger ?? "GMAIL_WEBHOOK",
+                    trigger: autoTrigger,
                     originalMessageId: email.messageId,
                 }
             )

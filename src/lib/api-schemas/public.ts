@@ -106,6 +106,24 @@ export const chatMessagePostSchema = z
         }
     })
 
+export const storefrontOtpRequestSchema = z.object({
+    shop: storefrontShopSchema,
+    visitorId: storefrontVisitorIdSchema,
+    email: emailSchema,
+})
+
+export const storefrontOtpVerifySchema = z.object({
+    shop: storefrontShopSchema,
+    visitorId: storefrontVisitorIdSchema,
+    email: emailSchema,
+    code: z
+        .string()
+        .trim()
+        .regex(/^\d{6}$/, "Enter the 6-digit code"),
+})
+
 export type NewsletterSubscribeInput = z.infer<typeof newsletterSubscribeSchema>
 export type StorefrontChatPostInput = z.infer<typeof storefrontChatPostSchema>
 export type ChatMessagePostInput = z.infer<typeof chatMessagePostSchema>
+export type StorefrontOtpRequestInput = z.infer<typeof storefrontOtpRequestSchema>
+export type StorefrontOtpVerifyInput = z.infer<typeof storefrontOtpVerifySchema>

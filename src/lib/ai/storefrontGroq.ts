@@ -1,6 +1,5 @@
 import { logger } from "@/lib/logger"
-import { groqChatCompletion, type GroqChatMessage } from "@/lib/ai/groqClient"
-import { getBlendedStorefrontContext } from "@/lib/storefront-chat/retrieval"
+import { runL1Orchestrator } from "@/lib/ai/orchestrator/runL1"
 
 type HistoryMessage = {
     senderType: "CUSTOMER" | "AI"
@@ -9,78 +8,63 @@ type HistoryMessage = {
 
 export async function generateStorefrontReply(params: {
     storeId: string
+    storeName: string
     query: string
     visitorId: string
     history: HistoryMessage[]
+    categoryMetadetailsEnabled: boolean
+    aiModulesJson: unknown
+    widgetVerifiedEmail: string | null
+    widgetSessionExpiresAt: Date | null
+    boundShopifyOrderId: string | null
 }) {
     const startedAt = Date.now()
-    const { storeId, query, visitorId, history } = params
+    const {
+        storeId,
+        storeName,
+        query,
+        visitorId,
+        history,
+        categoryMetadetailsEnabled,
+        aiModulesJson,
+        widgetVerifiedEmail,
+        widgetSessionExpiresAt,
+        boundShopifyOrderId,
+    } = params
 
-    const retrieval = await getBlendedStorefrontContext({ storeId, query })
-    const contextLines = retrieval.items.map(
-        (item, idx) => `[${idx + 1}] (${item.source}) ${item.title}: ${item.content}`
-    )
-    const contextBlock = contextLines.length
-        ? contextLines.join("\n")
-        : "No relevant KB/FAQ/product context found."
-
-    const shortHistory = history.slice(-8).map((m) => ({
-        role: m.senderType === "AI" ? "assistant" : "user",
-        content: m.content,
-    })) as GroqChatMessage[]
-
-    const system = [
-        "You are JUNO storefront assistant for an ecommerce store.",
-        "Use the provided context first (products, FAQs, knowledge).",
-        "If context is insufficient, ask one concise clarifying question.",
-        "Do not invent exact prices, stock or policy details that are not present.",
-        "Keep responses concise, friendly, and sales-supportive.",
-        "Return plain text only.",
-    ].join(" ")
-
-    const user = [
-        "Context:",
-        contextBlock,
-        "",
-        `Visitor ID: ${visitorId}`,
-        `Customer question: ${query}`,
-    ].join("\n")
-
-    const messages: GroqChatMessage[] = [
-        { role: "system", content: system },
-        ...shortHistory,
-        { role: "user", content: user },
-    ]
-
-    const out = await groqChatCompletion(messages, {
-        temperature: 0.2,
-        maxTokens: 420,
-        timeoutMs: 28_000,
+    const result = await runL1Orchestrator({
+        channel: "widget",
+        storeId,
+        storeName,
+        message: query,
+        history,
+        categoryMetadetailsEnabled,
+        aiModulesJson,
+        widgetVerifiedEmail,
+        widgetSessionExpiresAt,
+        boundShopifyOrderId,
     })
-
-    const fallback =
-        "Thanks for your message. I do not have enough details right now. Could you share the product name or what exactly you want to know?"
-
-    const content = (out.content || "").trim() || fallback
 
     logger.info("[STOREFRONT_AI_REPLY]", {
         storeId,
         visitorId,
         queryLength: query.length,
-        kbHits: retrieval.kbCount,
-        productHits: retrieval.productCount,
+        kbHits: result.meta.kbHits,
+        productHits: result.meta.productHits,
         latencyMs: Date.now() - startedAt,
-        fallbackUsed: !out.content,
-        error: out.error || null,
+        module: result.meta.module,
+        pillar: result.meta.pillar,
     })
 
     return {
-        content,
+        content: result.text,
         meta: {
-            kbHits: retrieval.kbCount,
-            productHits: retrieval.productCount,
-            fallbackUsed: !out.content,
+            kbHits: result.meta.kbHits,
+            productHits: result.meta.productHits,
+            fallbackUsed: false,
+            module: result.meta.module,
+            pillar: result.meta.pillar,
+            usedTools: result.meta.usedTools,
         },
     }
 }
-

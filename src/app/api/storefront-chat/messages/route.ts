@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import {
+    storeSelectStorefrontChatApi,
+    storeSelectStorefrontConversationSession,
+} from "@/lib/prisma/storeSelects"
 import { generateStorefrontReply } from "@/lib/ai/storefrontGroq"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { storefrontChatPostSchema } from "@/lib/api-schemas/public"
@@ -36,7 +40,6 @@ export async function POST(req: Request) {
             )
         }
 
-        const p = prisma as any
         const raw = await req.json().catch(() => ({}))
         const parsed = storefrontChatPostSchema.safeParse(raw)
         if (!parsed.success) {
@@ -47,12 +50,13 @@ export async function POST(req: Request) {
         const normalizedShop = normalizeShopDomain(shop)
 
         const variants = shopVariants(normalizedShop)
-        const stores = await p.store.findMany({
+        const stores = await prisma.store.findMany({
             where: { shopifyDomain: { in: variants } },
-            select: { id: true, storefrontChatEnabled: true }
+            select: storeSelectStorefrontChatApi,
         })
 
-        const store = stores.find((s: any) => Boolean(s.storefrontChatEnabled)) || stores[0]
+        const store =
+            stores.find((s) => Boolean(s.storefrontChatEnabled)) || stores[0]
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
         }
@@ -61,36 +65,36 @@ export async function POST(req: Request) {
         }
 
         // Find or create conversation for this anonymous visitor.
-        let conversation = await p.storefrontChatConversation.findFirst({
+        let conversation = await prisma.storefrontChatConversation.findFirst({
             where: { storeId: store.id, visitorId },
-            select: { id: true }
+            select: storeSelectStorefrontConversationSession,
         })
 
         if (conversation) {
             // Very lightweight rate limit: max 5 messages per 30 seconds per conversation.
             const windowMs = 30_000
-            const recentCount = await p.storefrontChatMessage.count({
+            const recentCount = await prisma.storefrontChatMessage.count({
                 where: {
                     conversationId: conversation.id,
-                    createdAt: { gte: new Date(Date.now() - windowMs) }
-                }
+                    createdAt: { gte: new Date(Date.now() - windowMs) },
+                },
             })
 
             if (recentCount >= 5) {
                 return NextResponse.json({ message: "Too many messages, slow down" }, { status: 429 })
             }
         } else {
-            conversation = await p.storefrontChatConversation.create({
+            conversation = await prisma.storefrontChatConversation.create({
                 data: {
                     storeId: store.id,
                     visitorId,
                     customerEmail: customerEmail ?? null,
                 },
-                select: { id: true }
+                select: storeSelectStorefrontConversationSession,
             })
         }
 
-        const customerMessage = await p.storefrontChatMessage.create({
+        const customerMessage = await prisma.storefrontChatMessage.create({
             data: {
                 conversationId: conversation.id,
                 senderType: "CUSTOMER",
@@ -99,24 +103,35 @@ export async function POST(req: Request) {
             select: { id: true, createdAt: true, senderType: true, content: true }
         })
 
-        const recentHistory = await p.storefrontChatMessage.findMany({
+        const recentHistory = await prisma.storefrontChatMessage.findMany({
             where: { conversationId: conversation.id },
             orderBy: { createdAt: "asc" },
             take: 10,
-            select: { senderType: true, content: true }
+            select: { senderType: true, content: true },
         })
+
+        const sessionOk =
+            Boolean(conversation.emailVerifiedAt) &&
+            conversation.sessionExpiresAt &&
+            (conversation.sessionExpiresAt as unknown as Date).getTime() > Date.now()
 
         const ai = await generateStorefrontReply({
             storeId: store.id,
+            storeName: store.businessName || "Our store",
             query: trimmedContent,
             visitorId,
-            history: recentHistory.map((m: any) => ({
+            history: recentHistory.map((m) => ({
                 senderType: m.senderType,
-                content: m.content
-            }))
+                content: m.content,
+            })),
+            categoryMetadetailsEnabled: store.categoryMetadetailsEnabled,
+            aiModulesJson: store.aiModules,
+            widgetVerifiedEmail: sessionOk ? conversation.assertedEmail : null,
+            widgetSessionExpiresAt: sessionOk ? conversation.sessionExpiresAt : null,
+            boundShopifyOrderId: conversation.boundShopifyOrderId,
         })
 
-        const aiMessage = await p.storefrontChatMessage.create({
+        const aiMessage = await prisma.storefrontChatMessage.create({
             data: {
                 conversationId: conversation.id,
                 senderType: "AI",
@@ -138,7 +153,6 @@ export async function POST(req: Request) {
 
 export async function GET(req: Request) {
     try {
-        const p = prisma as any
         const { searchParams } = new URL(req.url)
         const shop = searchParams.get("shop")?.trim() || ""
         const visitorId = searchParams.get("visitorId")?.trim() || ""
@@ -152,12 +166,13 @@ export async function GET(req: Request) {
 
         const normalizedShop = normalizeShopDomain(shop)
         const variants = shopVariants(normalizedShop)
-        const stores = await p.store.findMany({
+        const stores = await prisma.store.findMany({
             where: { shopifyDomain: { in: variants } },
-            select: { id: true, storefrontChatEnabled: true }
+            select: { id: true, storefrontChatEnabled: true },
         })
 
-        const store = stores.find((s: any) => Boolean(s.storefrontChatEnabled)) || stores[0]
+        const store =
+            stores.find((s) => Boolean(s.storefrontChatEnabled)) || stores[0]
 
         if (!store) {
             return NextResponse.json({ message: "Store not found" }, { status: 404 })
@@ -166,16 +181,16 @@ export async function GET(req: Request) {
             return NextResponse.json({ message: "Widget disabled" }, { status: 403 })
         }
 
-        const conversation = await p.storefrontChatConversation.findFirst({
+        const conversation = await prisma.storefrontChatConversation.findFirst({
             where: { storeId: store.id, visitorId },
-            select: { id: true }
+            select: { id: true },
         })
 
         if (!conversation) {
             return NextResponse.json({ success: true, messages: [] })
         }
 
-        const messages = await p.storefrontChatMessage.findMany({
+        const messages = await prisma.storefrontChatMessage.findMany({
             where: { conversationId: conversation.id },
             orderBy: { createdAt: "asc" },
             take: 120,

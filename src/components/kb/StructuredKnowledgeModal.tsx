@@ -9,6 +9,7 @@ import {
     type KnowledgeTemplateFieldKey,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
+import { sharedFieldsByGroup } from "@/lib/kb/sharedFieldCatalog"
 import { cn } from "@/lib/utils"
 import { Loader2, Save, X } from "lucide-react"
 
@@ -51,6 +52,7 @@ export function StructuredKnowledgeModal({
             ),
     )
     const [misc, setMisc] = useState("")
+    const [sharedFields, setSharedFields] = useState<Record<string, string>>({})
 
     const loadForm = useCallback(async () => {
         const res = await fetch(
@@ -64,12 +66,21 @@ export function StructuredKnowledgeModal({
         setAnswers((prev) => {
             const next = { ...prev }
             for (const f of KNOWLEDGE_TEMPLATE_FIELDS) {
-                const v = tmpl?.answers?.[f.key]
+                const v = tmpl?.legacyAnswers?.[f.key]
                 next[f.key] = typeof v === "string" ? v : ""
             }
             return next
         })
         setMisc(typeof tmpl?.misc === "string" ? tmpl.misc : "")
+        if (tmpl?.sharedFields && typeof tmpl.sharedFields === "object") {
+            const sf: Record<string, string> = {}
+            for (const [k, v] of Object.entries(tmpl.sharedFields)) {
+                if (typeof v === "string") sf[k] = v
+            }
+            setSharedFields(sf)
+        } else {
+            setSharedFields({})
+        }
     }, [storeId])
 
     useEffect(() => {
@@ -121,6 +132,7 @@ export function StructuredKnowledgeModal({
         const payload: Record<string, unknown> = {
             template: {
                 answers,
+                sharedFields,
                 misc: misc.trim() || undefined,
             },
         }
@@ -306,6 +318,97 @@ export function StructuredKnowledgeModal({
                                     />
                                 </div>
                             ))}
+
+                            <div
+                                className={cn(
+                                    "rounded-xl border p-4 space-y-4",
+                                    isLight
+                                        ? "border-slate-200 bg-slate-50/80"
+                                        : "border-white/10 bg-white/[0.03]",
+                                )}
+                            >
+                                <div>
+                                    <p
+                                        className={cn(
+                                            "text-sm font-bold",
+                                            isLight ? "text-slate-900" : "text-white",
+                                        )}
+                                    >
+                                        Extended policy fields (AI automation)
+                                    </p>
+                                    <p
+                                        className={cn(
+                                            "text-[11px] mt-1",
+                                            isLight ? "text-slate-500" : "text-slate-500",
+                                        )}
+                                    >
+                                        Optional detailed answers mapped to support playbooks. Same
+                                        fields can power multiple modules.
+                                    </p>
+                                </div>
+                                {Object.entries(sharedFieldsByGroup()).map(([group, fields]) => {
+                                    if (!fields.length) return null
+                                    return (
+                                        <details
+                                            key={group}
+                                            className={cn(
+                                                "rounded-lg border overflow-hidden",
+                                                isLight
+                                                    ? "border-slate-200 bg-white"
+                                                    : "border-white/10 bg-slate-950/40",
+                                            )}
+                                        >
+                                            <summary
+                                                className={cn(
+                                                    "cursor-pointer px-3 py-2 text-xs font-black uppercase tracking-widest",
+                                                    isLight
+                                                        ? "text-slate-700 bg-slate-100"
+                                                        : "text-slate-300 bg-white/5",
+                                                )}
+                                            >
+                                                {group.replace(/_/g, " ")}
+                                            </summary>
+                                            <div className="p-3 space-y-4">
+                                                {fields.map((field) => (
+                                                    <div key={field.id}>
+                                                        <label
+                                                            className={cn(
+                                                                "block text-xs font-semibold",
+                                                                isLight
+                                                                    ? "text-slate-800"
+                                                                    : "text-slate-200",
+                                                            )}
+                                                        >
+                                                            {field.label}
+                                                        </label>
+                                                        <textarea
+                                                            value={sharedFields[field.id] ?? ""}
+                                                            onChange={(e) =>
+                                                                setSharedFields((prev) => ({
+                                                                    ...prev,
+                                                                    [field.id]: e.target.value.slice(
+                                                                        0,
+                                                                        KNOWLEDGE_TEMPLATE_ANSWER_MAX,
+                                                                    ),
+                                                                }))
+                                                            }
+                                                            placeholder={field.placeholder}
+                                                            rows={2}
+                                                            maxLength={KNOWLEDGE_TEMPLATE_ANSWER_MAX}
+                                                            className={cn(
+                                                                "mt-1 w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[56px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
+                                                                isLight
+                                                                    ? "bg-white border-slate-200 text-slate-900"
+                                                                    : "bg-slate-950/50 border-white/10 text-white placeholder:text-slate-500",
+                                                            )}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </details>
+                                    )
+                                })}
+                            </div>
 
                             <div>
                                 <label

@@ -119,6 +119,11 @@ model Store {
   knowledgeBaseMode   KnowledgeBaseMode @default(UNSET)
   /** Saved structured KB answers (version, per-field text, misc). Embedded as STRUCTURED chunks. */
   knowledgeTemplate   Json?
+
+  /** When true, L1 may use DB-backed category/product metafield tools for customer answers. */
+  categoryMetadetailsEnabled Boolean @default(false)
+  /** Per-module AI enablement, e.g. { "FAQ": true, "ORDER_STATUS": true }. */
+  aiModules           Json?
   
   // Relations
   connections      Connection[]
@@ -624,6 +629,19 @@ model StorefrontChatConversation {
   store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   visitorId     String
   customerEmail String?
+
+  /** Email the customer entered for OTP (asserted order email). */
+  assertedEmail       String?
+  emailVerifiedAt     DateTime?
+  /** Verified session TTL (e.g. 1h from verification). */
+  sessionExpiresAt    DateTime?
+  /** After order disambiguation, pinned Shopify order id for this session. */
+  boundShopifyOrderId String?
+  /** SHA-256 hex of OTP + store-visitor salt; cleared after verify. */
+  otpHash             String?
+  otpExpiresAt        DateTime?
+  /** L1 orchestrator: phase, module, slots (JSON). */
+  l1State             Json?
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

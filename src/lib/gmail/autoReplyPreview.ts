@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { storeSelectGmailL1Context } from "@/lib/prisma/storeSelects"
 import { logger } from "@/lib/logger"
 import { escapeHtmlForEmail, escapeTemplateContextForHtml, renderTemplate } from "@/lib/templates/simpleRenderer"
 import { classifyCustomerEmail, type ClassifyCustomerEmailResult } from "@/lib/ai/gmailGroq"
@@ -12,6 +13,7 @@ import { looksLikeOffTopic, looksLikeSensitiveOrderTopic } from "@/lib/ai/gmailO
 import { parseEnvFloat } from "@/lib/gmail/gmailAutoReplyGuards"
 import { findTemplateWithFallback, type TemplateRecord } from "@/lib/juno/templatesRepo"
 import type { GmailClassification } from "@/lib/ai/gmailTaxonomy"
+import { runL1Orchestrator } from "@/lib/ai/orchestrator/runL1"
 
 /** Local-part of email, title-cased for greetings (templates use {{customer_name}}). */
 function greetingNameFromEmail(email: string): string {
@@ -93,6 +95,20 @@ export function buildHintUnmatchedFallbackHtml(storeName: string, storeEmail: st
         `
 }
 
+function buildL1HtmlEmail(plainBody: string, storeName: string): string {
+    const safe = escapeHtmlForEmail(plainBody).replace(/\r\n|\n/g, "<br/>")
+    return `
+            <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; line-height: 1.6; color: #0f172a; background-color: #0b1220;">
+                <div style="max-width: 640px; margin: 0 auto; background: #020617; border-radius: 16px; border: 1px solid #1f2937; padding: 24px;">
+                    <div style="color: #e5e7eb; font-size: 15px; white-space: normal;">${safe}</div>
+                    <p style="margin: 20px 0 0; color: #9ca3af; font-size: 13px;">
+                        — ${escapeHtmlForEmail(storeName)} Support (automated)
+                    </p>
+                </div>
+            </div>
+        `
+}
+
 /** When no off_topic template exists — polite boundary, no order data. */
 export function buildOffTopicFallbackHtml(storeName: string, storeEmail: string): string {
     const contact = storeEmail.trim()
@@ -161,6 +177,8 @@ export type AutoReplyPreviewOutput = {
     html: string
     flagged: boolean
     flaggedReason?: string
+    /** True when reply body came from the L1 orchestrator instead of templates. */
+    l1Used?: boolean
 }
 
 export async function generateAutoReplyPreview(
@@ -200,6 +218,7 @@ export async function generateAutoReplyPreview(
             html: buildMinimalFallbackHtml(emailBody, storeName),
             flagged: true,
             flaggedReason: safety.reason,
+            l1Used: false,
         }
     }
 
@@ -276,7 +295,7 @@ export async function generateAutoReplyPreview(
 
     const store = await prisma.store.findUnique({
         where: { id: input.storeId },
-        select: { businessName: true, email: true },
+        select: storeSelectGmailL1Context,
     })
 
     const storeName = store?.businessName || "Your store"
@@ -327,21 +346,51 @@ export async function generateAutoReplyPreview(
         order_summary: orderSummaryForContext,
     }
 
+    const skipL1Orchestrator =
+        isOffTopic ||
+        messageTooSparse ||
+        needsOrderNumberFirst ||
+        hintUnmatched
+
     let html: string | null = null
     let chosenTemplateId: string | null = null
+    let l1Used = false
 
-    try {
-        const template = await findTemplateWithFallback(
-            input.storeId,
-            classification.intent,
-            classification.mood,
-        )
-        if (template) {
-            chosenTemplateId = template.id
-            html = renderFromTemplate(template, context)
+    if (!skipL1Orchestrator) {
+        try {
+            const l1 = await runL1Orchestrator({
+                channel: "email",
+                storeId: input.storeId,
+                storeName,
+                message: plainForAi,
+                history: [],
+                categoryMetadetailsEnabled: store?.categoryMetadetailsEnabled ?? false,
+                aiModulesJson: store?.aiModules ?? null,
+                emailFrom: senderEmail,
+            })
+            if (l1.text.trim().length > 0) {
+                html = buildL1HtmlEmail(l1.text.trim(), storeName)
+                l1Used = true
+            }
+        } catch (e) {
+            logger.error("generateAutoReplyPreview: L1 orchestrator failed", e)
         }
-    } catch (e) {
-        logger.error("generateAutoReplyPreview: template load/render failed", e)
+    }
+
+    if (!html) {
+        try {
+            const template = await findTemplateWithFallback(
+                input.storeId,
+                classification.intent,
+                classification.mood,
+            )
+            if (template) {
+                chosenTemplateId = template.id
+                html = renderFromTemplate(template, context)
+            }
+        } catch (e) {
+            logger.error("generateAutoReplyPreview: template load/render failed", e)
+        }
     }
 
     let usedFallback: AutoReplyPreviewOutput["usedFallback"] = "none"
@@ -381,6 +430,7 @@ export async function generateAutoReplyPreview(
         usedFallback,
         html,
         flagged: false,
+        l1Used,
     }
 }
 

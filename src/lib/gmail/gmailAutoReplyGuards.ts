@@ -1,7 +1,11 @@
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
-const GMAIL_AUTO_REPLY_TRIGGERS = ["GMAIL_WEBHOOK", "GMAIL_POLL"] as const
+const GMAIL_AUTO_REPLY_TRIGGERS = [
+    "GMAIL_WEBHOOK",
+    "GMAIL_POLL",
+    "AI_L1_REPLY",
+] as const
 
 export function parseEnvInt(name: string, defaultVal: number): number {
     const v = process.env[name]

@@ -5,6 +5,8 @@ import { logger } from "@/lib/logger"
 import {
     knowledgeTemplatePutSchema,
     normalizeTemplateAnswers,
+    parseKnowledgeTemplateJson,
+    buildKnowledgeTemplateStored,
     type KnowledgeTemplateStored,
 } from "@/lib/kb/knowledgeTemplate"
 import { replaceStructuredKnowledgeChunks } from "@/lib/kb/structuredTemplateChunks"
@@ -47,9 +49,11 @@ export async function GET(
             }),
         ])
 
+        const normalizedTemplate = parseKnowledgeTemplateJson(store.knowledgeTemplate)
+
         return NextResponse.json({
             knowledgeBaseMode: store.knowledgeBaseMode,
-            knowledgeTemplate: store.knowledgeTemplate,
+            knowledgeTemplate: normalizedTemplate ?? store.knowledgeTemplate,
             counts: {
                 documents: documentCount,
                 faqs: faqCount,
@@ -167,15 +171,36 @@ export async function PUT(
                 )
             }
 
-            const answers = normalizeTemplateAnswers(body.template.answers)
-            const misc = body.template.misc?.trim() || undefined
-
-            const stored: KnowledgeTemplateStored = {
-                version: 1,
-                answers,
-                misc,
-                updatedAt: new Date().toISOString(),
+            const prev = parseKnowledgeTemplateJson(store.knowledgeTemplate)
+            const mergedAnswers = {
+                ...(prev?.legacyAnswers ?? {}),
+                ...normalizeTemplateAnswers(body.template.answers),
             }
+            const mergedShared: Record<string, string> = {}
+            for (const [k, v] of Object.entries(prev?.sharedFields ?? {})) {
+                if (typeof v === "string" && v.trim()) {
+                    mergedShared[k] = v.trim()
+                }
+            }
+            if (body.template.sharedFields !== undefined) {
+                for (const [k, v] of Object.entries(body.template.sharedFields)) {
+                    if (typeof v === "string" && v.trim()) {
+                        mergedShared[k] = v.trim()
+                    } else {
+                        delete mergedShared[k]
+                    }
+                }
+            }
+            const misc =
+                body.template.misc !== undefined
+                    ? body.template.misc.trim() || undefined
+                    : prev?.misc
+
+            const stored: KnowledgeTemplateStored = buildKnowledgeTemplateStored({
+                answers: mergedAnswers as Record<string, string>,
+                sharedFields: mergedShared as Record<string, string>,
+                misc,
+            })
 
             const nextMode: KnowledgeBaseMode =
                 store.knowledgeBaseMode === "UNSET" ? "STRUCTURED" : store.knowledgeBaseMode
@@ -202,7 +227,7 @@ export async function PUT(
         return NextResponse.json({
             success: true,
             knowledgeBaseMode: refreshed?.knowledgeBaseMode,
-            knowledgeTemplate: refreshed?.knowledgeTemplate,
+            knowledgeTemplate: parseKnowledgeTemplateJson(refreshed?.knowledgeTemplate),
         })
     } catch (error) {
         logger.error("PUT knowledge-template error", error)

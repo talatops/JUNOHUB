@@ -13,10 +13,16 @@ export type KbChunkEmbeddingMetadata = {
     embeddingModel: string
     embeddingDims: number
     sourceKey?: string
+    /** L1 module code for RAG filtering (e.g. FAQ, ORDER_STATUS). */
+    moduleCode?: string
+    /** Shared field id (sf_*) or legacy key. */
+    fieldId?: string
 }
 
 export function kbEmbeddingMetadata(
-    extra?: Partial<Pick<KbChunkEmbeddingMetadata, "sourceKey">>,
+    extra?: Partial<
+        Pick<KbChunkEmbeddingMetadata, "sourceKey" | "moduleCode" | "fieldId">
+    >,
 ): KbChunkEmbeddingMetadata {
     return {
         provider: KB_EMBEDDING_PROVIDER,
