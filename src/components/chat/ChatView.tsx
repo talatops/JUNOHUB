@@ -23,8 +23,11 @@ import { ChatAttachmentModal } from "@/components/chat/ChatAttachmentModal"
 
 interface Contact {
     id: string
-    name: string
-    email: string
+    connectionId: string
+    storeId: string
+    storeName: string | null
+    name: string | null
+    email: string | null
     image: string | null
     role: string
 }
@@ -33,6 +36,7 @@ interface Message {
     id: string
     senderId: string
     receiverId: string
+    storeId?: string | null
     content: string
     kind?: "TEXT" | "PRODUCT" | "ORDER" | string | null
     attachment?: any
@@ -138,13 +142,16 @@ export function ChatView() {
                 setLoadingMessages(true)
                 setMessagesError(null)
             }
-            const res = await fetch(`/api/chat/messages?contactId=${contact.id}`)
+            const res = await fetch(
+                `/api/chat/messages?contactId=${encodeURIComponent(contact.id)}&storeId=${encodeURIComponent(contact.storeId)}`
+            )
             if (res.ok) {
                 const data = await res.json()
                 const typedMessages = data.messages.map((m: any) => ({
                     id: m.id,
                     senderId: m.senderId,
                     receiverId: m.receiverId,
+                    storeId: m.storeId ?? null,
                     content: m.content ?? "",
                     kind: m.kind ?? "TEXT",
                     attachment: m.attachment ?? null,
@@ -182,7 +189,7 @@ export function ChatView() {
             fetchMessages(selectedContact, true)
         }, POLL_INTERVAL_MS)
         return () => clearInterval(interval)
-    }, [selectedContact?.id])
+    }, [selectedContact?.connectionId])
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -201,6 +208,8 @@ export function ChatView() {
     }, [attachOpen])
 
     const openAttach = async () => {
+        if (!selectedContact) return
+        const threadStoreId = selectedContact.storeId
         setAttachOpen(true)
         setAttachLoading(true)
         setAttachOrders([])
@@ -226,11 +235,17 @@ export function ChatView() {
                 ])
                 if (ordersRes.ok) {
                     const ordersData = await ordersRes.json()
-                    setAttachOrders(ordersData.orders || [])
+                    const allOrders = ordersData.orders || []
+                    setAttachOrders(
+                        allOrders.filter((o: AttachOrder) => o.storeId === threadStoreId)
+                    )
                 }
                 if (productsRes.ok) {
                     const productsData = await productsRes.json()
-                    setAttachProducts(productsData.products || [])
+                    const allProducts = productsData.products || []
+                    setAttachProducts(
+                        allProducts.filter((p: AttachProduct) => p.storeId === threadStoreId)
+                    )
                 }
             }
         } catch {
@@ -249,6 +264,7 @@ export function ChatView() {
             total_price: order.total_price,
             currency: order.currency ?? null,
             storeName: order.storeName ?? null,
+            storeId: order.storeId,
             shopifyOrderId: order.id
         })
         const summary = `Order ${order.orderNumber ?? order.name}${order.customerName ? ` - ${order.customerName}` : ""}${order.storeName ? ` · ${order.storeName}` : ""}`
@@ -263,6 +279,7 @@ export function ChatView() {
             description: product.description ?? null,
             imageUrl: product.imageUrl ?? null,
             storeName: product.storeName ?? null,
+            storeId: product.storeId,
             productId: product.id
         })
         const summary = `Product: ${product.title}${product.storeName ? ` · ${product.storeName}` : ""}`
@@ -282,6 +299,7 @@ export function ChatView() {
             setSendError(null)
             const payload: any = {
                 receiverId: selectedContact.id,
+                storeId: selectedContact.storeId,
                 content: newMessage
             }
             if (hasAttachment) {
@@ -300,6 +318,7 @@ export function ChatView() {
                     id: msg.id,
                     senderId: msg.senderId,
                     receiverId: msg.receiverId,
+                    storeId: msg.storeId ?? selectedContact.storeId,
                     content: newMessage,
                     kind: msg.kind ?? "TEXT",
                     attachment: msg.attachment ?? null,
@@ -401,10 +420,13 @@ export function ChatView() {
         return null
     }
 
-    const filteredContacts = contacts.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const q = searchQuery.toLowerCase()
+    const filteredContacts = contacts.filter(c => {
+        const name = (c.name ?? "").toLowerCase()
+        const email = (c.email ?? "").toLowerCase()
+        const storeName = (c.storeName ?? "").toLowerCase()
+        return name.includes(q) || email.includes(q) || storeName.includes(q)
+    })
 
     return (
         <div className={cn(
@@ -469,11 +491,11 @@ export function ChatView() {
                         <div className="px-2 space-y-1">
                             {filteredContacts.map(contact => (
                                 <button
-                                    key={contact.id}
+                                    key={contact.connectionId}
                                     onClick={() => setSelectedContact(contact)}
                                     className={cn(
                                         "w-full flex items-center gap-3 p-4 rounded-2xl transition-all group relative",
-                                        selectedContact?.id === contact.id
+                                        selectedContact?.connectionId === contact.connectionId
                                             ? isLight ? "bg-indigo-600 shadow-lg text-white" : "bg-indigo-600 shadow-lg shadow-indigo-600/20"
                                             : isLight ? "hover:bg-slate-100" : "hover:bg-white/5"
                                     )}
@@ -481,24 +503,46 @@ export function ChatView() {
                                     <div className="relative">
                                         <div className={cn(
                                             "w-12 h-12 rounded-xl flex items-center justify-center font-black transition-all",
-                                            selectedContact?.id === contact.id
+                                            selectedContact?.connectionId === contact.connectionId
                                                 ? "bg-white text-indigo-600"
                                                 : isLight ? "bg-slate-100 text-slate-600 group-hover:bg-indigo-100 group-hover:text-indigo-600" : "bg-white/10 text-slate-300 group-hover:bg-indigo-500/20 group-hover:text-indigo-400"
                                         )}>
-                                            {contact.name?.[0].toUpperCase() || "?"}
+                                            {(contact.name?.[0] ?? contact.email?.[0] ?? "?").toUpperCase()}
                                         </div>
                                         <div className={cn("absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 bg-green-500", isLight ? "border-white" : "border-slate-900")} />
                                     </div>
                                     <div className="flex-1 text-left min-w-0">
                                         <h4 className={cn(
                                             "text-sm font-black truncate tracking-tight",
-                                            selectedContact?.id === contact.id ? "text-white" : isLight ? "text-slate-900" : "text-slate-200"
+                                            selectedContact?.connectionId === contact.connectionId ? "text-white" : isLight ? "text-slate-900" : "text-slate-200"
                                         )}>
-                                            {contact.name}
+                                            {contact.name ?? contact.email ?? "Unknown"}
                                         </h4>
+                                        {contact.email ? (
+                                            <p
+                                                className={cn(
+                                                    "text-[11px] font-medium truncate mt-0.5",
+                                                    selectedContact?.connectionId === contact.connectionId ? "text-indigo-100/90" : isLight ? "text-slate-600" : "text-slate-400"
+                                                )}
+                                                title={contact.email}
+                                            >
+                                                {contact.email}
+                                            </p>
+                                        ) : null}
+                                        {contact.storeName ? (
+                                            <p
+                                                className={cn(
+                                                    "text-[10px] font-semibold truncate mt-0.5 normal-case tracking-normal",
+                                                    selectedContact?.connectionId === contact.connectionId ? "text-indigo-100/85" : isLight ? "text-slate-600" : "text-slate-400"
+                                                )}
+                                                title={contact.storeName}
+                                            >
+                                                {contact.storeName}
+                                            </p>
+                                        ) : null}
                                         <p className={cn(
                                             "text-[10px] uppercase font-black tracking-widest mt-0.5",
-                                            selectedContact?.id === contact.id ? "text-indigo-100/70" : isLight ? "text-slate-500" : "text-slate-500"
+                                            selectedContact?.connectionId === contact.connectionId ? "text-indigo-100/70" : isLight ? "text-slate-500" : "text-slate-500"
                                         )}>
                                             {contact.role}
                                         </p>
@@ -552,14 +596,24 @@ export function ChatView() {
                                     "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center font-black",
                                     isLight ? "bg-indigo-100 border border-indigo-200 text-indigo-600" : "bg-indigo-500/20 border border-indigo-500/30 text-indigo-400"
                                 )}>
-                                    {selectedContact.name[0].toUpperCase()}
+                                    {(selectedContact.name?.[0] ?? selectedContact.email?.[0] ?? "?").toUpperCase()}
                                 </div>
-                                <div>
-                                    <h3 className={cn("font-black text-sm md:text-lg tracking-tight leading-none mb-1", isLight ? "text-slate-900" : "text-white")}>
-                                        {selectedContact.name}
+                                <div className="min-w-0">
+                                    <h3 className={cn("font-black text-sm md:text-lg tracking-tight leading-none mb-1 truncate", isLight ? "text-slate-900" : "text-white")}>
+                                        {selectedContact.name ?? selectedContact.email ?? "Unknown"}
                                     </h3>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-green-500" />
+                                    {selectedContact.email ? (
+                                        <p className={cn("text-xs font-medium truncate mb-1", isLight ? "text-slate-600" : "text-slate-400")} title={selectedContact.email}>
+                                            {selectedContact.email}
+                                        </p>
+                                    ) : null}
+                                    {selectedContact.storeName ? (
+                                        <p className={cn("text-[10px] font-semibold truncate mb-1", isLight ? "text-slate-500" : "text-slate-500")} title={selectedContact.storeName}>
+                                            {selectedContact.storeName}
+                                        </p>
+                                    ) : null}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
                                         <span className={cn("text-[10px] font-black uppercase tracking-widest", isLight ? "text-slate-500" : "text-slate-500")}>Active Now</span>
                                         <div className={cn("h-3 w-[1px] mx-1", isLight ? "bg-slate-200" : "bg-white/10")} />
                                         <span className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-1", isLight ? "text-indigo-600" : "text-indigo-400")}>
@@ -608,6 +662,28 @@ export function ChatView() {
                                                 : legacy?.attachment
                                             : null
 
+                                    const threadStoreId = selectedContact.storeId
+                                    let wrongStoreForRichCard = false
+                                    if (
+                                        (kindToRender === "PRODUCT" || kindToRender === "ORDER") &&
+                                        threadStoreId
+                                    ) {
+                                        if (msg.storeId != null && msg.storeId !== "") {
+                                            wrongStoreForRichCard = msg.storeId !== threadStoreId
+                                        } else if (
+                                            attachmentToRender &&
+                                            typeof (attachmentToRender as { storeId?: string }).storeId ===
+                                                "string" &&
+                                            (attachmentToRender as { storeId: string }).storeId !== ""
+                                        ) {
+                                            wrongStoreForRichCard =
+                                                (attachmentToRender as { storeId: string }).storeId !==
+                                                threadStoreId
+                                        }
+                                    }
+                                    const displayKind = wrongStoreForRichCard ? "TEXT" : kindToRender
+                                    const displayAttachment = wrongStoreForRichCard ? null : attachmentToRender
+
                                     return (
                                         <div
                                             key={msg.id}
@@ -624,83 +700,83 @@ export function ChatView() {
                                                         ? "bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-md"
                                                         : "bg-white/5 border border-white/10 text-slate-200 rounded-tl-none backdrop-blur-sm shadow-xl"
                                             )}>
-                                                {kindToRender === "PRODUCT" && attachmentToRender ? (
+                                                {displayKind === "PRODUCT" && displayAttachment ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             setActiveAttachmentKind("PRODUCT")
-                                                            setActiveAttachment(attachmentToRender)
+                                                            setActiveAttachment(displayAttachment)
                                                             setAttachmentModalOpen(true)
                                                         }}
                                                         className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                {attachmentToRender.imageUrl ? (
+                                                                {displayAttachment.imageUrl ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={attachmentToRender.imageUrl} alt={attachmentToRender.title || "Product"} className="w-full h-full object-cover" />
+                                                                    <img src={displayAttachment.imageUrl} alt={displayAttachment.title || "Product"} className="w-full h-full object-cover" />
                                                                 ) : (
                                                                     <div className="flex flex-col items-center justify-center px-1">
                                                                         <Package className="w-5 h-5 text-indigo-400" />
                                                                         <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
-                                                                            {attachmentToRender.title ? attachmentToRender.title : ""}
+                                                                            {displayAttachment.title ? displayAttachment.title : ""}
                                                                         </div>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <div className="font-black truncate">
-                                                                    {attachmentToRender.title || msg.content}
+                                                                    {displayAttachment.title || msg.content}
                                                                 </div>
-                                                                {attachmentToRender.description ? (
+                                                                {displayAttachment.description ? (
                                                                     <div className={cn("text-xs opacity-90 mt-1 line-clamp-2")}>
-                                                                        {attachmentToRender.description}
+                                                                        {displayAttachment.description}
                                                                     </div>
                                                                 ) : null}
-                                                                {attachmentToRender.storeName ? (
+                                                                {displayAttachment.storeName ? (
                                                                     <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
-                                                                        {attachmentToRender.storeName}
+                                                                        {displayAttachment.storeName}
                                                                     </div>
                                                                 ) : null}
                                                             </div>
                                                         </div>
                                                     </button>
-                                                ) : kindToRender === "ORDER" && attachmentToRender ? (
+                                                ) : displayKind === "ORDER" && displayAttachment ? (
                                                     <button
                                                         type="button"
                                                         onClick={() => {
                                                             setActiveAttachmentKind("ORDER")
-                                                            setActiveAttachment(attachmentToRender)
+                                                            setActiveAttachment(displayAttachment)
                                                             setAttachmentModalOpen(true)
                                                         }}
                                                         className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
                                                     >
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                {attachmentToRender.primaryImageUrl ? (
+                                                                {displayAttachment.primaryImageUrl ? (
                                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={attachmentToRender.primaryImageUrl} alt="Order item" className="w-full h-full object-cover" />
+                                                                    <img src={displayAttachment.primaryImageUrl} alt="Order item" className="w-full h-full object-cover" />
                                                                 ) : (
                                                                     <div className="flex flex-col items-center justify-center px-1">
                                                                         <ShoppingCart className="w-5 h-5 text-indigo-400" />
                                                                         <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
-                                                                            {attachmentToRender.orderNumber || "#"}
+                                                                            {displayAttachment.orderNumber || "#"}
                                                                         </div>
                                                                     </div>
                                                                 )}
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <div className="font-black truncate">
-                                                                    Order {attachmentToRender.orderNumber || msg.content}
+                                                                    Order {displayAttachment.orderNumber || msg.content}
                                                                 </div>
-                                                                {attachmentToRender.customerName ? (
+                                                                {displayAttachment.customerName ? (
                                                                     <div className={cn("text-xs opacity-90 mt-1 line-clamp-1")}>
-                                                                        {attachmentToRender.customerName}
+                                                                        {displayAttachment.customerName}
                                                                     </div>
                                                                 ) : null}
-                                                                {attachmentToRender.total_price ? (
+                                                                {displayAttachment.total_price ? (
                                                                     <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
-                                                                        {attachmentToRender.currency ? `${attachmentToRender.currency} ` : ""}{attachmentToRender.total_price}
+                                                                        {displayAttachment.currency ? `${displayAttachment.currency} ` : ""}{displayAttachment.total_price}
                                                                     </div>
                                                                 ) : null}
                                                             </div>

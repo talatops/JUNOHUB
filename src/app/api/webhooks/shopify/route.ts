@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { updateSingleProduct, updateSingleOrder } from "@/lib/cache"
+import { autoLinkOfferToShopifyProduct } from "@/lib/products/autoLinkOfferToShopifyProduct"
 import crypto from "crypto"
 import { logger } from "@/lib/logger"
 
@@ -93,6 +94,18 @@ export async function POST(req: NextRequest) {
             case "products/create":
                 logger.info(`[Webhook] Processing product ${topic}: ${body.id}`)
                 await updateSingleProduct(store.id, body)
+                try {
+                    const linkResult = await autoLinkOfferToShopifyProduct(store.id, body)
+                    if (linkResult.linked) {
+                        logger.info(`[Webhook] Auto-linked product to supplier offer`, {
+                            storeId: store.id,
+                            productSyncId: linkResult.productSyncId,
+                            supplierId: linkResult.supplierId,
+                        })
+                    }
+                } catch (autoLinkErr) {
+                    logger.error("[Webhook] autoLinkOfferToShopifyProduct error (ignored)", autoLinkErr)
+                }
                 // Update sync metadata to invalidate cache
                 await prisma.syncMetadata.upsert({
                     where: {

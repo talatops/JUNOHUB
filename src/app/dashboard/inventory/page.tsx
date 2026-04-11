@@ -56,6 +56,8 @@ interface ProductSync {
         id: string
         companyName: string
     }
+    /** Set by GET /api/products/sync when status is ACCEPTED (from JSON or offer match). */
+    supplierAvailableQuantity?: number | null
 }
 
 interface Supplier {
@@ -66,6 +68,27 @@ interface Supplier {
         email: string
     }
     connectionStatus: "NONE" | "PENDING" | "CONNECTED" | "REJECTED"
+}
+
+/** Sum variant inventory_quantity from Shopify REST/cache payload. */
+function totalShopifyInventory(variants: unknown): string {
+    if (!Array.isArray(variants) || variants.length === 0) return "—"
+    let total = 0
+    let hasQty = false
+    for (const v of variants) {
+        if (v && typeof v === "object" && v !== null && "inventory_quantity" in v) {
+            const raw = (v as { inventory_quantity?: unknown }).inventory_quantity
+            if (raw !== null && raw !== undefined && raw !== "") {
+                const n = Number(raw)
+                if (!Number.isNaN(n)) {
+                    total += n
+                    hasQty = true
+                }
+            }
+        }
+    }
+    if (!hasQty) return "—"
+    return String(total)
 }
 
 export default function InventoryPage() {
@@ -471,7 +494,12 @@ export default function InventoryPage() {
                                         <tr className="bg-white/5 border-b border-white/10">
                                             <th className="px-4 md:px-8 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest min-w-[200px] md:min-w-[300px]">Product</th>
                                             <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Status</th>
-                                            <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Inventory</th>
+                                            <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-left">
+                                                Shopify stock
+                                            </th>
+                                            <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap text-left">
+                                                Supplier stock
+                                            </th>
                                             <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden md:table-cell text-left">Supplier</th>
                                             <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden lg:table-cell text-left">Sync</th>
                                             <th className="px-4 md:px-8 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Actions</th>
@@ -504,10 +532,31 @@ export default function InventoryPage() {
                                                     </span>
                                                 </td>
                                                 <td className="px-3 md:px-6 py-3 md:py-4">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm md:text-base text-white">{product.variants.length} Variants</span>
-                                                        <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">Total Sync Stock</span>
+                                                    <div className="flex flex-col gap-0.5">
+                                                        <span className="font-bold text-sm md:text-base text-white tabular-nums">
+                                                            {totalShopifyInventory(product.variants)}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500">
+                                                            {product.variants.length} variant
+                                                            {product.variants.length !== 1 ? "s" : ""}
+                                                        </span>
                                                     </div>
+                                                </td>
+                                                <td className="px-3 md:px-6 py-3 md:py-4">
+                                                    {(() => {
+                                                        const sync = getProductSyncStatus(product.id)
+                                                        if (!sync || sync.status !== "ACCEPTED") {
+                                                            return (
+                                                                <span className="text-sm text-slate-500">—</span>
+                                                            )
+                                                        }
+                                                        const q = sync.supplierAvailableQuantity
+                                                        return (
+                                                            <span className="font-bold text-sm md:text-base text-white tabular-nums">
+                                                                {q != null ? String(q) : "—"}
+                                                            </span>
+                                                        )
+                                                    })()}
                                                 </td>
                                                 <td className="px-3 md:px-6 py-3 md:py-4 hidden md:table-cell text-left">
                                                     {(() => {

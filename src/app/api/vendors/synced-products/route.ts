@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
+import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
 
 /**
  * GET /api/vendors/synced-products
@@ -50,40 +51,33 @@ export async function GET() {
             }
         })
 
-        // Transform syncs into product-like objects for display
-        const syncedProducts = acceptedSyncs.map((sync: any) => {
-            const productData = sync.shopifyProductData || {}
-            const supplierQuantity =
-                typeof productData.supplier_quantity === "number"
-                    ? productData.supplier_quantity
-                    : undefined
-            return {
-                id: sync.id,
-                syncId: sync.id,
-                shopifyProductId: sync.shopifyProductId,
-                title: sync.shopifyProductTitle,
-                description: productData.body_html || productData.description || null,
-                price: productData.variants?.[0]?.price || "0",
-                sku: productData.variants?.[0]?.sku || null,
-                imageUrl: productData.image?.src || productData.images?.[0]?.src || null,
-                supplier: {
-                    id: sync.supplier.id,
-                    companyName: sync.supplier.companyName
-                },
-                syncedAt: sync.acceptedAt || sync.createdAt,
-                isSynced: true, // Flag to indicate this is a synced product
-                source: "synced",
-                offerQuantity: supplierQuantity,
-                // Include full Shopify product data for reference
-                shopifyData: productData
-            }
-        })
-
-        // Get supplier-provided products for this store
+        // Get supplier-provided products for this store (offers list)
         if (!("supplierProductOffer" in prisma)) {
             console.error("Prisma Client missing supplierProductOffer model. Run: npx prisma generate")
-            // Return only synced products if SupplierProductOffer model is missing
-            return NextResponse.json({ products: syncedProducts })
+            const syncedOnly = acceptedSyncs.map((sync: any) => {
+                const productData = sync.shopifyProductData || {}
+                const supplierQuantity = supplierQuantityFromSyncedProductData(productData)
+                return {
+                    id: sync.id,
+                    syncId: sync.id,
+                    shopifyProductId: sync.shopifyProductId,
+                    title: sync.shopifyProductTitle,
+                    description: productData.body_html || productData.description || null,
+                    price: productData.variants?.[0]?.price || "0",
+                    sku: productData.variants?.[0]?.sku || null,
+                    imageUrl: productData.image?.src || productData.images?.[0]?.src || null,
+                    supplier: {
+                        id: sync.supplier.id,
+                        companyName: sync.supplier.companyName
+                    },
+                    syncedAt: sync.acceptedAt || sync.createdAt,
+                    isSynced: true,
+                    source: "synced",
+                    offerQuantity: supplierQuantity,
+                    shopifyData: productData
+                }
+            })
+            return NextResponse.json({ products: syncedOnly })
         }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const supplierOffers = await (prisma as any).supplierProductOffer.findMany({
@@ -106,10 +100,42 @@ export async function GET() {
                         id: true,
                         companyName: true
                     }
+                },
+                connection: {
+                    select: {
+                        status: true
+                    }
                 }
             },
             orderBy: {
                 createdAt: "desc"
+            }
+        })
+
+        // Transform syncs into product-like objects for display
+        const syncedProducts = acceptedSyncs.map((sync: any) => {
+            const productData = sync.shopifyProductData || {}
+            const supplierQuantity = supplierQuantityFromSyncedProductData(productData)
+
+            return {
+                id: sync.id,
+                syncId: sync.id,
+                shopifyProductId: sync.shopifyProductId,
+                title: sync.shopifyProductTitle,
+                description: productData.body_html || productData.description || null,
+                price: productData.variants?.[0]?.price || "0",
+                sku: productData.variants?.[0]?.sku || null,
+                imageUrl: productData.image?.src || productData.images?.[0]?.src || null,
+                supplier: {
+                    id: sync.supplier.id,
+                    companyName: sync.supplier.companyName
+                },
+                syncedAt: sync.acceptedAt || sync.createdAt,
+                isSynced: true, // Flag to indicate this is a synced product
+                source: "synced",
+                offerQuantity: supplierQuantity,
+                // Include full Shopify product data for reference
+                shopifyData: productData
             }
         })
 

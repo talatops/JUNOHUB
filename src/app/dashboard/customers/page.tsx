@@ -23,9 +23,26 @@ interface ShopifyCustomer {
     last_order_id: number | null
     created_at: string
     default_address: {
-        city: string
-        country_name: string
+        city?: string
+        country_name?: string
+        country?: string
+        province?: string
+        address1?: string
     } | null
+}
+
+function formatCustomerLocation(default_address: ShopifyCustomer["default_address"]): string {
+    if (!default_address) return "Not provided"
+    const city = (default_address.city || "").trim()
+    const country = (default_address.country_name || default_address.country || "").trim()
+    if (city && country) return `${city}, ${country}`
+    if (city) return city
+    if (country) return country
+    const prov = (default_address.province || "").trim()
+    if (prov) return prov
+    const line = (default_address.address1 || "").trim()
+    if (line) return line
+    return "Not provided"
 }
 
 export default function CustomersPage() {
@@ -140,7 +157,7 @@ export default function CustomersPage() {
                                                     </div>
                                                     <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium md:hidden mt-1">
                                                         <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                                                        <span className="truncate">{customer.default_address ? `${customer.default_address.city}, ${customer.default_address.country_name}` : "Not provided"}</span>
+                                                        <span className="truncate">{formatCustomerLocation(customer.default_address)}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -156,7 +173,7 @@ export default function CustomersPage() {
                                         <td className="px-3 md:px-6 py-3 md:py-4 hidden md:table-cell">
                                             <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
                                                 <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                                                <span className="truncate">{customer.default_address ? `${customer.default_address.city}, ${customer.default_address.country_name}` : "Not provided"}</span>
+                                                <span className="truncate">{formatCustomerLocation(customer.default_address)}</span>
                                             </div>
                                         </td>
                                         <td className="px-3 md:px-6 py-3 md:py-4 hidden lg:table-cell">

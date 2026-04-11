@@ -46,6 +46,23 @@ interface ShopifyCustomerRecord {
     phone?: string
     tags?: string
     created_at?: string
+    /** Shopify REST customer `default_address` */
+    default_address?: unknown
+}
+
+function defaultAddressForCustomerCache(addr: unknown): Prisma.InputJsonValue | undefined {
+    if (!addr || typeof addr !== "object" || Array.isArray(addr)) return undefined
+    const a = addr as Record<string, unknown>
+    const payload = {
+        city: typeof a.city === "string" ? a.city : null,
+        country: typeof a.country === "string" ? a.country : null,
+        country_name: typeof a.country_name === "string" ? a.country_name : null,
+        province: typeof a.province === "string" ? a.province : null,
+        address1: typeof a.address1 === "string" ? a.address1 : null,
+    }
+    const hasAny = Object.values(payload).some((v) => v != null && String(v).trim() !== "")
+    if (!hasAny) return undefined
+    return payload as Prisma.InputJsonValue
 }
 
 // Cache TTL (Time To Live) in milliseconds
@@ -319,7 +336,8 @@ export async function updateCustomerCache(storeId: string, customers: ShopifyCus
             totalSpent: customer.total_spent || "0",
             phone: customer.phone || null,
             tags: customer.tags || null,
-            shopifyCreatedAt: customer.created_at ? new Date(customer.created_at) : null
+            shopifyCreatedAt: customer.created_at ? new Date(customer.created_at) : null,
+            defaultAddress: defaultAddressForCustomerCache(customer.default_address),
         }))
 
         await prisma.cachedCustomer.createMany({

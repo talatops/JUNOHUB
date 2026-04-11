@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
+import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
 
 /**
  * GET /api/vendors/synced-products/[id]
@@ -54,10 +55,8 @@ export async function GET(
 
         if (sync) {
             const productData = sync.shopifyProductData || {}
-            const supplierQuantity =
-                typeof productData.supplier_quantity === "number"
-                    ? productData.supplier_quantity
-                    : undefined
+            const supplierQuantity = supplierQuantityFromSyncedProductData(productData)
+
             const product = {
                 id: sync.id,
                 syncId: sync.id,

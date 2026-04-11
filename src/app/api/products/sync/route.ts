@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
+import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
 
 /**
  * GET /api/products/sync
@@ -46,7 +47,20 @@ export async function GET() {
             }
         })
 
-        return NextResponse.json({ syncs })
+        const enriched = syncs.map((sync: any) => {
+            const productData = sync.shopifyProductData || {}
+            let supplierAvailable: number | null = null
+            if (sync.status === "ACCEPTED") {
+                const sq = supplierQuantityFromSyncedProductData(productData)
+                if (sq !== undefined) supplierAvailable = sq
+            }
+            return {
+                ...sync,
+                supplierAvailableQuantity: supplierAvailable,
+            }
+        })
+
+        return NextResponse.json({ syncs: enriched })
     } catch (error) {
         console.error("Error fetching product syncs:", error)
         return NextResponse.json(
@@ -154,7 +168,41 @@ export async function POST(req: Request) {
                     { status: 400 }
                 )
             }
-            // If rejected, allow creating a new request
+            // REJECTED: reuse row (unique on store+supplier+shopifyProductId) instead of create
+            if (existingSync.status === "REJECTED") {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const productSync = await (prisma as any).productSync.update({
+                    where: { id: existingSync.id },
+                    data: {
+                        shopifyProductTitle,
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        shopifyProductData: shopifyProductData
+                            ? (shopifyProductData as any)
+                            : undefined,
+                        status: "PENDING",
+                        requestedBy: session.user.id,
+                        rejectedAt: null,
+                        acceptedAt: null,
+                    },
+                })
+
+                try {
+                    const { notifyProductSyncRequested } = await import("@/lib/notifications")
+                    await notifyProductSyncRequested(
+                        supplier.user.id,
+                        vendorStore.businessName,
+                        shopifyProductTitle,
+                        productSync.id
+                    )
+                } catch (notifError) {
+                    console.error("Error creating notification:", notifError)
+                }
+
+                return NextResponse.json({
+                    message: "Product sync request sent successfully",
+                    sync: productSync,
+                })
+            }
         }
 
         // Create sync request

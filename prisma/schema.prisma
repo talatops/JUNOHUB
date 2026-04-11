@@ -137,6 +137,7 @@ model Store {
   flaggedEmails   FlaggedEmail[]
   gmailInboundAutoReplies GmailInboundAutoReply[]
   templates       Template[]
+  chatMessages    ChatMessage[]
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -207,6 +208,8 @@ model CachedCustomer {
   totalSpent        String?
   phone             String?
   tags              String?
+  /** Shopify REST `default_address` snapshot for vendor UI (city, country, etc.). */
+  defaultAddress    Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   lastSyncedAt      DateTime @default(now())
@@ -591,17 +594,21 @@ model ChatMessage {
   id                      String   @id @default(cuid())
   senderId                String
   receiverId              String
+  /** Vendor store this thread belongs to (B2B JUNO CHAT). Null = legacy messages before per-store threading. */
+  storeId                 String?
   kind                    ChatMessageKind @default(TEXT)
   content                 String   @map("encryptedContent") @db.Text
   attachment              Json?
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
   receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  store    Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 
   @@index([senderId, receiverId])
   @@index([receiverId, senderId])
+  @@index([senderId, receiverId, storeId])
 }
 
 enum StorefrontChatSenderType {

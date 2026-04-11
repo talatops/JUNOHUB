@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { supplierQuantityFromSyncedProductData } from "@/lib/products/shopifyInventorySum"
 
 /**
  * GET /api/supplier/products
@@ -56,10 +57,7 @@ export async function GET() {
         // Transform synced products to match product format
         const syncedProductsFormatted = syncedProducts.map((sync: any) => {
             const productData = sync.shopifyProductData || {}
-            const supplierQuantity =
-                typeof productData.supplier_quantity === "number"
-                    ? productData.supplier_quantity
-                    : undefined
+            const supplierQuantity = supplierQuantityFromSyncedProductData(productData)
 
             return {
                 id: `synced-${sync.id}`, // Unique ID for synced products
@@ -77,7 +75,7 @@ export async function GET() {
                     businessName: sync.store.businessName
                 },
                 isSynced: true, // Flag to indicate this is a synced product from vendor
-                availableQuantity: supplierQuantity,
+                availableQuantity: supplierQuantity ?? null,
                 // Include full Shopify product data for reference
                 shopifyData: productData
             }

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
+import { sumVariantInventoryQuantity } from "@/lib/products/shopifyInventorySum"
 
 /**
  * PUT /api/products/sync/[syncId]
@@ -83,6 +84,17 @@ export async function PUT(
 
         if (action === "accept") {
             updateData.acceptedAt = new Date()
+            const base = {
+                ...(productSync.shopifyProductData &&
+                typeof productSync.shopifyProductData === "object"
+                    ? productSync.shopifyProductData
+                    : {}),
+            } as Record<string, unknown>
+            const initialSq = sumVariantInventoryQuantity(base.variants)
+            if (initialSq !== null) {
+                base.supplier_quantity = initialSq
+            }
+            updateData.shopifyProductData = base
         } else {
             updateData.rejectedAt = new Date()
         }

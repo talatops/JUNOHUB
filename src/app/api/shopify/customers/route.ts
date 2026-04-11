@@ -3,6 +3,37 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { isCacheFresh, getCachedCustomers, updateCustomerCache } from "@/lib/cache"
 
+function defaultAddressFromCacheJson(raw: unknown): {
+    city: string
+    country_name: string
+    country: string
+    province: string
+    address1: string
+} | null {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+    const d = raw as Record<string, unknown>
+    const out = {
+        city: typeof d.city === "string" ? d.city : "",
+        country_name:
+            typeof d.country_name === "string"
+                ? d.country_name
+                : typeof d.country === "string"
+                  ? d.country
+                  : "",
+        country: typeof d.country === "string" ? d.country : "",
+        province: typeof d.province === "string" ? d.province : "",
+        address1: typeof d.address1 === "string" ? d.address1 : "",
+    }
+    const has =
+        out.city.trim() ||
+        out.country_name.trim() ||
+        out.country.trim() ||
+        out.province.trim() ||
+        out.address1.trim()
+    if (!has) return null
+    return out
+}
+
 export async function GET() {
     try {
         const session = await auth()
@@ -41,7 +72,8 @@ export async function GET() {
                 total_spent: customer.totalSpent,
                 phone: customer.phone,
                 tags: customer.tags,
-                created_at: customer.shopifyCreatedAt?.toISOString() || customer.createdAt.toISOString()
+                created_at: customer.shopifyCreatedAt?.toISOString() || customer.createdAt.toISOString(),
+                default_address: defaultAddressFromCacheJson(customer.defaultAddress),
             }))
             return NextResponse.json({
                 customers: transformedCustomers,
