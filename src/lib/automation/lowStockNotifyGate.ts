@@ -1,6 +1,6 @@
 /**
  * Whether to send a low-stock supplier chat for this inventory observation.
- * Used by webhook/reconcile paths and unit-tested in isolation.
+ * `newQty` / `prevQty` are supplier-reported quantities (ProductSync snapshot).
  */
 export function shouldSendLowStockSupplierMessage(params: {
     newQty: number

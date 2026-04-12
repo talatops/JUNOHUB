@@ -1,11 +1,15 @@
--- CreateEnum
-CREATE TYPE "SupplierAutomationKind" AS ENUM ('LOW_STOCK', 'ASK_SUPPLIER');
+-- Idempotent: safe when objects already exist (partial / db push / re-apply after resolve).
 
--- AlterTable
-ALTER TABLE "Store" ADD COLUMN "lowStockThreshold" INTEGER;
+DO $$
+BEGIN
+  CREATE TYPE "SupplierAutomationKind" AS ENUM ('LOW_STOCK', 'ASK_SUPPLIER');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- CreateTable
-CREATE TABLE "LowStockAlertState" (
+ALTER TABLE "Store" ADD COLUMN IF NOT EXISTS "lowStockThreshold" INTEGER;
+
+CREATE TABLE IF NOT EXISTS "LowStockAlertState" (
     "id" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
     "shopifyProductId" TEXT NOT NULL,
@@ -17,8 +21,7 @@ CREATE TABLE "LowStockAlertState" (
     CONSTRAINT "LowStockAlertState_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "SupplierAutomationLog" (
+CREATE TABLE IF NOT EXISTS "SupplierAutomationLog" (
     "id" TEXT NOT NULL,
     "storeId" TEXT NOT NULL,
     "kind" "SupplierAutomationKind" NOT NULL,
@@ -31,20 +34,24 @@ CREATE TABLE "SupplierAutomationLog" (
     CONSTRAINT "SupplierAutomationLog_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "LowStockAlertState_storeId_shopifyProductId_key" ON "LowStockAlertState"("storeId", "shopifyProductId");
+CREATE UNIQUE INDEX IF NOT EXISTS "LowStockAlertState_storeId_shopifyProductId_key" ON "LowStockAlertState"("storeId", "shopifyProductId");
 
--- CreateIndex
-CREATE INDEX "LowStockAlertState_storeId_idx" ON "LowStockAlertState"("storeId");
+CREATE INDEX IF NOT EXISTS "LowStockAlertState_storeId_idx" ON "LowStockAlertState"("storeId");
 
--- CreateIndex
-CREATE INDEX "SupplierAutomationLog_storeId_kind_createdAt_idx" ON "SupplierAutomationLog"("storeId", "kind", "createdAt");
+CREATE INDEX IF NOT EXISTS "SupplierAutomationLog_storeId_kind_createdAt_idx" ON "SupplierAutomationLog"("storeId", "kind", "createdAt");
 
--- CreateIndex
-CREATE INDEX "SupplierAutomationLog_storeId_shopifyProductId_supplierUserId_createdAt_idx" ON "SupplierAutomationLog"("storeId", "shopifyProductId", "supplierUserId", "createdAt");
+CREATE INDEX IF NOT EXISTS "SupplierAutomationLog_storeId_shopifyProductId_supplierUserId_createdAt_idx" ON "SupplierAutomationLog"("storeId", "shopifyProductId", "supplierUserId", "createdAt");
 
--- AddForeignKey
-ALTER TABLE "LowStockAlertState" ADD CONSTRAINT "LowStockAlertState_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  ALTER TABLE "LowStockAlertState" ADD CONSTRAINT "LowStockAlertState_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
--- AddForeignKey
-ALTER TABLE "SupplierAutomationLog" ADD CONSTRAINT "SupplierAutomationLog_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+DO $$
+BEGIN
+  ALTER TABLE "SupplierAutomationLog" ADD CONSTRAINT "SupplierAutomationLog_storeId_fkey" FOREIGN KEY ("storeId") REFERENCES "Store"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;

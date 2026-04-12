@@ -34,6 +34,9 @@ services:
       # Override DATABASE_URL to use internal docker network hostname
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-dropshipping}?schema=public
       NODE_ENV: production
+      # P3009 recovery (one-time): set ONE of these on app, restart, verify migrate deploy, then remove.
+      #PRISMA_MIGRATE_RESOLVE_ROLLED_BACK: "20260412180000_supplier_automations"
+      # PRISMA_MIGRATE_RESOLVE_APPLIED: "20260412180000_supplier_automations"
     volumes:
       - ./public/uploads/supplier-products:/app/public/uploads/supplier-products
       - ./public/uploads/gmail-reply-logos:/app/public/uploads/gmail-reply-logos

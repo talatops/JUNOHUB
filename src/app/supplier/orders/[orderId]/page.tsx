@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, Loader2, AlertCircle, Package, Truck, Save, CheckCircle2, User, Mail, Phone, MapPin, X } from "lucide-react"
 import toast from "react-hot-toast"
+import { useTheme } from "@/components/ThemeProvider"
 import {
     SUPPLIER_HOLD_REASON_OPTIONS,
     type SupplierHoldReasonCode,
@@ -63,6 +64,8 @@ export default function SupplierOrderDetailsPage() {
     const router = useRouter()
     const params = useParams()
     const orderId = params?.orderId as string
+    const { theme } = useTheme()
+    const isLight = theme === "light"
 
     const [order, setOrder] = useState<SupplierOrder | null>(null)
     const [loading, setLoading] = useState(true)
@@ -474,26 +477,39 @@ export default function SupplierOrderDetailsPage() {
 
             {holdModalOpen ? (
                 <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                    className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isLight ? "bg-slate-900/40 backdrop-blur-sm" : "bg-black/70"}`}
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="hold-modal-title"
                 >
-                    <div className="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900 p-5 shadow-xl space-y-4">
+                    <div
+                        className={`w-full max-w-md rounded-2xl p-5 shadow-xl space-y-4 ${
+                            isLight
+                                ? "bg-white border border-slate-200"
+                                : "border border-white/15 bg-slate-900"
+                        }`}
+                    >
                         <div className="flex items-start justify-between gap-2">
-                            <h2 id="hold-modal-title" className="text-lg font-bold text-white">
+                            <h2
+                                id="hold-modal-title"
+                                className={`text-lg font-bold ${isLight ? "text-slate-900" : "text-white"}`}
+                            >
                                 On hold reason
                             </h2>
                             <button
                                 type="button"
                                 onClick={cancelHoldModal}
-                                className="p-1 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
+                                className={`p-1 rounded-lg ${
+                                    isLight
+                                        ? "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                                        : "text-slate-400 hover:bg-white/10 hover:text-white"
+                                }`}
                                 aria-label="Close"
                             >
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
-                        <p className="text-sm text-slate-400">
+                        <p className={`text-sm ${isLight ? "text-slate-600" : "text-slate-400"}`}>
                             Select why this order is on hold. Required before you can save.
                         </p>
                         <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
@@ -502,8 +518,12 @@ export default function SupplierOrderDetailsPage() {
                                     key={opt.value}
                                     className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
                                         modalReason === opt.value
-                                            ? "border-indigo-500/60 bg-indigo-500/15"
-                                            : "border-white/10 bg-white/5"
+                                            ? isLight
+                                                ? "border-indigo-500 bg-indigo-50"
+                                                : "border-indigo-500/60 bg-indigo-500/15"
+                                            : isLight
+                                              ? "border-slate-200 bg-slate-50"
+                                              : "border-white/10 bg-white/5"
                                     }`}
                                 >
                                     <input
@@ -513,20 +533,32 @@ export default function SupplierOrderDetailsPage() {
                                         checked={modalReason === opt.value}
                                         onChange={() => setModalReason(opt.value)}
                                     />
-                                    <span className="text-sm text-white font-medium">{opt.label}</span>
+                                    <span
+                                        className={`text-sm font-medium ${isLight ? "text-slate-900" : "text-white"}`}
+                                    >
+                                        {opt.label}
+                                    </span>
                                 </label>
                             ))}
                         </div>
                         {modalReason === "other" ? (
                             <div>
-                                <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Note</label>
+                                <label
+                                    className={`block text-xs uppercase font-bold mb-2 ${isLight ? "text-slate-500" : "text-slate-400"}`}
+                                >
+                                    Note
+                                </label>
                                 <textarea
                                     value={modalNote}
                                     onChange={(e) => setModalNote(e.target.value)}
                                     rows={3}
                                     maxLength={2000}
                                     placeholder="Describe the hold…"
-                                    className="w-full rounded-xl bg-white/10 border border-white/10 text-white px-3 py-2 text-sm"
+                                    className={
+                                        isLight
+                                            ? "w-full rounded-xl bg-white border border-slate-200 text-slate-900 placeholder:text-slate-400 px-3 py-2 text-sm"
+                                            : "w-full rounded-xl bg-white/10 border border-white/10 text-white px-3 py-2 text-sm"
+                                    }
                                 />
                             </div>
                         ) : null}
@@ -534,7 +566,11 @@ export default function SupplierOrderDetailsPage() {
                             <button
                                 type="button"
                                 onClick={cancelHoldModal}
-                                className="h-10 px-4 rounded-xl bg-white/10 text-white font-semibold"
+                                className={
+                                    isLight
+                                        ? "h-10 px-4 rounded-xl bg-slate-100 text-slate-800 font-semibold hover:bg-slate-200"
+                                        : "h-10 px-4 rounded-xl bg-white/10 text-white font-semibold"
+                                }
                             >
                                 Cancel
                             </button>

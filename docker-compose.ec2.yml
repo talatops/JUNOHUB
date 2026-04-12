@@ -32,6 +32,7 @@ services:
       # Override DATABASE_URL to use internal docker network hostname
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-password}@db:5432/${POSTGRES_DB:-dropshipping}?schema=public
       NODE_ENV: production
+      # P3009 one-time: PRISMA_MIGRATE_RESOLVE_ROLLED_BACK or PRISMA_MIGRATE_RESOLVE_APPLIED (see docker-compose.yml comments)
     volumes:
       - ./public/uploads/supplier-products:/app/public/uploads/supplier-products
     depends_on:

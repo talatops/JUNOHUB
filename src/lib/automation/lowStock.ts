@@ -1,7 +1,11 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
-import { sumVariantInventoryQuantity } from "@/lib/products/shopifyInventorySum"
+import {
+    sumVariantInventoryQuantity,
+    supplierQuantityFromSyncedProductData,
+} from "@/lib/products/shopifyInventorySum"
 import { postB2bChatMessage } from "@/lib/chat/postB2bChatMessage"
+import { notifyVendorShopifyLowStock } from "@/lib/notifications"
 import {
     isLowStockRateLimited,
     logSupplierAutomation,
@@ -14,6 +18,7 @@ type ShopifyProductWebhookBody = {
     id?: unknown
     title?: unknown
     variants?: unknown
+    images?: unknown
 }
 
 function shopifyProductIdString(body: ShopifyProductWebhookBody): string | null {
@@ -22,39 +27,149 @@ function shopifyProductIdString(body: ShopifyProductWebhookBody): string | null 
     return String(id)
 }
 
-function buildLowStockMessage(params: {
-    storeName: string
-    productTitle: string
+function extractImageUrlFromImagesField(images: unknown): string | null {
+    if (!Array.isArray(images) || images.length === 0) return null
+    const first = images[0] as { src?: string; url?: string }
+    return first?.src || first?.url || null
+}
+
+function buildLowStockTextContent(supplierQty: number): string {
+    return `Supplier-reported quantity: ${supplierQty}. Please restock or share an ETA when you can.`
+}
+
+async function runShopifyLowStockVendorNotification(params: {
+    storeId: string
+    vendorUserId: string
     shopifyProductId: string
-    currentQty: number
+    title: string
+    shopifyTotal: number
     threshold: number
-    shopifyDomain: string
-}): string {
-    const domain = params.shopifyDomain
-        .trim()
-        .replace(/^https?:\/\//, "")
-        .replace(/\/$/, "")
-    const adminUrl = `https://${domain}/admin/products/${params.shopifyProductId}`
-    return [
-        `[Low stock — automated]`,
-        `Store: ${params.storeName}`,
-        `Product: ${params.productTitle}`,
-        `Shopify product ID: ${params.shopifyProductId}`,
-        `Total inventory (sum of variants): ${params.currentQty}`,
-        `Store threshold: ${params.threshold}`,
-        `Please confirm restock or ETA when you can.`,
-        `Admin: ${adminUrl}`,
-    ].join("\n")
+}): Promise<void> {
+    const { storeId, vendorUserId, shopifyProductId, title, shopifyTotal, threshold: shopifyTh } = params
+
+    const state = await prisma.lowStockShopifyVendorAlertState.findUnique({
+        where: {
+            storeId_shopifyProductId: { storeId, shopifyProductId },
+        },
+    })
+
+    const upsertAboveOrClear = async () => {
+        await prisma.lowStockShopifyVendorAlertState.upsert({
+            where: { storeId_shopifyProductId: { storeId, shopifyProductId } },
+            create: {
+                storeId,
+                shopifyProductId,
+                lastSeenShopifyTotal: shopifyTotal,
+                lastNotifiedBelowAt: null,
+            },
+            update: {
+                lastSeenShopifyTotal: shopifyTotal,
+                lastNotifiedBelowAt: null,
+            },
+        })
+    }
+
+    if (shopifyTotal >= shopifyTh) {
+        await upsertAboveOrClear()
+        return
+    }
+
+    const prevQty = state?.lastSeenShopifyTotal ?? null
+    if (
+        !shouldSendLowStockSupplierMessage({
+            newQty: shopifyTotal,
+            threshold: shopifyTh,
+            prevQty,
+            lastNotifiedBelowAt: state?.lastNotifiedBelowAt ?? null,
+        })
+    ) {
+        await prisma.lowStockShopifyVendorAlertState.upsert({
+            where: { storeId_shopifyProductId: { storeId, shopifyProductId } },
+            create: {
+                storeId,
+                shopifyProductId,
+                lastSeenShopifyTotal: shopifyTotal,
+                lastNotifiedBelowAt: null,
+            },
+            update: { lastSeenShopifyTotal: shopifyTotal },
+        })
+        return
+    }
+
+    try {
+        await notifyVendorShopifyLowStock(vendorUserId, {
+            storeId,
+            shopifyProductId,
+            productTitle: title,
+            shopifyTotal,
+            threshold: shopifyTh,
+        })
+    } catch (e) {
+        logger.warn("[lowStock] notifyVendorShopifyLowStock failed", e)
+        await prisma.lowStockShopifyVendorAlertState.upsert({
+            where: { storeId_shopifyProductId: { storeId, shopifyProductId } },
+            create: {
+                storeId,
+                shopifyProductId,
+                lastSeenShopifyTotal: shopifyTotal,
+                lastNotifiedBelowAt: null,
+            },
+            update: { lastSeenShopifyTotal: shopifyTotal },
+        })
+        return
+    }
+
+    const now = new Date()
+    await prisma.lowStockShopifyVendorAlertState.upsert({
+        where: { storeId_shopifyProductId: { storeId, shopifyProductId } },
+        create: {
+            storeId,
+            shopifyProductId,
+            lastSeenShopifyTotal: shopifyTotal,
+            lastNotifiedBelowAt: now,
+        },
+        update: {
+            lastSeenShopifyTotal: shopifyTotal,
+            lastNotifiedBelowAt: now,
+        },
+    })
+}
+
+function buildProductChatAttachment(params: {
+    storeId: string
+    shopifyProductId: string
+    title: string
+    description: string | null
+    imageUrl: string | null
+}): {
+    title: string
+    description: string | null
+    imageUrl: string | null
+    storeName: null
+    storeId: string
+    productId: number
+} {
+    const productId = Number.parseInt(params.shopifyProductId, 10)
+    return {
+        title: params.title,
+        description: params.description,
+        imageUrl: params.imageUrl,
+        storeName: null,
+        storeId: params.storeId,
+        productId: Number.isFinite(productId) ? productId : 0,
+    }
 }
 
 /**
- * After Shopify product webhook updates cache: evaluate low-stock and notify linked supplier(s).
- * @param prevTotalQty - total from CachedProduct variants before this update; null if no prior row
+ * After Shopify product webhook updates cache (or during reconcile):
+ * - If `lowStockShopifyThreshold` is set: compare total Shopify variant inventory to threshold; notify the vendor
+ *   in-app when appropriate (deduped per product).
+ * - If `lowStockThreshold` is set: for each ACCEPTED ProductSync, compare supplier-reported quantity; notify that
+ *   supplier via a PRODUCT chat card (unchanged).
  */
 export async function evaluateLowStockAfterProductWebhook(params: {
     storeId: string
     shopifyProductBody: ShopifyProductWebhookBody
-    prevTotalQty: number | null
 }): Promise<void> {
     const shopifyProductId = shopifyProductIdString(params.shopifyProductBody)
     if (!shopifyProductId) return
@@ -63,20 +178,19 @@ export async function evaluateLowStockAfterProductWebhook(params: {
         where: { id: params.storeId },
         select: {
             lowStockThreshold: true,
+            lowStockShopifyThreshold: true,
             userId: true,
-            businessName: true,
-            shopifyDomain: true,
         },
     })
 
-    const threshold = store?.lowStockThreshold
-    if (store === null || threshold === null || threshold === undefined) {
+    const supplierThreshold = store?.lowStockThreshold
+    const shopifyThreshold = store?.lowStockShopifyThreshold
+    if (store === null) {
         return
     }
-
-    const variants = params.shopifyProductBody.variants
-    const newQty = sumVariantInventoryQuantity(variants)
-    if (newQty === null) {
+    const hasSupplierRule = supplierThreshold !== null && supplierThreshold !== undefined
+    const hasShopifyRule = shopifyThreshold !== null && shopifyThreshold !== undefined
+    if (!hasSupplierRule && !hasShopifyRule) {
         return
     }
 
@@ -85,58 +199,57 @@ export async function evaluateLowStockAfterProductWebhook(params: {
             ? params.shopifyProductBody.title
             : "Product"
 
-    const state = await prisma.lowStockAlertState.findUnique({
-        where: {
-            storeId_shopifyProductId: {
-                storeId: params.storeId,
-                shopifyProductId,
-            },
-        },
-    })
+    let imageUrl = extractImageUrlFromImagesField(params.shopifyProductBody.images)
 
-    if (newQty >= threshold) {
-        await prisma.lowStockAlertState.upsert({
+    let cachedProductRow: { images: unknown; variants: unknown } | null = null
+    const loadCachedProductRow = async (): Promise<{ images: unknown; variants: unknown } | null> => {
+        if (cachedProductRow !== null) return cachedProductRow
+        cachedProductRow = await prisma.cachedProduct.findUnique({
             where: {
-                storeId_shopifyProductId: {
-                    storeId: params.storeId,
+                shopifyProductId_storeId: {
                     shopifyProductId,
+                    storeId: params.storeId,
                 },
             },
-            create: {
+            select: { images: true, variants: true },
+        })
+        return cachedProductRow
+    }
+
+    if (imageUrl === null) {
+        const row = await loadCachedProductRow()
+        imageUrl = extractImageUrlFromImagesField(row?.images)
+    }
+
+    if (hasShopifyRule) {
+        const shopifyTh = shopifyThreshold as number
+        let shopifyTotal = sumVariantInventoryQuantity(params.shopifyProductBody.variants)
+        if (shopifyTotal === null) {
+            const row = await loadCachedProductRow()
+            shopifyTotal = sumVariantInventoryQuantity(row?.variants)
+        }
+        if (shopifyTotal === null) {
+            logger.info("[lowStock] skip Shopify vendor alert (no variant inventory totals)", {
                 storeId: params.storeId,
                 shopifyProductId,
-                lastSeenTotalQty: newQty,
-                lastNotifiedBelowAt: null,
-            },
-            update: {
-                lastSeenTotalQty: newQty,
-                lastNotifiedBelowAt: null,
-            },
-        })
+            })
+        } else {
+            await runShopifyLowStockVendorNotification({
+                storeId: params.storeId,
+                vendorUserId: store.userId,
+                shopifyProductId,
+                title,
+                shopifyTotal,
+                threshold: shopifyTh,
+            })
+        }
+    }
+
+    if (!hasSupplierRule) {
         return
     }
 
-    // Below threshold
-    const prevQty = params.prevTotalQty
-    if (
-        !shouldSendLowStockSupplierMessage({
-            newQty,
-            threshold,
-            prevQty,
-            lastNotifiedBelowAt: state?.lastNotifiedBelowAt ?? null,
-        })
-    ) {
-        await prisma.lowStockAlertState.update({
-            where: {
-                storeId_shopifyProductId: {
-                    storeId: params.storeId,
-                    shopifyProductId,
-                },
-            },
-            data: { lastSeenTotalQty: newQty },
-        })
-        return
-    }
+    const threshold = supplierThreshold as number
 
     const syncs = await prisma.productSync.findMany({
         where: {
@@ -152,33 +265,89 @@ export async function evaluateLowStockAfterProductWebhook(params: {
     })
 
     if (!syncs.length) {
-        logger.info("[lowStock] no ACCEPTED ProductSync for product", {
-            storeId: params.storeId,
-            shopifyProductId,
-        })
-        await prisma.lowStockAlertState.upsert({
-            where: {
-                storeId_shopifyProductId: {
-                    storeId: params.storeId,
-                    shopifyProductId,
-                },
-            },
-            create: {
-                storeId: params.storeId,
-                shopifyProductId,
-                lastSeenTotalQty: newQty,
-                lastNotifiedBelowAt: null,
-            },
-            update: { lastSeenTotalQty: newQty },
-        })
         return
     }
 
     const vendorUserId = store.userId
-    const now = new Date()
-    let anySent = false
 
     for (const sync of syncs) {
+        const supplierQty = supplierQuantityFromSyncedProductData(sync.shopifyProductData)
+        if (supplierQty === undefined) {
+            logger.info("[lowStock] skip sync (no supplier quantity in snapshot)", {
+                storeId: params.storeId,
+                shopifyProductId,
+                productSyncId: sync.id,
+            })
+            continue
+        }
+
+        const state = await prisma.lowStockAlertState.findUnique({
+            where: {
+                storeId_shopifyProductId_supplierId: {
+                    storeId: params.storeId,
+                    shopifyProductId,
+                    supplierId: sync.supplierId,
+                },
+            },
+        })
+
+        const upsertAboveOrClear = async () => {
+            await prisma.lowStockAlertState.upsert({
+                where: {
+                    storeId_shopifyProductId_supplierId: {
+                        storeId: params.storeId,
+                        shopifyProductId,
+                        supplierId: sync.supplierId,
+                    },
+                },
+                create: {
+                    storeId: params.storeId,
+                    shopifyProductId,
+                    supplierId: sync.supplierId,
+                    lastSeenSupplierQty: supplierQty,
+                    lastNotifiedBelowAt: null,
+                },
+                update: {
+                    lastSeenSupplierQty: supplierQty,
+                    lastNotifiedBelowAt: null,
+                },
+            })
+        }
+
+        if (supplierQty >= threshold) {
+            await upsertAboveOrClear()
+            continue
+        }
+
+        const prevQty = state?.lastSeenSupplierQty ?? null
+        if (
+            !shouldSendLowStockSupplierMessage({
+                newQty: supplierQty,
+                threshold,
+                prevQty,
+                lastNotifiedBelowAt: state?.lastNotifiedBelowAt ?? null,
+            })
+        ) {
+            await prisma.lowStockAlertState.upsert({
+                where: {
+                    storeId_shopifyProductId_supplierId: {
+                        storeId: params.storeId,
+                        shopifyProductId,
+                        supplierId: sync.supplierId,
+                    },
+                },
+                create: {
+                    storeId: params.storeId,
+                    shopifyProductId,
+                    supplierId: sync.supplierId,
+                    lastSeenSupplierQty: supplierQty,
+                    lastNotifiedBelowAt: null,
+                },
+                update: { lastSeenSupplierQty: supplierQty },
+            })
+            continue
+        }
+
         const supplierUserId = sync.supplier.userId
         const limited = await isLowStockRateLimited(
             params.storeId,
@@ -195,24 +364,26 @@ export async function evaluateLowStockAfterProductWebhook(params: {
             continue
         }
 
-        const content = buildLowStockMessage({
-            storeName: store.businessName,
-            productTitle: title,
+        const content = buildLowStockTextContent(supplierQty)
+        const attachment = buildProductChatAttachment({
+            storeId: params.storeId,
             shopifyProductId,
-            currentQty: newQty,
-            threshold,
-            shopifyDomain: store.shopifyDomain,
+            title: sync.shopifyProductTitle || title,
+            description: null,
+            imageUrl,
         })
 
         const posted = await postB2bChatMessage({
             senderId: vendorUserId,
             receiverId: supplierUserId,
             storeId: params.storeId,
-            kind: "TEXT",
+            kind: "PRODUCT",
             content,
+            attachment,
             notify: true,
         })
 
+        const now = new Date()
         if (!posted.ok) {
             logger.warn("[lowStock] chat post failed", {
                 storeId: params.storeId,
@@ -220,10 +391,26 @@ export async function evaluateLowStockAfterProductWebhook(params: {
                 supplierUserId,
                 reason: posted.reason,
             })
+            await prisma.lowStockAlertState.upsert({
+                where: {
+                    storeId_shopifyProductId_supplierId: {
+                        storeId: params.storeId,
+                        shopifyProductId,
+                        supplierId: sync.supplierId,
+                    },
+                },
+                create: {
+                    storeId: params.storeId,
+                    shopifyProductId,
+                    supplierId: sync.supplierId,
+                    lastSeenSupplierQty: supplierQty,
+                    lastNotifiedBelowAt: null,
+                },
+                update: { lastSeenSupplierQty: supplierQty },
+            })
             continue
         }
 
-        anySent = true
         await logSupplierAutomation({
             storeId: params.storeId,
             kind: "LOW_STOCK",
@@ -231,26 +418,92 @@ export async function evaluateLowStockAfterProductWebhook(params: {
             supplierUserId,
             messagePreview: content.slice(0, 500),
         })
-    }
 
-    await prisma.lowStockAlertState.upsert({
-        where: {
-            storeId_shopifyProductId: {
+        await prisma.lowStockAlertState.upsert({
+            where: {
+                storeId_shopifyProductId_supplierId: {
+                    storeId: params.storeId,
+                    shopifyProductId,
+                    supplierId: sync.supplierId,
+                },
+            },
+            create: {
                 storeId: params.storeId,
                 shopifyProductId,
+                supplierId: sync.supplierId,
+                lastSeenSupplierQty: supplierQty,
+                lastNotifiedBelowAt: now,
             },
-        },
-        create: {
-            storeId: params.storeId,
-            shopifyProductId,
-            lastSeenTotalQty: newQty,
-            lastNotifiedBelowAt: anySent ? now : null,
-        },
-        update: {
-            lastSeenTotalQty: newQty,
-            ...(anySent ? { lastNotifiedBelowAt: now } : {}),
+            update: {
+                lastSeenSupplierQty: supplierQty,
+                lastNotifiedBelowAt: now,
+            },
+        })
+    }
+}
+
+/**
+ * Reconcile cached ACCEPTED-synced products for one store (missed webhooks / after threshold save).
+ * Bounded work per invocation.
+ */
+export async function reconcileLowStockForStore(
+    storeId: string,
+    maxProductsPerStore = 120,
+): Promise<void> {
+    const store = await prisma.store.findUnique({
+        where: { id: storeId },
+        select: {
+            id: true,
+            lowStockThreshold: true,
+            lowStockShopifyThreshold: true,
         },
     })
+    if (
+        !store ||
+        (store.lowStockThreshold === null && store.lowStockShopifyThreshold === null)
+    ) {
+        return
+    }
+
+    const syncRows = await prisma.productSync.findMany({
+        where: {
+            storeId: store.id,
+            status: "ACCEPTED",
+        },
+        select: { shopifyProductId: true },
+        take: maxProductsPerStore * 3,
+    })
+    const seen = new Set<string>()
+    const syncedIds: { shopifyProductId: string }[] = []
+    for (const r of syncRows) {
+        if (seen.has(r.shopifyProductId)) continue
+        seen.add(r.shopifyProductId)
+        syncedIds.push({ shopifyProductId: r.shopifyProductId })
+        if (syncedIds.length >= maxProductsPerStore) break
+    }
+
+    for (const row of syncedIds) {
+        const cached = await prisma.cachedProduct.findUnique({
+            where: {
+                shopifyProductId_storeId: {
+                    shopifyProductId: row.shopifyProductId,
+                    storeId: store.id,
+                },
+            },
+        })
+        if (!cached) continue
+
+        const body: ShopifyProductWebhookBody = {
+            id: row.shopifyProductId,
+            title: cached.title,
+            variants: cached.variants as unknown,
+            images: cached.images as unknown,
+        }
+        await evaluateLowStockAfterProductWebhook({
+            storeId: store.id,
+            shopifyProductBody: body,
+        })
+    }
 }
 
 /**
@@ -261,70 +514,18 @@ export async function reconcileLowStockForActiveStores(maxStores = 10, maxProduc
     const stores = await prisma.store.findMany({
         where: {
             isActive: true,
-            lowStockThreshold: { not: null },
+            OR: [
+                { lowStockThreshold: { not: null } },
+                { lowStockShopifyThreshold: { not: null } },
+            ],
         },
         select: {
             id: true,
-            lowStockThreshold: true,
-            userId: true,
-            businessName: true,
-            shopifyDomain: true,
         },
         take: maxStores,
     })
 
     for (const store of stores) {
-        const threshold = store.lowStockThreshold
-        if (threshold === null) continue
-
-        const syncRows = await prisma.productSync.findMany({
-            where: {
-                storeId: store.id,
-                status: "ACCEPTED",
-            },
-            select: { shopifyProductId: true },
-            take: maxProductsPerStore * 3,
-        })
-        const seen = new Set<string>()
-        const syncedIds: { shopifyProductId: string }[] = []
-        for (const r of syncRows) {
-            if (seen.has(r.shopifyProductId)) continue
-            seen.add(r.shopifyProductId)
-            syncedIds.push({ shopifyProductId: r.shopifyProductId })
-            if (syncedIds.length >= maxProductsPerStore) break
-        }
-
-        for (const row of syncedIds) {
-            const cached = await prisma.cachedProduct.findUnique({
-                where: {
-                    shopifyProductId_storeId: {
-                        shopifyProductId: row.shopifyProductId,
-                        storeId: store.id,
-                    },
-                },
-            })
-            if (!cached) continue
-
-            const alertState = await prisma.lowStockAlertState.findUnique({
-                where: {
-                    storeId_shopifyProductId: {
-                        storeId: store.id,
-                        shopifyProductId: row.shopifyProductId,
-                    },
-                },
-            })
-            const prevForReconcile = alertState?.lastSeenTotalQty ?? null
-
-            const body: ShopifyProductWebhookBody = {
-                id: row.shopifyProductId,
-                title: cached.title,
-                variants: cached.variants as unknown,
-            }
-            await evaluateLowStockAfterProductWebhook({
-                storeId: store.id,
-                shopifyProductBody: body,
-                prevTotalQty: prevForReconcile,
-            })
-        }
+        await reconcileLowStockForStore(store.id, maxProductsPerStore)
     }
 }

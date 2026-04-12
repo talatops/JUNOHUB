@@ -21,7 +21,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Plus,
-    BellRing
+    PackagePlus,
 } from "lucide-react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
@@ -109,17 +109,40 @@ export default function InventoryPage() {
     const [showFilters, setShowFilters] = useState(false)
     const [mounted, setMounted] = useState(false)
     const [menuRect, setMenuRect] = useState<{ top: number; left: number } | null>(null)
+    const [showLoadStockModal, setShowLoadStockModal] = useState(false)
+    const [loadStockProduct, setLoadStockProduct] = useState<ShopifyProduct | null>(null)
+    const [loadStockSync, setLoadStockSync] = useState<ProductSync | null>(null)
+    const [loadStockQtyInput, setLoadStockQtyInput] = useState("1")
+    const [loadStockSubmitting, setLoadStockSubmitting] = useState(false)
+    const [loadStockError, setLoadStockError] = useState("")
     const menuRefs = useRef<{ [key: number]: HTMLButtonElement | null }>({})
     const { theme } = useTheme()
     const isLight = theme === "light"
 
-    const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
-    const [lowStockDraft, setLowStockDraft] = useState("")
-    const [lowStockSaving, setLowStockSaving] = useState(false)
-
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    const refetchInventoryAndSyncs = async () => {
+        try {
+            const invRes = await fetch("/api/shopify/inventory")
+            if (invRes.ok) {
+                const invData = await invRes.json()
+                setProducts(invData.products || [])
+            }
+            const syncRes = await fetch("/api/products/sync")
+            if (syncRes.ok) {
+                const syncData = await syncRes.json()
+                const syncsMap = new Map<string, ProductSync>()
+                syncData.syncs?.forEach((sync: ProductSync) => {
+                    syncsMap.set(sync.shopifyProductId, sync)
+                })
+                setProductSyncs(syncsMap)
+            }
+        } catch {
+            // Silent fail
+        }
+    }
 
     useEffect(() => {
         const fetchStoreInfo = async () => {
@@ -128,23 +151,6 @@ export default function InventoryPage() {
                 if (res.ok) {
                     const data = await res.json()
                     const activeStore = data.stores?.find((s: { isActive: boolean }) => s.isActive)
-                    if (activeStore?.id) {
-                        setActiveStoreId(activeStore.id)
-                        try {
-                            const settingsRes = await fetch(`/api/stores/${activeStore.id}`, {
-                                cache: "no-store",
-                            })
-                            if (settingsRes.ok) {
-                                const settingsData = (await settingsRes.json()) as {
-                                    lowStockThreshold?: number | null
-                                }
-                                const t = settingsData.lowStockThreshold
-                                setLowStockDraft(typeof t === "number" ? String(t) : "")
-                            }
-                        } catch {
-                            // ignore
-                        }
-                    }
                     if (activeStore?.shopifyDomain) {
                         const cleanDomain = activeStore.shopifyDomain.replace(/^https?:\/\//, "").replace(/\/$/, "")
                         setStoreDomain(cleanDomain)
@@ -311,6 +317,53 @@ export default function InventoryPage() {
         return productSyncs.get(productId.toString()) || null
     }
 
+    const handleOpenLoadStock = (product: ShopifyProduct, sync: ProductSync) => {
+        setLoadStockProduct(product)
+        setLoadStockSync(sync)
+        setLoadStockQtyInput("1")
+        setLoadStockError("")
+        setShowLoadStockModal(true)
+        setOpenMenuId(null)
+        setMenuRect(null)
+    }
+
+    const handleSubmitLoadStock = async () => {
+        if (!loadStockProduct || !loadStockSync) return
+        const qty = parseInt(loadStockQtyInput, 10)
+        if (!Number.isFinite(qty) || qty < 1) {
+            setLoadStockError("Enter a positive whole number.")
+            return
+        }
+        const cap = loadStockSync.supplierAvailableQuantity
+        if (cap != null && qty > cap) {
+            setLoadStockError(`Amount cannot exceed supplier stock (${cap}).`)
+            return
+        }
+        setLoadStockSubmitting(true)
+        setLoadStockError("")
+        try {
+            const res = await fetch("/api/shopify/inventory/load-stock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ productSyncId: loadStockSync.id, quantity: qty }),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                setLoadStockError(typeof data.message === "string" ? data.message : "Could not load stock.")
+                return
+            }
+            toast.success(typeof data.message === "string" ? data.message : "Stock loaded.")
+            setShowLoadStockModal(false)
+            setLoadStockProduct(null)
+            setLoadStockSync(null)
+            await refetchInventoryAndSyncs()
+        } catch {
+            setLoadStockError("Could not load stock.")
+        } finally {
+            setLoadStockSubmitting(false)
+        }
+    }
+
     const handleSyncProduct = (product: ShopifyProduct) => {
         if (connectedSuppliers.length === 0) {
             toast.error("You need to connect with at least one supplier before syncing products. Please go to Suppliers > My Suppliers to connect.")
@@ -362,46 +415,6 @@ export default function InventoryPage() {
             toast.error(errorMessage)
         } finally {
             setSyncingProduct(false)
-        }
-    }
-
-    const saveLowStockSettings = async () => {
-        if (!activeStoreId) {
-            toast.error("No active store")
-            return
-        }
-        const trimmed = lowStockDraft.trim()
-        let payload: { lowStockThreshold: number | null }
-        if (trimmed === "") {
-            payload = { lowStockThreshold: null }
-        } else {
-            const n = Number.parseInt(trimmed, 10)
-            if (!Number.isFinite(n) || n < 0 || n > 1_000_000) {
-                toast.error("Enter a whole number from 0 to 1000000, or leave empty to turn off.")
-                return
-            }
-            payload = { lowStockThreshold: n }
-        }
-        setLowStockSaving(true)
-        try {
-            const res = await fetch(`/api/stores/${activeStoreId}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload),
-            })
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok) {
-                throw new Error((data as { message?: string }).message || "Save failed")
-            }
-            toast.success(
-                payload.lowStockThreshold === null
-                    ? "Low-stock supplier alerts turned off."
-                    : `Alerts on when total variant stock drops below ${payload.lowStockThreshold}.`,
-            )
-        } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Could not save settings")
-        } finally {
-            setLowStockSaving(false)
         }
     }
 
@@ -457,63 +470,6 @@ export default function InventoryPage() {
                             className="h-10 md:h-11 px-3 md:px-4 bg-white/10 border border-white/10 rounded-xl font-bold text-white hover:bg-white/15 backdrop-blur-sm transition-all flex items-center gap-2 text-sm"
                         >
                             <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
-                        </button>
-                    </div>
-                </div>
-
-                <div
-                    className={`rounded-xl md:rounded-2xl border p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0 ${
-                        isLight
-                            ? "bg-indigo-50/80 border-indigo-200"
-                            : "bg-indigo-500/10 border-indigo-500/20"
-                    }`}
-                >
-                    <div className="flex items-start gap-3 min-w-0">
-                        <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                                isLight ? "bg-indigo-100 text-indigo-700" : "bg-indigo-500/20 text-indigo-300"
-                            }`}
-                        >
-                            <BellRing className="w-5 h-5" />
-                        </div>
-                        <div className="min-w-0">
-                            <h2
-                                className={`text-sm font-black uppercase tracking-wider ${
-                                    isLight ? "text-indigo-900" : "text-indigo-200"
-                                }`}
-                            >
-                                Supplier low-stock alerts
-                            </h2>
-                            <p
-                                className={`text-xs mt-1 leading-relaxed ${
-                                    isLight ? "text-indigo-800/80" : "text-slate-400"
-                                }`}
-                            >
-                                When enabled, synced products (ACCEPTED) message the linked supplier in JUNO chat if
-                                total inventory drops below your threshold. Leave empty to turn off.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:ml-auto shrink-0">
-                        <input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="Off"
-                            value={lowStockDraft}
-                            onChange={(e) => setLowStockDraft(e.target.value.replace(/[^\d]/g, ""))}
-                            className={`h-10 w-full sm:w-28 px-3 rounded-xl border text-sm font-bold ${
-                                isLight
-                                    ? "bg-white border-indigo-200 text-slate-900 placeholder:text-slate-400"
-                                    : "bg-white/5 border-white/10 text-white placeholder:text-slate-500"
-                            }`}
-                        />
-                        <button
-                            type="button"
-                            disabled={lowStockSaving || !activeStoreId}
-                            onClick={() => saveLowStockSettings()}
-                            className="h-10 px-4 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
-                        >
-                            {lowStockSaving ? "Saving…" : "Save"}
                         </button>
                     </div>
                 </div>
@@ -738,6 +694,89 @@ export default function InventoryPage() {
                 </div>
 
                 {/* Supplier Selection Modal */}
+                {showLoadStockModal && loadStockProduct && loadStockSync && (
+                    <div className={`fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4 ${isLight ? "bg-black/40" : "bg-black/60"}`}>
+                        <div className={`rounded-2xl shadow-2xl max-w-md w-full overflow-hidden flex flex-col ${isLight ? "bg-white border border-slate-200" : "bg-slate-900 border border-white/10"}`}>
+                            <div className={`p-6 flex items-center justify-between ${isLight ? "border-b border-slate-200" : "border-b border-white/10"}`}>
+                                <div>
+                                    <h2 className={`text-xl font-bold ${isLight ? "text-slate-900" : "text-white"}`}>Load stock</h2>
+                                    <p className={`text-sm mt-1 ${isLight ? "text-slate-600" : "text-slate-400"}`}>
+                                        Add inventory to Shopify from supplier stock for &quot;{loadStockProduct.title}&quot;
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        if (!loadStockSubmitting) {
+                                            setShowLoadStockModal(false)
+                                            setLoadStockProduct(null)
+                                            setLoadStockSync(null)
+                                        }
+                                    }}
+                                    className={`p-2 rounded-lg transition-colors ${isLight ? "text-slate-500 hover:text-slate-900 hover:bg-slate-100" : "text-slate-400 hover:text-white hover:bg-white/10"}`}
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <p className={`text-xs ${isLight ? "text-slate-500" : "text-slate-500"}`}>
+                                    Sellable quantity is added to the <span className="font-semibold">first variant</span> at your primary Shopify location. Supplier stock cannot exceed what is shown below.
+                                </p>
+                                <div className={`grid grid-cols-2 gap-3 text-sm ${isLight ? "text-slate-700" : "text-slate-300"}`}>
+                                    <div>
+                                        <span className={`block text-[10px] uppercase font-bold ${isLight ? "text-slate-400" : "text-slate-500"}`}>Supplier stock</span>
+                                        <span className={`font-mono font-bold tabular-nums text-base ${isLight ? "text-slate-900" : "text-white"}`}>
+                                            {loadStockSync.supplierAvailableQuantity ?? "—"}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className={`block text-[10px] uppercase font-bold ${isLight ? "text-slate-400" : "text-slate-500"}`}>Shopify (total)</span>
+                                        <span className={`font-mono font-bold tabular-nums text-base ${isLight ? "text-slate-900" : "text-white"}`}>
+                                            {totalShopifyInventory(loadStockProduct.variants)}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label htmlFor="load-stock-qty" className={`block text-xs font-bold uppercase tracking-widest mb-2 ${isLight ? "text-slate-500" : "text-slate-400"}`}>
+                                        Quantity to load
+                                    </label>
+                                    <input
+                                        id="load-stock-qty"
+                                        type="number"
+                                        min={1}
+                                        max={loadStockSync.supplierAvailableQuantity ?? undefined}
+                                        value={loadStockQtyInput}
+                                        onChange={(e) => setLoadStockQtyInput(e.target.value)}
+                                        disabled={loadStockSubmitting}
+                                        className={`w-full h-11 rounded-xl px-3 font-mono tabular-nums border outline-none focus:ring-2 ${isLight
+                                            ? "bg-slate-50 border-slate-200 text-slate-900 focus:ring-indigo-500/30"
+                                            : "bg-white/5 border-white/10 text-white focus:ring-indigo-500/30"
+                                            }`}
+                                    />
+                                </div>
+                                {loadStockError ? (
+                                    <p className="text-sm text-red-400">{loadStockError}</p>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    disabled={loadStockSubmitting}
+                                    onClick={() => void handleSubmitLoadStock()}
+                                    className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {loadStockSubmitting ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Loading…
+                                        </>
+                                    ) : (
+                                        "Load"
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {showSupplierModal && selectedProduct && (
                     <div className={`fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4 ${isLight ? "bg-black/40" : "bg-black/60"}`}>
                         <div className={`rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col ${isLight ? "bg-white border border-slate-200" : "bg-slate-900 border border-white/10"}`}>
@@ -819,6 +858,27 @@ export default function InventoryPage() {
                                 handleViewProduct={handleViewProduct}
                                 handleCopyProductId={handleCopyProductId}
                                 handleRefreshProduct={handleRefreshProduct}
+                                loadStockEnabled={(() => {
+                                    const p = products.find((x) => x.id === openMenuId)
+                                    if (!p) return false
+                                    const s = getProductSyncStatus(p.id)
+                                    const cap = s?.supplierAvailableQuantity
+                                    return (
+                                        !!s &&
+                                        s.status === "ACCEPTED" &&
+                                        cap != null &&
+                                        cap > 0
+                                    )
+                                })()}
+                                onLoadStock={() => {
+                                    const p = products.find((x) => x.id === openMenuId)
+                                    if (!p) return
+                                    const s = getProductSyncStatus(p.id)
+                                    if (!s || s.status !== "ACCEPTED") return
+                                    const cap = s.supplierAvailableQuantity
+                                    if (cap == null || cap <= 0) return
+                                    handleOpenLoadStock(p, s)
+                                }}
                                 onClose={() => {
                                     setOpenMenuId(null)
                                     setMenuRect(null)
@@ -842,6 +902,8 @@ function ActionsMenuContent({
     handleViewProduct,
     handleCopyProductId,
     handleRefreshProduct,
+    loadStockEnabled,
+    onLoadStock,
     onClose
 }: {
     openMenuId: number;
@@ -852,6 +914,8 @@ function ActionsMenuContent({
     handleViewProduct: (product: ShopifyProduct) => void;
     handleCopyProductId: (productId: number) => void;
     handleRefreshProduct: () => void;
+    loadStockEnabled: boolean;
+    onLoadStock: () => void;
     onClose: () => void;
 }) {
     const product = products.find(p => p.id === openMenuId);
@@ -905,6 +969,22 @@ function ActionsMenuContent({
                 >
                     <RefreshCw className="w-4 h-4" />
                     Refresh Product
+                </button>
+                <button
+                    type="button"
+                    disabled={!loadStockEnabled}
+                    title={!loadStockEnabled ? "Requires accepted sync with supplier stock" : undefined}
+                    onClick={() => {
+                        if (!loadStockEnabled) return
+                        onLoadStock()
+                    }}
+                    className={`w-full px-4 py-2.5 text-left text-sm font-medium flex items-center gap-2 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${isLight
+                        ? "text-slate-700 hover:bg-slate-50 hover:text-indigo-600"
+                        : "text-slate-300 hover:bg-white/5 hover:text-white"
+                        }`}
+                >
+                    <PackagePlus className="w-4 h-4" />
+                    Load stock
                 </button>
 
                 {storeDomain && product.handle && (

@@ -64,6 +64,23 @@ type AttachProduct = {
     description?: string | null
 }
 
+/** Matches the line inserted when picking a product from + attach (see insertProduct). */
+function defaultProductAttachSummary(title: string, storeName: string | null | undefined): string {
+    const t = title.trim()
+    const s = (storeName ?? "").trim()
+    return s ? `Product: ${t} · ${s}` : `Product: ${t}`
+}
+
+/** Hide duplicate body when the message is only the auto summary; show automation / user-typed text. */
+function shouldHideProductMessageBody(
+    content: string,
+    attachment: { title?: string; storeName?: string | null } | null,
+): boolean {
+    const c = content.trim()
+    if (!c || !attachment?.title) return true
+    return c === defaultProductAttachSummary(attachment.title, attachment.storeName ?? null)
+}
+
 export function ChatView() {
     const pathname = usePathname()
     const isSupplier = pathname.startsWith("/supplier")
@@ -692,46 +709,63 @@ export function ChatView() {
                                                         : "bg-white/5 border border-white/10 text-slate-200 rounded-tl-none backdrop-blur-sm shadow-xl"
                                             )}>
                                                 {displayKind === "PRODUCT" && displayAttachment ? (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setActiveAttachmentKind("PRODUCT")
-                                                            setActiveAttachment(displayAttachment)
-                                                            setAttachmentModalOpen(true)
-                                                        }}
-                                                        className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
-                                                    >
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
-                                                                {displayAttachment.imageUrl ? (
-                                                                    // eslint-disable-next-line @next/next/no-img-element
-                                                                    <img src={displayAttachment.imageUrl} alt={displayAttachment.title || "Product"} className="w-full h-full object-cover" />
-                                                                ) : (
-                                                                    <div className="flex flex-col items-center justify-center px-1">
-                                                                        <Package className="w-5 h-5 text-indigo-400" />
-                                                                        <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
-                                                                            {displayAttachment.title ? displayAttachment.title : ""}
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setActiveAttachmentKind("PRODUCT")
+                                                                setActiveAttachment(displayAttachment)
+                                                                setAttachmentModalOpen(true)
+                                                            }}
+                                                            className={cn("w-full text-left bg-transparent border-0 p-0 m-0")}
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-black/10 border border-white/10 flex-shrink-0 flex items-center justify-center">
+                                                                    {displayAttachment.imageUrl ? (
+                                                                        // eslint-disable-next-line @next/next/no-img-element
+                                                                        <img src={displayAttachment.imageUrl} alt={displayAttachment.title || "Product"} className="w-full h-full object-cover" />
+                                                                    ) : (
+                                                                        <div className="flex flex-col items-center justify-center px-1">
+                                                                            <Package className="w-5 h-5 text-indigo-400" />
+                                                                            <div className="text-[10px] font-black mt-1 leading-none text-indigo-200">
+                                                                                {displayAttachment.title ? displayAttachment.title : ""}
+                                                                            </div>
                                                                         </div>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <div className="font-black truncate">
-                                                                    {displayAttachment.title || msg.content}
+                                                                    )}
                                                                 </div>
-                                                                {displayAttachment.description ? (
-                                                                    <div className={cn("text-xs opacity-90 mt-1 line-clamp-2")}>
-                                                                        {displayAttachment.description}
+                                                                <div className="min-w-0">
+                                                                    <div className="font-black truncate">
+                                                                        {displayAttachment.title || msg.content}
                                                                     </div>
-                                                                ) : null}
-                                                                {displayAttachment.storeName ? (
-                                                                    <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
-                                                                        {displayAttachment.storeName}
-                                                                    </div>
-                                                                ) : null}
+                                                                    {displayAttachment.description ? (
+                                                                        <div className={cn("text-xs opacity-90 mt-1 line-clamp-2")}>
+                                                                            {displayAttachment.description}
+                                                                        </div>
+                                                                    ) : null}
+                                                                    {displayAttachment.storeName ? (
+                                                                        <div className={cn("text-[10px] font-black uppercase tracking-widest mt-1 opacity-80")}>
+                                                                            {displayAttachment.storeName}
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </button>
+                                                        </button>
+                                                        {msg.content.trim() &&
+                                                        !shouldHideProductMessageBody(msg.content, displayAttachment) ? (
+                                                            <div
+                                                                className={cn(
+                                                                    "mt-3 pt-3 border-t text-sm font-medium whitespace-pre-wrap break-words",
+                                                                    isMe
+                                                                        ? "border-white/25 text-white/95"
+                                                                        : isLight
+                                                                          ? "border-slate-200 text-slate-800"
+                                                                          : "border-white/10 text-slate-200",
+                                                                )}
+                                                            >
+                                                                {msg.content}
+                                                            </div>
+                                                        ) : null}
+                                                    </>
                                                 ) : displayKind === "ORDER" && displayAttachment ? (
                                                     <button
                                                         type="button"

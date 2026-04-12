@@ -109,6 +109,8 @@ model Store {
 
   // Customer-facing storefront widget (floating chat) enablement.
   storefrontChatEnabled Boolean @default(false)
+  /** After OTP verify, widget session length (minutes). Clamped server-side (e.g. 5–10080). Default 60. */
+  storefrontOtpSessionMinutes Int @default(60)
   storefrontChatName String?
   storefrontChatTagline String?
   storefrontChatBrandColor String?
@@ -133,10 +135,15 @@ model Store {
   gmailReplyTheme     Json?
 
   /**
-   * When set (non-null), low-stock automation is on: sum of variant inventory_quantity below this
-   * triggers a B2B chat message to the ProductSync-linked supplier(s).
+   * When set, supplier-reported stock (ProductSync snapshot) below this value can trigger
+   * B2B low-stock chat to linked suppliers. Null = off for this signal.
    */
-  lowStockThreshold   Int?
+  lowStockThreshold          Int?
+  /**
+   * When set, total Shopify variant inventory (sum of inventory_quantity) below this value
+   * triggers an in-app notification to the vendor (restock / Load stock). Null = off.
+   */
+  lowStockShopifyThreshold   Int?
 
   // Relations
   connections      Connection[]
@@ -157,6 +164,7 @@ model Store {
   templates       Template[]
   chatMessages    ChatMessage[]
   lowStockAlertStates LowStockAlertState[]
+  lowStockShopifyVendorAlertStates LowStockShopifyVendorAlertState[]
   supplierAutomationLogs SupplierAutomationLog[]
   
   createdAt        DateTime @default(now())
@@ -165,15 +173,35 @@ model Store {
   @@index([userId])  // Add index for performance
 }
 
-/** Dedupes low-stock B2B notifications per store + Shopify product while stock stays below threshold. */
+/** Dedupes low-stock B2B notifications per store + product + supplier while supplier-reported qty stays below threshold. */
 model LowStockAlertState {
   id                 String   @id @default(cuid())
   storeId            String
   store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   shopifyProductId   String
-  lastSeenTotalQty   Int?
-  /** Set when we sent a low-stock alert; cleared when total qty is back >= threshold. */
+  supplierId         String
+  supplier           SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  lastSeenSupplierQty Int?
+  /** Set when we sent a low-stock alert; cleared when supplier qty is back >= threshold. */
   lastNotifiedBelowAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, shopifyProductId, supplierId])
+  @@index([storeId])
+  @@index([supplierId])
+}
+
+/** Dedupes Shopify low-stock vendor notifications per store + product while total stays below threshold. */
+model LowStockShopifyVendorAlertState {
+  id                    String   @id @default(cuid())
+  storeId               String
+  store                 Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId      String
+  lastSeenShopifyTotal  Int?
+  /** Set when we created a vendor notification; cleared when Shopify total is back >= threshold. */
+  lastNotifiedBelowAt   DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -313,6 +341,7 @@ model SupplierProfile {
   invitations  Invitation[]
   productSyncs ProductSync[]
   supplierProductOffers SupplierProductOffer[]
+  lowStockAlertStates LowStockAlertState[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -460,6 +489,7 @@ enum NotificationType {
   PRODUCT_SYNC_REQUESTED
   PRODUCT_SYNC_ACCEPTED
   PRODUCT_SYNC_REJECTED
+  SHOPIFY_LOW_STOCK
 }
 
 model Notification {
