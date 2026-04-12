@@ -5,7 +5,7 @@ import { storefrontOtpVerifySchema } from "@/lib/api-schemas/public"
 import { validationErrorResponse } from "@/lib/api-schemas/validate"
 import {
     hashStorefrontOtp,
-    STOREFRONT_SESSION_TTL_MS,
+    storefrontSessionTtlMsFromMinutes,
 } from "@/lib/storefront-chat/otpCrypto"
 
 function normalizeShopDomain(input: string) {
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 
         const stores = await prisma.store.findMany({
             where: { shopifyDomain: { in: variants } },
-            select: { id: true, storefrontChatEnabled: true },
+            select: { id: true, storefrontChatEnabled: true, storefrontOtpSessionMinutes: true },
         })
         const store =
             stores.find((s) => Boolean(s.storefrontChatEnabled)) || stores[0]
@@ -94,7 +94,8 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "Invalid code." }, { status: 400 })
         }
 
-        const sessionExpiresAt = new Date(Date.now() + STOREFRONT_SESSION_TTL_MS)
+        const sessionMs = storefrontSessionTtlMsFromMinutes(store.storefrontOtpSessionMinutes)
+        const sessionExpiresAt = new Date(Date.now() + sessionMs)
 
         await prisma.storefrontChatConversation.update({
             where: {

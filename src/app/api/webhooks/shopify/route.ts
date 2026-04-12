@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { updateSingleProduct, updateSingleOrder } from "@/lib/cache"
-import { sumVariantInventoryQuantity } from "@/lib/products/shopifyInventorySum"
 import { evaluateLowStockAfterProductWebhook } from "@/lib/automation/lowStock"
 import { autoLinkOfferToShopifyProduct } from "@/lib/products/autoLinkOfferToShopifyProduct"
 import crypto from "crypto"
@@ -96,28 +95,10 @@ export async function POST(req: NextRequest) {
             case "products/create":
                 logger.info(`[Webhook] Processing product ${topic}: ${body.id}`)
                 {
-                    const productNumericId =
-                        body?.id !== undefined && body?.id !== null ? String(body.id) : null
-                    let prevTotalQty: number | null = null
-                    if (productNumericId) {
-                        const prevRow = await prisma.cachedProduct.findUnique({
-                            where: {
-                                shopifyProductId_storeId: {
-                                    shopifyProductId: productNumericId,
-                                    storeId: store.id,
-                                },
-                            },
-                            select: { variants: true },
-                        })
-                        if (prevRow) {
-                            prevTotalQty = sumVariantInventoryQuantity(prevRow.variants)
-                        }
-                    }
                     await updateSingleProduct(store.id, body)
                     evaluateLowStockAfterProductWebhook({
                         storeId: store.id,
                         shopifyProductBody: body,
-                        prevTotalQty,
                     }).catch((lowStockErr) => {
                         logger.error("[Webhook] lowStock evaluation failed", lowStockErr)
                     })

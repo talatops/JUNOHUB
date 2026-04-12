@@ -12,6 +12,7 @@ import {
     productSyncRequestSchema,
     supplierProfileUpsertSchema,
     productSyncDecisionSchema,
+    loadStockRequestSchema,
 } from "./business"
 import { notificationsMarkReadSchema } from "./vendorMutations"
 import { webPushSubscribeSchema, webPushUnsubscribeSchema } from "./notificationsPush"
@@ -117,6 +118,16 @@ describe("productSyncDecisionSchema", () => {
     it("only allows accept/reject", () => {
         expect(productSyncDecisionSchema.safeParse({ action: "accept" }).success).toBe(true)
         expect(productSyncDecisionSchema.safeParse({ action: "hold" }).success).toBe(false)
+    })
+})
+
+describe("loadStockRequestSchema", () => {
+    it("accepts valid payload", () => {
+        const r = loadStockRequestSchema.safeParse({ productSyncId: "clxyz123", quantity: 5 })
+        expect(r.success).toBe(true)
+    })
+    it("rejects non-positive quantity", () => {
+        expect(loadStockRequestSchema.safeParse({ productSyncId: "a", quantity: 0 }).success).toBe(false)
     })
 })
 

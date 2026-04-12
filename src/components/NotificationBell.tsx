@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { Bell, Loader2, CheckCircle2, Clock, XCircle, Mail, Package, ShoppingCart, X } from "lucide-react"
+import { Bell, Loader2, CheckCircle2, Clock, XCircle, Mail, Package, ShoppingCart, X, AlertTriangle } from "lucide-react"
 import { formatDistanceToNow } from "date-fns"
 import { motion, AnimatePresence } from "framer-motion"
 import { useTheme } from "@/components/ThemeProvider"
@@ -117,6 +117,8 @@ export default function NotificationBell() {
                 return <ShoppingCart className="w-4 h-4 text-blue-400" />
             case "PRODUCT_UPDATED":
                 return <Package className="w-4 h-4 text-purple-400" />
+            case "SHOPIFY_LOW_STOCK":
+                return <AlertTriangle className="w-4 h-4 text-amber-400" />
             default:
                 return <Bell className="w-4 h-4 text-slate-400" />
         }

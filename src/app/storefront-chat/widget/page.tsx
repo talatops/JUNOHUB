@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { formatDistanceToNow } from "date-fns"
 import { Send } from "lucide-react"
 
 type WidgetMessage = {
@@ -225,13 +226,18 @@ export default function StorefrontChatWidgetPage() {
             if (!res.ok) {
                 throw new Error(data?.message || "Invalid code")
             }
-            setSessionUntil(
-                typeof data.sessionExpiresAt === "string" ? data.sessionExpiresAt : null,
-            )
+            const expiresRaw =
+                typeof data.sessionExpiresAt === "string" ? data.sessionExpiresAt : null
+            setSessionUntil(expiresRaw)
             setOtpCode("")
             setOtpPhase("verified")
+            const expiresAt = expiresRaw ? new Date(expiresRaw) : null
+            const distanceOk =
+                expiresAt && !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() > Date.now()
             setOtpMessage(
-                "You’re verified. You can ask about your orders for about one hour. We’ll use this session until it expires.",
+                distanceOk
+                    ? `You’re verified. This session stays active ${formatDistanceToNow(expiresAt!, { addSuffix: true })}. You can ask about your orders until then.`
+                    : "You’re verified. You can ask about your orders until this session expires.",
             )
         } catch (e: unknown) {
             setOtpMessage(e instanceof Error ? e.message : "Verification failed")

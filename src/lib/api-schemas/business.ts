@@ -80,8 +80,15 @@ export const productSyncDecisionSchema = z.object({
     action: z.enum(["accept", "reject"]),
 })
 
+/** POST /api/shopify/inventory/load-stock */
+export const loadStockRequestSchema = z.object({
+    productSyncId: z.string().trim().min(1).max(128),
+    quantity: z.number().int().positive().max(1e9),
+})
+
 export type SupplierProductCreateInput = z.infer<typeof supplierProductCreateSchema>
 export type SupplierProductUpdateInput = z.infer<typeof supplierProductUpdateSchema>
 export type ProductSyncRequestInput = z.infer<typeof productSyncRequestSchema>
 export type SupplierProfileUpsertInput = z.infer<typeof supplierProfileUpsertSchema>
 export type ProductSyncDecisionInput = z.infer<typeof productSyncDecisionSchema>
+export type LoadStockRequestInput = z.infer<typeof loadStockRequestSchema>

@@ -2,7 +2,10 @@ import { prisma } from "@/lib/prisma"
 import { storeSelectDashboardStorefrontInbox } from "@/lib/prisma/storeSelects"
 import { auth } from "@/auth.vendor"
 import { redirect } from "next/navigation"
-import Link from "next/link"
+import StorefrontChatInboxClient, {
+    type SerializedConversationCard,
+    type SerializedStorefrontMessage,
+} from "@/components/storefront/StorefrontChatInboxClient"
 
 export default async function StorefrontChatInbox() {
     const session = await auth()
@@ -31,27 +34,54 @@ export default async function StorefrontChatInbox() {
 
     const conversationIds = conversations.map((c) => c.id)
 
-    const messages = await prisma.storefrontChatMessage.findMany({
-        where: conversationIds.length ? { conversationId: { in: conversationIds } } : undefined,
-        orderBy: { createdAt: "desc" },
-        take: 200,
-        select: {
-            id: true,
-            content: true,
-            createdAt: true,
-            senderType: true,
-            conversation: {
-                select: {
-                    visitorId: true,
-                    customerEmail: true,
-                },
-            },
-        },
+    /** Most recent messages store-wide (then grouped per conversation); avoids loading unbounded history. */
+    const messages = conversationIds.length
+        ? await prisma.storefrontChatMessage.findMany({
+              where: { conversationId: { in: conversationIds } },
+              orderBy: { createdAt: "desc" },
+              take: 800,
+              select: {
+                  id: true,
+                  conversationId: true,
+                  content: true,
+                  createdAt: true,
+                  senderType: true,
+              },
+          })
+        : []
+
+    const byConversationId = new Map<string, typeof messages>()
+    for (const m of messages) {
+        const list = byConversationId.get(m.conversationId) ?? []
+        list.push(m)
+        byConversationId.set(m.conversationId, list)
+    }
+    for (const list of byConversationId.values()) {
+        list.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    }
+
+    const serializedCards: SerializedConversationCard[] = conversations.map((c) => {
+        const thread = byConversationId.get(c.id) ?? []
+        const serializedMessages: SerializedStorefrontMessage[] = thread.map((m) => ({
+            id: m.id,
+            conversationId: m.conversationId,
+            content: m.content,
+            createdAt: m.createdAt.toISOString(),
+            senderType: m.senderType,
+        }))
+        return {
+            id: c.id,
+            visitorId: c.visitorId,
+            customerEmail: c.customerEmail,
+            updatedAt: c.updatedAt.toISOString(),
+            messages: serializedMessages,
+        }
     })
 
-    const sorted = [...messages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-    const aiCount = sorted.filter((m) => m.senderType === "AI").length
-    const customerCount = sorted.filter((m) => m.senderType === "CUSTOMER").length
+    const cardsWithMessages = serializedCards.filter((c) => c.messages.length > 0)
+
+    const aiCount = messages.filter((m) => m.senderType === "AI").length
+    const customerCount = messages.filter((m) => m.senderType === "CUSTOMER").length
 
     return (
         <div className="flex flex-col gap-4 p-1">
@@ -63,74 +93,33 @@ export default async function StorefrontChatInbox() {
                     </p>
                 </div>
                 <div className="shrink-0 text-right">
-                    <p className="text-sm font-black text-white">{conversations.length} visitors</p>
-                    <p className="text-xs text-slate-500 mt-1">{sorted.length} messages</p>
+                    <p className="text-sm font-black text-white">
+                        {cardsWithMessages.length} conversation{cardsWithMessages.length === 1 ? "" : "s"}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">{messages.length} messages</p>
                     <p className="text-[11px] text-slate-500 mt-1">
                         {customerCount} customer · {aiCount} AI
                     </p>
                 </div>
             </div>
 
-            <p className="text-sm text-slate-400">
-                L1 AI modules and catalog metafields:{" "}
-                <Link
-                    href="/dashboard/juno-engine/modules"
-                    className="font-semibold text-indigo-400 hover:underline"
-                >
-                    JUNO Engine → Modules
-                </Link>
-                .
-            </p>
-
-            {sorted.length === 0 ? (
+            {conversations.length === 0 ? (
                 <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-slate-300">
-                    <p className="font-black">No storefront chat messages yet.</p>
+                    <p className="font-black">No storefront chat conversations yet.</p>
                     <p className="text-sm text-slate-400 mt-2">
                         When customers send a message from the widget, it will show here.
                     </p>
                 </div>
-            ) : (
-                <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-                    <div className="p-4 border-b border-white/10 flex items-center justify-between">
-                        <p className="text-sm font-black text-white">Recent activity</p>
-                        <p className="text-xs text-slate-400">Read-only</p>
-                    </div>
-                    <div className="max-h-[70vh] overflow-y-auto p-4 space-y-3">
-                        {sorted.map((m) => (
-                            <div key={m.id} className="flex flex-col gap-2">
-                                <div className="flex items-center justify-between gap-4">
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <span
-                                                className={`text-[10px] font-black uppercase tracking-widest rounded-full px-2 py-1 border ${
-                                                    m.senderType === "AI"
-                                                        ? "text-indigo-300 border-indigo-400/30 bg-indigo-500/10"
-                                                        : "text-emerald-300 border-emerald-400/30 bg-emerald-500/10"
-                                                }`}
-                                            >
-                                                {m.senderType === "CUSTOMER" ? "CUSTOMER" : "AI"}
-                                            </span>
-                                            <p className="text-xs font-black uppercase tracking-widest text-slate-400 truncate">
-                                                {m.conversation?.visitorId || "visitor"}
-                                            </p>
-                                        </div>
-                                        {m.conversation?.customerEmail ? (
-                                            <p className="text-[11px] text-slate-500 truncate">
-                                                {m.conversation.customerEmail}
-                                            </p>
-                                        ) : null}
-                                    </div>
-                                    <p className="text-[11px] text-slate-500 shrink-0">
-                                        {new Date(m.createdAt).toLocaleString()}
-                                    </p>
-                                </div>
-                                <div className="whitespace-pre-wrap text-sm text-white/90 bg-black/20 border border-white/10 rounded-2xl px-4 py-3">
-                                    {m.content}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+            ) : cardsWithMessages.length === 0 ? (
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-6 text-slate-300">
+                    <p className="font-black">No messages yet.</p>
+                    <p className="text-sm text-slate-400 mt-2">
+                        Sessions without any messages are hidden. Once a customer sends a message from the
+                        widget, the conversation will appear here.
+                    </p>
                 </div>
+            ) : (
+                <StorefrontChatInboxClient cards={cardsWithMessages} />
             )}
         </div>
     )

@@ -33,6 +33,32 @@ export const storeSelectGmailL1Context = {
     gmailReplyTheme: true,
 } as const
 
+/** GET /api/stores/[storeId] — full vendor settings row (cast at call site if IDE Prisma types lag schema). */
+export const storeSelectVendorSettingsGetFull = {
+    id: true,
+    businessName: true,
+    categoryMetadetailsEnabled: true,
+    aiModules: true,
+    modulePolicies: true,
+    sharedFieldAnswers: true,
+    gmailReplyTheme: true,
+    lowStockThreshold: true,
+    lowStockShopifyThreshold: true,
+    storefrontOtpSessionMinutes: true,
+} as const
+
+/** Fallback when modulePolicies/sharedFieldAnswers columns are missing on old DBs. */
+export const storeSelectVendorSettingsGetMinimal = {
+    id: true,
+    businessName: true,
+    categoryMetadetailsEnabled: true,
+    aiModules: true,
+    gmailReplyTheme: true,
+    lowStockThreshold: true,
+    lowStockShopifyThreshold: true,
+    storefrontOtpSessionMinutes: true,
+} as const
+
 export const storeSelectPatchStorefrontAi = {
     storefrontChatEnabled: true,
     storefrontChatName: true,
@@ -46,6 +72,8 @@ export const storeSelectPatchStorefrontAi = {
     sharedFieldAnswers: true,
     gmailReplyTheme: true,
     lowStockThreshold: true,
+    lowStockShopifyThreshold: true,
+    storefrontOtpSessionMinutes: true,
 } as const
 
 /** Session / OTP fields for L1 storefront replies */

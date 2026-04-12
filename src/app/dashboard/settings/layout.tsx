@@ -1,6 +1,6 @@
 "use client"
 
-import { User, Shield } from "lucide-react"
+import { User, Shield, BellRing, MessageCircle } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -17,7 +17,19 @@ const settingsTabs = [
         label: "Security",
         icon: Shield,
         href: "/dashboard/settings/security"
-    }
+    },
+    {
+        id: "low-stock",
+        label: "Low stock",
+        icon: BellRing,
+        href: "/dashboard/settings/low-stock"
+    },
+    {
+        id: "storefront",
+        label: "Storefront",
+        icon: MessageCircle,
+        href: "/dashboard/settings/storefront"
+    },
 ]
 
 export default function SettingsLayout({
@@ -31,7 +43,9 @@ export default function SettingsLayout({
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Settings</h1>
-                <p className="text-sm md:text-base text-slate-400 mt-1">Manage your account and security preferences.</p>
+                <p className="text-sm md:text-base text-slate-400 mt-1">
+                    Manage your account, security, low-stock alerts, and storefront chat session settings.
+                </p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 overflow-hidden">

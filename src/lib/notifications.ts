@@ -12,6 +12,7 @@ type NotificationType =
     | "PRODUCT_SYNC_REQUESTED"
     | "PRODUCT_SYNC_ACCEPTED"
     | "PRODUCT_SYNC_REJECTED"
+    | "SHOPIFY_LOW_STOCK"
 
 interface CreateNotificationParams {
     userId: string
@@ -185,5 +186,31 @@ export async function notifyProductSyncStatusChanged(
             status
         },
         url: "/dashboard/new-products"
+    })
+}
+
+/** Vendor: Shopify sellable stock (sum of variant quantities) fell below the configured threshold. */
+export async function notifyVendorShopifyLowStock(
+    vendorUserId: string,
+    params: {
+        storeId: string
+        shopifyProductId: string
+        productTitle: string
+        shopifyTotal: number
+        threshold: number
+    },
+) {
+    return createNotification({
+        userId: vendorUserId,
+        type: "SHOPIFY_LOW_STOCK",
+        title: "Shopify inventory low",
+        message: `"${params.productTitle}" is low on Shopify (${params.shopifyTotal} available, your threshold is ${params.threshold}). Please restock or use Load stock in Inventory.`,
+        metadata: {
+            storeId: params.storeId,
+            shopifyProductId: params.shopifyProductId,
+            shopifyTotal: params.shopifyTotal,
+            threshold: params.threshold,
+        },
+        url: "/dashboard/inventory",
     })
 }

@@ -186,7 +186,7 @@ export default function OnboardingClient() {
                             <AlertCircle className="w-6 h-6 text-indigo-400 shrink-0" />
                             <div className="text-sm text-slate-300 leading-relaxed">
                                 <p className="font-bold mb-1 text-white">How to get your credentials?</p>
-                                Go to your Shopify Admin &gt; Settings &gt; Apps and sales channels &gt; Develop apps. Create an app and configure Admin API scopes. For the storefront chat widget auto-injection, enable <span className="font-bold text-white">read_themes</span> and <span className="font-bold text-white">write_themes</span> too.
+                                Go to your Shopify Admin &gt; Settings &gt; Apps and sales channels &gt; Develop apps. Create an app and configure Admin API scopes. To <span className="font-bold text-white">load stock</span> from Inventory, enable <span className="font-bold text-white">read_inventory</span>, <span className="font-bold text-white">write_inventory</span>, and <span className="font-bold text-white">read_locations</span>. For the storefront chat widget auto-injection, enable <span className="font-bold text-white">read_themes</span> and <span className="font-bold text-white">write_themes</span> too.
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

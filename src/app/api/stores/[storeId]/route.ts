@@ -2,7 +2,11 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth.vendor"
 import { prisma } from "@/lib/prisma"
 import { Prisma } from "@prisma/client"
-import { storeSelectPatchStorefrontAi } from "@/lib/prisma/storeSelects"
+import {
+    storeSelectPatchStorefrontAi,
+    storeSelectVendorSettingsGetFull,
+    storeSelectVendorSettingsGetMinimal,
+} from "@/lib/prisma/storeSelects"
 import { modulePoliciesBodySchema, parseModulePoliciesJson } from "@/lib/kb/modulePolicies"
 import {
     parseSharedFieldAnswersJson,
@@ -22,6 +26,53 @@ import {
     parseGmailReplyThemeJson,
     resolvedThemeFromBody,
 } from "@/lib/gmail/emailReplyTheme"
+import { reconcileLowStockForStore } from "@/lib/automation/lowStock"
+import {
+    MAX_STOREFRONT_OTP_SESSION_MINUTES,
+    MIN_STOREFRONT_OTP_SESSION_MINUTES,
+} from "@/lib/storefront-chat/otpCrypto"
+
+function parseStorefrontOtpSessionMinutes(
+    value: unknown,
+): { ok: true; value: number } | { ok: false; message: string } {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+        return {
+            ok: false,
+            message: "storefrontOtpSessionMinutes must be a whole number (total minutes).",
+        }
+    }
+    if (
+        value < MIN_STOREFRONT_OTP_SESSION_MINUTES ||
+        value > MAX_STOREFRONT_OTP_SESSION_MINUTES
+    ) {
+        return {
+            ok: false,
+            message: `Session length must be between ${MIN_STOREFRONT_OTP_SESSION_MINUTES} and ${MAX_STOREFRONT_OTP_SESSION_MINUTES} minutes.`,
+        }
+    }
+    return { ok: true, value }
+}
+
+function parseOptionalLowStockThreshold(
+    value: unknown,
+    fieldName: string,
+): { ok: true; value: number | null } | { ok: false; message: string } {
+    if (value === null) {
+        return { ok: true, value: null }
+    }
+    if (
+        typeof value === "number" &&
+        Number.isInteger(value) &&
+        value >= 0 &&
+        value <= 1_000_000
+    ) {
+        return { ok: true, value }
+    }
+    return {
+        ok: false,
+        message: `${fieldName} must be null or an integer 0–1000000`,
+    }
+}
 
 /**
  * DELETE /api/stores/[storeId]
@@ -561,39 +612,25 @@ export async function GET(
             sharedFieldAnswers?: unknown
             gmailReplyTheme?: unknown
             lowStockThreshold?: number | null
+            lowStockShopifyThreshold?: number | null
+            storefrontOtpSessionMinutes?: number
         }
 
         let store: StoreGetRow | null = null
         try {
-            store = await prisma.store.findFirst({
+            store = (await prisma.store.findFirst({
                 where: { id: storeId, userId: session.user.id },
-                select: {
-                    id: true,
-                    businessName: true,
-                    categoryMetadetailsEnabled: true,
-                    aiModules: true,
-                    modulePolicies: true,
-                    sharedFieldAnswers: true,
-                    gmailReplyTheme: true,
-                    lowStockThreshold: true,
-                },
-            })
+                select: storeSelectVendorSettingsGetFull as unknown as Prisma.StoreSelect,
+            })) as StoreGetRow | null
         } catch (firstErr) {
             console.warn(
                 "[STORE_GET] full select failed (run migrations if modulePolicies/sharedFieldAnswers are missing); retrying minimal",
                 firstErr,
             )
-            store = await prisma.store.findFirst({
+            store = (await prisma.store.findFirst({
                 where: { id: storeId, userId: session.user.id },
-                select: {
-                    id: true,
-                    businessName: true,
-                    categoryMetadetailsEnabled: true,
-                    aiModules: true,
-                    gmailReplyTheme: true,
-                    lowStockThreshold: true,
-                },
-            })
+                select: storeSelectVendorSettingsGetMinimal as unknown as Prisma.StoreSelect,
+            })) as StoreGetRow | null
         }
 
         if (!store) {
@@ -614,6 +651,8 @@ export async function GET(
                       ? null
                       : parseGmailReplyThemeJson(store.gmailReplyTheme),
             lowStockThreshold: store.lowStockThreshold ?? null,
+            lowStockShopifyThreshold: store.lowStockShopifyThreshold ?? null,
+            storefrontOtpSessionMinutes: store.storefrontOtpSessionMinutes ?? 60,
         })
     } catch (error) {
         console.error("Error reading store settings:", error)
@@ -661,7 +700,13 @@ export async function PATCH(
         const nextFont = sanitizeFont(data.storefrontChatFontFamily ?? store.storefrontChatFontFamily)
         const nextLogoUrl = sanitizeLogoUrl(data.storefrontChatLogoUrl ?? store.storefrontChatLogoUrl)
 
-        const updatePayload: Prisma.StoreUpdateInput = {
+        type StorePatchPayload = Prisma.StoreUpdateInput & {
+            lowStockThreshold?: number | null
+            lowStockShopifyThreshold?: number | null
+            storefrontOtpSessionMinutes?: number
+        }
+
+        const updatePayload: StorePatchPayload = {
             storefrontChatEnabled: nextEnabled,
             storefrontChatName: nextChatName,
             storefrontChatTagline: nextTagline,
@@ -734,29 +779,65 @@ export async function PATCH(
             }
         }
 
-        if (data.lowStockThreshold !== undefined) {
-            if (data.lowStockThreshold === null) {
-                updatePayload.lowStockThreshold = null
-            } else if (
-                typeof data.lowStockThreshold === "number" &&
-                Number.isInteger(data.lowStockThreshold) &&
-                data.lowStockThreshold >= 0 &&
-                data.lowStockThreshold <= 1_000_000
-            ) {
-                updatePayload.lowStockThreshold = data.lowStockThreshold
-            } else {
-                return NextResponse.json(
-                    { message: "lowStockThreshold must be null or an integer 0–1000000" },
-                    { status: 400 },
-                )
+        const lowStockThresholdTouched = data.lowStockThreshold !== undefined
+        const lowStockShopifyThresholdTouched = data.lowStockShopifyThreshold !== undefined
+
+        if (lowStockThresholdTouched) {
+            const parsed = parseOptionalLowStockThreshold(data.lowStockThreshold, "lowStockThreshold")
+            if (!parsed.ok) {
+                return NextResponse.json({ message: parsed.message }, { status: 400 })
             }
+            updatePayload.lowStockThreshold = parsed.value
         }
+
+        if (lowStockShopifyThresholdTouched) {
+            const parsed = parseOptionalLowStockThreshold(
+                data.lowStockShopifyThreshold,
+                "lowStockShopifyThreshold",
+            )
+            if (!parsed.ok) {
+                return NextResponse.json({ message: parsed.message }, { status: 400 })
+            }
+            updatePayload.lowStockShopifyThreshold = parsed.value
+        }
+
+        if (data.storefrontOtpSessionMinutes !== undefined) {
+            const parsed = parseStorefrontOtpSessionMinutes(data.storefrontOtpSessionMinutes)
+            if (!parsed.ok) {
+                return NextResponse.json({ message: parsed.message }, { status: 400 })
+            }
+            updatePayload.storefrontOtpSessionMinutes = parsed.value
+        }
+
+        const lowStockSettingsTouched =
+            lowStockThresholdTouched || lowStockShopifyThresholdTouched
 
         const updatedStore = await prisma.store.update({
             where: { id: storeId },
-            data: updatePayload,
-            select: storeSelectPatchStorefrontAi,
+            data: updatePayload as Prisma.StoreUpdateInput,
+            select: storeSelectPatchStorefrontAi as unknown as Prisma.StoreSelect,
         })
+
+        if (lowStockSettingsTouched) {
+            await prisma.$executeRaw(
+                Prisma.sql`DELETE FROM "LowStockAlertState" WHERE "storeId" = ${storeId}`,
+            )
+            await prisma.$executeRaw(
+                Prisma.sql`DELETE FROM "LowStockShopifyVendorAlertState" WHERE "storeId" = ${storeId}`,
+            )
+            const patchLowStock = updatedStore as {
+                lowStockThreshold?: number | null
+                lowStockShopifyThreshold?: number | null
+            }
+            if (
+                patchLowStock.lowStockThreshold != null ||
+                patchLowStock.lowStockShopifyThreshold != null
+            ) {
+                void reconcileLowStockForStore(storeId).catch((err) => {
+                    console.error("[LOW_STOCK_RECONCILE_AFTER_THRESHOLD_SAVE]", err)
+                })
+            }
+        }
 
         // Explicit behavior change:
         // - Enable: save only (no auto inject).
@@ -803,7 +884,23 @@ export async function PATCH(
                 updatedStore.gmailReplyTheme == null
                     ? null
                     : parseGmailReplyThemeJson(updatedStore.gmailReplyTheme),
-            lowStockThreshold: updatedStore.lowStockThreshold ?? null,
+            lowStockThreshold:
+                (updatedStore as { lowStockThreshold?: number | null }).lowStockThreshold ?? null,
+            lowStockShopifyThreshold:
+                (updatedStore as { lowStockShopifyThreshold?: number | null }).lowStockShopifyThreshold ??
+                null,
+            storefrontOtpSessionMinutes:
+                (updatedStore as { storefrontOtpSessionMinutes?: number }).storefrontOtpSessionMinutes ??
+                60,
+            ...(lowStockSettingsTouched
+                ? {
+                      lowStockReconcileQueued:
+                          (updatedStore as { lowStockThreshold?: number | null }).lowStockThreshold !=
+                              null ||
+                          (updatedStore as { lowStockShopifyThreshold?: number | null })
+                              .lowStockShopifyThreshold != null,
+                  }
+                : {}),
         })
     } catch (error) {
         console.error("Error updating store settings:", error)
