@@ -560,6 +560,7 @@ export async function GET(
             modulePolicies?: unknown
             sharedFieldAnswers?: unknown
             gmailReplyTheme?: unknown
+            lowStockThreshold?: number | null
         }
 
         let store: StoreGetRow | null = null
@@ -574,6 +575,7 @@ export async function GET(
                     modulePolicies: true,
                     sharedFieldAnswers: true,
                     gmailReplyTheme: true,
+                    lowStockThreshold: true,
                 },
             })
         } catch (firstErr) {
@@ -589,6 +591,7 @@ export async function GET(
                     categoryMetadetailsEnabled: true,
                     aiModules: true,
                     gmailReplyTheme: true,
+                    lowStockThreshold: true,
                 },
             })
         }
@@ -610,6 +613,7 @@ export async function GET(
                     : store.gmailReplyTheme === null
                       ? null
                       : parseGmailReplyThemeJson(store.gmailReplyTheme),
+            lowStockThreshold: store.lowStockThreshold ?? null,
         })
     } catch (error) {
         console.error("Error reading store settings:", error)
@@ -730,6 +734,24 @@ export async function PATCH(
             }
         }
 
+        if (data.lowStockThreshold !== undefined) {
+            if (data.lowStockThreshold === null) {
+                updatePayload.lowStockThreshold = null
+            } else if (
+                typeof data.lowStockThreshold === "number" &&
+                Number.isInteger(data.lowStockThreshold) &&
+                data.lowStockThreshold >= 0 &&
+                data.lowStockThreshold <= 1_000_000
+            ) {
+                updatePayload.lowStockThreshold = data.lowStockThreshold
+            } else {
+                return NextResponse.json(
+                    { message: "lowStockThreshold must be null or an integer 0–1000000" },
+                    { status: 400 },
+                )
+            }
+        }
+
         const updatedStore = await prisma.store.update({
             where: { id: storeId },
             data: updatePayload,
@@ -781,6 +803,7 @@ export async function PATCH(
                 updatedStore.gmailReplyTheme == null
                     ? null
                     : parseGmailReplyThemeJson(updatedStore.gmailReplyTheme),
+            lowStockThreshold: updatedStore.lowStockThreshold ?? null,
         })
     } catch (error) {
         console.error("Error updating store settings:", error)

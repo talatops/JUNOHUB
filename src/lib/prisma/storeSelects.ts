@@ -45,6 +45,7 @@ export const storeSelectPatchStorefrontAi = {
     modulePolicies: true,
     sharedFieldAnswers: true,
     gmailReplyTheme: true,
+    lowStockThreshold: true,
 } as const
 
 /** Session / OTP fields for L1 storefront replies */

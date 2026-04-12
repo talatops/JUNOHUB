@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Ticket, Loader2, MoreHorizontal } from "lucide-react"
+import {
+  ArrowLeft,
+  Ticket,
+  Loader2,
+  MessageCircleQuestion,
+  Send,
+  Sparkles,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 type TicketStatus = "open" | "pending" | "resolved" | "closed"
@@ -28,6 +35,24 @@ interface TicketData {
   messages: TicketMessage[]
 }
 
+type AskSupplierPreviewGroup = {
+  supplierUserId: string
+  companyName: string
+  lines: Array<{
+    lineIndex: number
+    title: string
+    sku: string | null
+    quantity: number
+    shopifyProductId: string | null
+  }>
+}
+
+type AskSupplierPreview = {
+  order: { shopifyOrderId: string; orderNumber: string } | null
+  groups: AskSupplierPreviewGroup[]
+  message?: string
+}
+
 import { useTheme } from "@/components/ThemeProvider"
 
 export default function TicketDetailPage() {
@@ -39,6 +64,14 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({})
+
+  const [orderRefInput, setOrderRefInput] = useState("")
+  const [askPreviewLoading, setAskPreviewLoading] = useState(false)
+  const [askPreview, setAskPreview] = useState<AskSupplierPreview | null>(null)
+  const [askPreviewError, setAskPreviewError] = useState<string | null>(null)
+  const [msgBySupplier, setMsgBySupplier] = useState<Record<string, string>>({})
+  const [draftingSupplierId, setDraftingSupplierId] = useState<string | null>(null)
+  const [sendingSupplierId, setSendingSupplierId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadTicket = async () => {
@@ -70,6 +103,111 @@ export default function TicketDetailPage() {
 
     void loadTicket()
   }, [params.ticketId])
+
+  const loadAskSupplierPreview = async () => {
+    const ref = orderRefInput.trim()
+    if (!ref) {
+      setAskPreviewError("Enter an order number (e.g. 1002 or #1002).")
+      return
+    }
+    setAskPreviewLoading(true)
+    setAskPreviewError(null)
+    try {
+      const res = await fetch(
+        `/api/juno-engine/tickets/ask-supplier?orderRef=${encodeURIComponent(ref)}`,
+        { cache: "no-store" },
+      )
+      const data = (await res.json()) as AskSupplierPreview
+      if (!res.ok) {
+        throw new Error((data as { message?: string }).message || "Preview failed")
+      }
+      setAskPreview(data)
+      if (!data.order) {
+        setAskPreviewError(
+          data.message ||
+            "Order not found in cache. Sync orders or check the order number.",
+        )
+      } else if (data.groups.length === 0) {
+        setAskPreviewError(
+          "No suppliers linked for these line items. Ensure orders are synced and products are ACCEPTED with a connected supplier.",
+        )
+      } else {
+        setAskPreviewError(null)
+      }
+    } catch (e) {
+      setAskPreview(null)
+      setAskPreviewError(e instanceof Error ? e.message : "Preview failed")
+    } finally {
+      setAskPreviewLoading(false)
+    }
+  }
+
+  const draftForSupplier = async (supplierUserId: string) => {
+    const ref = orderRefInput.trim()
+    if (!ref || !ticket) return
+    const snippet = [
+      `Subject: ${ticket.subject}`,
+      ticket.lastMessageSnippet ? `Latest: ${ticket.lastMessageSnippet}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n")
+    setDraftingSupplierId(supplierUserId)
+    try {
+      const res = await fetch("/api/juno-engine/tickets/ask-supplier/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderRef: ref,
+          supplierUserId,
+          ticketSnippet: snippet.slice(0, 6000),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.message || "Draft failed")
+      }
+      setMsgBySupplier((prev) => ({
+        ...prev,
+        [supplierUserId]: typeof data.draft === "string" ? data.draft : "",
+      }))
+    } catch (e) {
+      setAskPreviewError(e instanceof Error ? e.message : "Draft failed")
+    } finally {
+      setDraftingSupplierId(null)
+    }
+  }
+
+  const sendToSupplier = async (supplierUserId: string) => {
+    const ref = orderRefInput.trim()
+    const text = (msgBySupplier[supplierUserId] || "").trim()
+    if (!ref || !ticket || !text) {
+      setAskPreviewError("Enter a message to send.")
+      return
+    }
+    setSendingSupplierId(supplierUserId)
+    setAskPreviewError(null)
+    try {
+      const res = await fetch("/api/juno-engine/tickets/ask-supplier", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderRef: ref,
+          ticketKey: ticket.id,
+          supplierUserId,
+          message: text,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.message || "Send failed")
+      }
+      setMsgBySupplier((prev) => ({ ...prev, [supplierUserId]: "" }))
+    } catch (e) {
+      setAskPreviewError(e instanceof Error ? e.message : "Send failed")
+    } finally {
+      setSendingSupplierId(null)
+    }
+  }
 
   const getStatusStyles = (status: TicketStatus | string) => {
     switch (status) {
@@ -160,6 +298,155 @@ export default function TicketDetailPage() {
                   timeStyle: "short",
                 })}
               </div>
+            </div>
+
+            {/* Ask supplier (per supplier, optional) */}
+            <div
+              className={cn(
+                "rounded-2xl border p-5 flex flex-col gap-4 flex-shrink-0",
+                isLight ? "bg-white border-slate-200 shadow-sm" : "bg-white/5 border-white/10",
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <MessageCircleQuestion
+                  className={cn("w-5 h-5", isLight ? "text-indigo-600" : "text-indigo-400")}
+                />
+                <h2
+                  className={cn(
+                    "text-sm font-black uppercase tracking-wider",
+                    isLight ? "text-slate-900" : "text-white",
+                  )}
+                >
+                  Ask supplier
+                </h2>
+              </div>
+              <p
+                className={cn(
+                  "text-xs leading-relaxed",
+                  isLight ? "text-slate-600" : "text-slate-400",
+                )}
+              >
+                Link this ticket to a Shopify order, then send a separate chat message to each supplier
+                that provides products on that order. You can reply to the customer in Gmail yourself once
+                the supplier responds.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  placeholder="Order # (e.g. 1002)"
+                  value={orderRefInput}
+                  onChange={(e) => setOrderRefInput(e.target.value)}
+                  className={cn(
+                    "flex-1 h-10 px-3 rounded-xl border text-sm font-medium",
+                    isLight
+                      ? "bg-slate-50 border-slate-200 text-slate-900"
+                      : "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+                  )}
+                />
+                <button
+                  type="button"
+                  disabled={askPreviewLoading}
+                  onClick={() => void loadAskSupplierPreview()}
+                  className={cn(
+                    "h-10 px-4 rounded-xl font-bold text-sm shrink-0",
+                    isLight
+                      ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                      : "bg-indigo-600 text-white hover:bg-indigo-500",
+                  )}
+                >
+                  {askPreviewLoading ? "Loading…" : "Load suppliers"}
+                </button>
+              </div>
+              {askPreviewError && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">{askPreviewError}</p>
+              )}
+              {askPreview?.order && askPreview.groups.length > 0 && (
+                <div className="space-y-4">
+                  <p
+                    className={cn(
+                      "text-xs font-bold",
+                      isLight ? "text-slate-700" : "text-slate-300",
+                    )}
+                  >
+                    Order #{askPreview.order.orderNumber} — message each supplier separately.
+                  </p>
+                  {askPreview.groups.map((g) => (
+                    <div
+                      key={g.supplierUserId}
+                      className={cn(
+                        "rounded-xl border p-4 space-y-2",
+                        isLight ? "bg-slate-50 border-slate-200" : "bg-black/20 border-white/10",
+                      )}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span
+                          className={cn(
+                            "text-sm font-black",
+                            isLight ? "text-slate-900" : "text-white",
+                          )}
+                        >
+                          {g.companyName}
+                        </span>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={draftingSupplierId === g.supplierUserId}
+                            onClick={() => void draftForSupplier(g.supplierUserId)}
+                            className={cn(
+                              "h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1",
+                              isLight
+                                ? "bg-white border border-slate-200 text-slate-800"
+                                : "bg-white/10 text-slate-200",
+                            )}
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            {draftingSupplierId === g.supplierUserId ? "Draft…" : "Draft"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={sendingSupplierId === g.supplierUserId}
+                            onClick={() => void sendToSupplier(g.supplierUserId)}
+                            className="h-8 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white flex items-center gap-1"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            {sendingSupplierId === g.supplierUserId ? "…" : "Send"}
+                          </button>
+                        </div>
+                      </div>
+                      <ul
+                        className={cn(
+                          "text-[11px] list-disc list-inside",
+                          isLight ? "text-slate-600" : "text-slate-400",
+                        )}
+                      >
+                        {g.lines.map((l) => (
+                          <li key={`${g.supplierUserId}-${l.lineIndex}`}>
+                            {l.title}
+                            {l.sku ? ` (${l.sku})` : ""} × {l.quantity}
+                          </li>
+                        ))}
+                      </ul>
+                      <textarea
+                        value={msgBySupplier[g.supplierUserId] || ""}
+                        onChange={(e) =>
+                          setMsgBySupplier((prev) => ({
+                            ...prev,
+                            [g.supplierUserId]: e.target.value,
+                          }))
+                        }
+                        placeholder="Your question to this supplier…"
+                        rows={4}
+                        className={cn(
+                          "w-full rounded-xl border p-3 text-sm resize-y min-h-[96px]",
+                          isLight
+                            ? "bg-white border-slate-200 text-slate-900"
+                            : "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+                        )}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Conversation timeline - Full width corners chat style */}

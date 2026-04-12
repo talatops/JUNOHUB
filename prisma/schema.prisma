@@ -132,6 +132,12 @@ model Store {
   /** Optional Gmail auto-reply HTML theming (colors, font, logo URL). Merged with defaults server-side. */
   gmailReplyTheme     Json?
 
+  /**
+   * When set (non-null), low-stock automation is on: sum of variant inventory_quantity below this
+   * triggers a B2B chat message to the ProductSync-linked supplier(s).
+   */
+  lowStockThreshold   Int?
+
   // Relations
   connections      Connection[]
   cachedProducts   CachedProduct[]
@@ -150,11 +156,51 @@ model Store {
   gmailInboundAutoReplies GmailInboundAutoReply[]
   templates       Template[]
   chatMessages    ChatMessage[]
+  lowStockAlertStates LowStockAlertState[]
+  supplierAutomationLogs SupplierAutomationLog[]
   
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   
   @@index([userId])  // Add index for performance
+}
+
+/** Dedupes low-stock B2B notifications per store + Shopify product while stock stays below threshold. */
+model LowStockAlertState {
+  id                 String   @id @default(cuid())
+  storeId            String
+  store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId   String
+  lastSeenTotalQty   Int?
+  /** Set when we sent a low-stock alert; cleared when total qty is back >= threshold. */
+  lastNotifiedBelowAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, shopifyProductId])
+  @@index([storeId])
+}
+
+enum SupplierAutomationKind {
+  LOW_STOCK
+  ASK_SUPPLIER
+}
+
+model SupplierAutomationLog {
+  id               String   @id @default(cuid())
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  kind             SupplierAutomationKind
+  shopifyProductId String?
+  supplierUserId   String?
+  ticketKey        String?
+  messagePreview   String   @db.Text
+
+  createdAt DateTime @default(now())
+
+  @@index([storeId, kind, createdAt])
+  @@index([storeId, shopifyProductId, supplierUserId, createdAt])
 }
 
 model CachedProduct {

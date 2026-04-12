@@ -20,7 +20,8 @@ import {
     CheckCircle2,
     ChevronLeft,
     ChevronRight,
-    Plus
+    Plus,
+    BellRing
 } from "lucide-react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence } from "framer-motion"
@@ -112,6 +113,10 @@ export default function InventoryPage() {
     const { theme } = useTheme()
     const isLight = theme === "light"
 
+    const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
+    const [lowStockDraft, setLowStockDraft] = useState("")
+    const [lowStockSaving, setLowStockSaving] = useState(false)
+
     useEffect(() => {
         setMounted(true)
     }, [])
@@ -123,6 +128,23 @@ export default function InventoryPage() {
                 if (res.ok) {
                     const data = await res.json()
                     const activeStore = data.stores?.find((s: { isActive: boolean }) => s.isActive)
+                    if (activeStore?.id) {
+                        setActiveStoreId(activeStore.id)
+                        try {
+                            const settingsRes = await fetch(`/api/stores/${activeStore.id}`, {
+                                cache: "no-store",
+                            })
+                            if (settingsRes.ok) {
+                                const settingsData = (await settingsRes.json()) as {
+                                    lowStockThreshold?: number | null
+                                }
+                                const t = settingsData.lowStockThreshold
+                                setLowStockDraft(typeof t === "number" ? String(t) : "")
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    }
                     if (activeStore?.shopifyDomain) {
                         const cleanDomain = activeStore.shopifyDomain.replace(/^https?:\/\//, "").replace(/\/$/, "")
                         setStoreDomain(cleanDomain)
@@ -343,6 +365,46 @@ export default function InventoryPage() {
         }
     }
 
+    const saveLowStockSettings = async () => {
+        if (!activeStoreId) {
+            toast.error("No active store")
+            return
+        }
+        const trimmed = lowStockDraft.trim()
+        let payload: { lowStockThreshold: number | null }
+        if (trimmed === "") {
+            payload = { lowStockThreshold: null }
+        } else {
+            const n = Number.parseInt(trimmed, 10)
+            if (!Number.isFinite(n) || n < 0 || n > 1_000_000) {
+                toast.error("Enter a whole number from 0 to 1000000, or leave empty to turn off.")
+                return
+            }
+            payload = { lowStockThreshold: n }
+        }
+        setLowStockSaving(true)
+        try {
+            const res = await fetch(`/api/stores/${activeStoreId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            })
+            const data = await res.json().catch(() => ({}))
+            if (!res.ok) {
+                throw new Error((data as { message?: string }).message || "Save failed")
+            }
+            toast.success(
+                payload.lowStockThreshold === null
+                    ? "Low-stock supplier alerts turned off."
+                    : `Alerts on when total variant stock drops below ${payload.lowStockThreshold}.`,
+            )
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Could not save settings")
+        } finally {
+            setLowStockSaving(false)
+        }
+    }
+
     const handleExport = () => {
         const csvHeaders = ["ID", "Title", "Vendor", "Status", "Variants", "Created At"]
         const csvRows = filteredProducts.map(p => [
@@ -395,6 +457,63 @@ export default function InventoryPage() {
                             className="h-10 md:h-11 px-3 md:px-4 bg-white/10 border border-white/10 rounded-xl font-bold text-white hover:bg-white/15 backdrop-blur-sm transition-all flex items-center gap-2 text-sm"
                         >
                             <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    className={`rounded-xl md:rounded-2xl border p-4 md:p-5 flex flex-col sm:flex-row sm:items-center gap-4 flex-shrink-0 ${
+                        isLight
+                            ? "bg-indigo-50/80 border-indigo-200"
+                            : "bg-indigo-500/10 border-indigo-500/20"
+                    }`}
+                >
+                    <div className="flex items-start gap-3 min-w-0">
+                        <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                isLight ? "bg-indigo-100 text-indigo-700" : "bg-indigo-500/20 text-indigo-300"
+                            }`}
+                        >
+                            <BellRing className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <h2
+                                className={`text-sm font-black uppercase tracking-wider ${
+                                    isLight ? "text-indigo-900" : "text-indigo-200"
+                                }`}
+                            >
+                                Supplier low-stock alerts
+                            </h2>
+                            <p
+                                className={`text-xs mt-1 leading-relaxed ${
+                                    isLight ? "text-indigo-800/80" : "text-slate-400"
+                                }`}
+                            >
+                                When enabled, synced products (ACCEPTED) message the linked supplier in JUNO chat if
+                                total inventory drops below your threshold. Leave empty to turn off.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:ml-auto shrink-0">
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            placeholder="Off"
+                            value={lowStockDraft}
+                            onChange={(e) => setLowStockDraft(e.target.value.replace(/[^\d]/g, ""))}
+                            className={`h-10 w-full sm:w-28 px-3 rounded-xl border text-sm font-bold ${
+                                isLight
+                                    ? "bg-white border-indigo-200 text-slate-900 placeholder:text-slate-400"
+                                    : "bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+                            }`}
+                        />
+                        <button
+                            type="button"
+                            disabled={lowStockSaving || !activeStoreId}
+                            onClick={() => saveLowStockSettings()}
+                            className="h-10 px-4 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+                        >
+                            {lowStockSaving ? "Saving…" : "Save"}
                         </button>
                     </div>
                 </div>

@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { processIncomingEmail } from "@/lib/gmail/emailProcessor"
+import { reconcileLowStockForActiveStores } from "@/lib/automation/lowStock"
 
 let pollerStarted = false
+let gmailPollCycles = 0
 
 /**
  * Run a single polling cycle for all users who have GmailIntegration configured.
@@ -59,6 +61,13 @@ export async function pollAllGmailOnce() {
                     error,
                 })
             }
+        }
+
+        gmailPollCycles += 1
+        if (gmailPollCycles % 10 === 0) {
+            void reconcileLowStockForActiveStores().catch((e) =>
+                logger.error("Gmail poller: low-stock reconcile failed", e),
+            )
         }
     } catch (error) {
         logger.error("Gmail poller: failed to query integrations", error)

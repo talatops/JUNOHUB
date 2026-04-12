@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
-import { sendPushNotification } from "@/lib/push"
 import {
     countConnectionsForPair,
     hasChatConnectionForStore,
     resolveB2bChatPair,
 } from "@/lib/chat/chatThreadAccess"
+import { postB2bChatMessage } from "@/lib/chat/postB2bChatMessage"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { chatMessagePostSchema } from "@/lib/api-schemas/public"
 import { validationErrorResponse } from "@/lib/api-schemas/validate"
@@ -38,55 +38,29 @@ export async function POST(req: Request) {
         const { receiverId, content, kind, attachment, storeId: storeIdRaw } = parsed.data
         const normalizedKind = kind ?? "TEXT"
 
-        const pair = await resolveB2bChatPair(session.user.id, receiverId)
-        if (!pair) {
-            return new NextResponse("Invalid chat participant", { status: 403 })
-        }
-
-        const allowed = await hasChatConnectionForStore(
-            pair.vendorUserId,
-            pair.supplierUserId,
-            storeIdRaw
-        )
-        if (!allowed) {
-            return new NextResponse("Store not connected for this chat", { status: 403 })
-        }
-
-        const sessionUser = await prisma.user.findUnique({
-            where: { id: session.user.id },
-            select: { role: true },
+        const posted = await postB2bChatMessage({
+            senderId: session.user.id,
+            receiverId,
+            storeId: storeIdRaw,
+            kind: normalizedKind,
+            content,
+            attachment: normalizedKind === "TEXT" ? null : attachment,
+            notify: true,
         })
 
-        if (
-            sessionUser?.role === "VENDOR" &&
-            (normalizedKind === "PRODUCT" || normalizedKind === "ORDER")
-        ) {
-            const att = attachment as { storeId?: string }
-            if (!att.storeId || att.storeId !== storeIdRaw) {
-                return new NextResponse("Attachment store does not match chat store", { status: 400 })
+        if (!posted.ok) {
+            if (posted.reason === "invalid_pair") {
+                return new NextResponse("Invalid chat participant", { status: 403 })
             }
+            if (posted.reason === "store_not_connected") {
+                return new NextResponse("Store not connected for this chat", { status: 403 })
+            }
+            return new NextResponse("Attachment store does not match chat store", { status: 400 })
         }
 
-        const message = await prisma.chatMessage.create({
-            data: {
-                senderId: session.user.id,
-                receiverId,
-                storeId: storeIdRaw,
-                kind: normalizedKind as any,
-                content: content as any,
-                attachment: (normalizedKind === "TEXT" ? null : (attachment as any)) as any,
-            } as any,
+        const message = await prisma.chatMessage.findUniqueOrThrow({
+            where: { id: posted.messageId },
         })
-
-        try {
-            await sendPushNotification(receiverId, {
-                title: "New Message",
-                body: `${session.user.name || "A user"} sent you a message.`,
-                url: "/dashboard/chat",
-            })
-        } catch (pushError) {
-            console.error("Failed to send push notification", pushError)
-        }
 
         return NextResponse.json(message)
     } catch (error) {
