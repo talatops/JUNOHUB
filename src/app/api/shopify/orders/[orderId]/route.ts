@@ -3,6 +3,10 @@ import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { handleApiError } from "@/lib/errors"
 import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
+import {
+    SUPPLIER_HOLD_REASON_LABELS,
+    isSupplierHoldReasonCode,
+} from "@/lib/orders/supplierHoldReasons"
 
 export async function GET(
     request: Request,
@@ -74,6 +78,8 @@ export async function GET(
                     email: true,
                     customer: true,
                     fulfillmentStatus: true,
+                    holdReasonCode: true,
+                    holdNote: true,
                     trackingNumber: true,
                     trackingCompany: true,
                     trackingUrl: true,
@@ -118,6 +124,12 @@ export async function GET(
                 order.last_supplier_update_at = cached.lastSupplierUpdateAt?.toISOString() || null
                 order.last_shopify_sync_at = cached.lastShopifySyncAt?.toISOString() || null
                 order.last_shopify_sync_error = cached.lastShopifySyncError || null
+                order.hold_reason_code = cached.holdReasonCode || null
+                order.hold_note = cached.holdNote || null
+                order.hold_reason_label =
+                    cached.holdReasonCode && isSupplierHoldReasonCode(cached.holdReasonCode)
+                        ? SUPPLIER_HOLD_REASON_LABELS[cached.holdReasonCode]
+                        : null
             }
 
             return NextResponse.json({ order })

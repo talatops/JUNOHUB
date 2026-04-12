@@ -36,6 +36,7 @@ services:
       NODE_ENV: production
     volumes:
       - ./public/uploads/supplier-products:/app/public/uploads/supplier-products
+      - ./public/uploads/gmail-reply-logos:/app/public/uploads/gmail-reply-logos
     depends_on:
       db:
         condition: service_healthy

@@ -188,6 +188,44 @@ describe("supplierOrderPatchSchema", () => {
     it("allows empty patch", () => {
         expect(supplierOrderPatchSchema.safeParse({}).success).toBe(true)
     })
+
+    it("requires holdReasonCode when status is On hold", () => {
+        expect(
+            supplierOrderPatchSchema.safeParse({ fulfillmentStatus: "ON_HOLD" }).success,
+        ).toBe(false)
+        expect(
+            supplierOrderPatchSchema.safeParse({
+                fulfillmentStatus: "ON_HOLD",
+                holdReasonCode: "inventory_out_of_stock",
+            }).success,
+        ).toBe(true)
+    })
+
+    it("requires holdNote when reason is other", () => {
+        expect(
+            supplierOrderPatchSchema.safeParse({
+                fulfillmentStatus: "ON_HOLD",
+                holdReasonCode: "other",
+            }).success,
+        ).toBe(false)
+        expect(
+            supplierOrderPatchSchema.safeParse({
+                fulfillmentStatus: "ON_HOLD",
+                holdReasonCode: "other",
+                holdNote: "Custom explanation",
+            }).success,
+        ).toBe(true)
+    })
+
+    it("does not require hold fields for shipped", () => {
+        expect(
+            supplierOrderPatchSchema.safeParse({
+                fulfillmentStatus: "SHIPPED",
+                trackingNumber: "1Z",
+                trackingCompany: "UPS",
+            }).success,
+        ).toBe(true)
+    })
 })
 
 describe("vendorInvitePostSchema", () => {

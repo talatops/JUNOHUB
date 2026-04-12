@@ -354,7 +354,16 @@ export default function AccountSettingsPage() {
                                 Reinstalled your app in Shopify or added API permissions? Shopify issues a
                                 new <strong className="text-slate-300">Admin API access token</strong>.
                                 Paste it here—your store domain stays the same; we verify the token with
-                                Shopify before saving.
+                                Shopify before saving. Supplier fulfillment sync needs fulfillment scopes;
+                                <strong className="text-slate-300"> write_orders </strong>
+                                is required for order tags and the hold metafield. Native{" "}
+                                <strong className="text-slate-300">On hold</strong> in Shopify admin also
+                                needs{" "}
+                                <strong className="text-slate-300">
+                                    write_merchant_managed_fulfillment_orders
+                                </strong>{" "}
+                                (or <strong className="text-slate-300">write_third_party_fulfillment_orders</strong>{" "}
+                                if applicable).
                             </p>
                             {tokenSuccess ? (
                                 <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-400">

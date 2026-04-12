@@ -517,7 +517,7 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             totalPrice: order.total_price || "0",
             currency: order.currency || null,
             financialStatus: order.financial_status || null,
-            fulfillmentStatus: order.fulfillment_status || null,
+            fulfillmentStatus: shouldPreserve ? preservedStatus : order.fulfillment_status || null,
             lineItems: (order.line_items || []) as Prisma.InputJsonValue,
             customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
             shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,

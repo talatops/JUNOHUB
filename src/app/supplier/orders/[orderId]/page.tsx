@@ -2,8 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Loader2, AlertCircle, Package, Truck, Save, CheckCircle2, User, Mail, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Loader2, AlertCircle, Package, Truck, Save, CheckCircle2, User, Mail, Phone, MapPin, X } from "lucide-react"
 import toast from "react-hot-toast"
+import {
+    SUPPLIER_HOLD_REASON_OPTIONS,
+    type SupplierHoldReasonCode,
+} from "@/lib/orders/supplierHoldReasons"
 
 const SHOPIFY_TRACKING_COMPANIES = [
     "4PX",
@@ -50,6 +54,9 @@ type SupplierOrder = {
     shippingAddress?: { first_name?: string; last_name?: string; address1?: string; address2?: string; city?: string; province?: string; country?: string; zip?: string; phone?: string } | null
     billingAddress?: { first_name?: string; last_name?: string; address1?: string; address2?: string; city?: string; province?: string; country?: string; zip?: string; phone?: string } | null
     store: { id: string; businessName: string; shopifyStoreName: string }
+    holdReasonCode?: string | null
+    holdNote?: string | null
+    holdReasonLabel?: string | null
 }
 
 export default function SupplierOrderDetailsPage() {
@@ -66,6 +73,12 @@ export default function SupplierOrderDetailsPage() {
     const [trackingNumber, setTrackingNumber] = useState("")
     const [trackingCompany, setTrackingCompany] = useState("")
     const [trackingUrl, setTrackingUrl] = useState("")
+    const [holdReasonCode, setHoldReasonCode] = useState<SupplierHoldReasonCode | "">("")
+    const [holdNote, setHoldNote] = useState("")
+    const [holdModalOpen, setHoldModalOpen] = useState(false)
+    const [statusBeforeHoldModal, setStatusBeforeHoldModal] = useState<string | null>(null)
+    const [modalReason, setModalReason] = useState<SupplierHoldReasonCode | "">("")
+    const [modalNote, setModalNote] = useState("")
 
     useEffect(() => {
         if (!orderId) return
@@ -82,6 +95,17 @@ export default function SupplierOrderDetailsPage() {
                 setTrackingNumber(o.trackingNumber || "")
                 setTrackingCompany(o.trackingCompany || "")
                 setTrackingUrl(o.trackingUrl || "")
+                const hc = o.holdReasonCode
+                setHoldReasonCode(
+                    hc === "inventory_out_of_stock" ||
+                        hc === "address_incorrect" ||
+                        hc === "high_risk_fraud" ||
+                        hc === "awaiting_payment" ||
+                        hc === "other"
+                        ? hc
+                        : "",
+                )
+                setHoldNote(o.holdNote || "")
             } catch {
                 setError("Failed to load order details.")
             } finally {
@@ -93,16 +117,73 @@ export default function SupplierOrderDetailsPage() {
 
     const changed = useMemo(() => {
         if (!order) return false
+        const origHold =
+            order.holdReasonCode === "inventory_out_of_stock" ||
+            order.holdReasonCode === "address_incorrect" ||
+            order.holdReasonCode === "high_risk_fraud" ||
+            order.holdReasonCode === "awaiting_payment" ||
+            order.holdReasonCode === "other"
+                ? order.holdReasonCode
+                : ""
         return (
             fulfillmentStatus !== (order.fulfillmentStatus || "UNFULFILLED") ||
             trackingNumber !== (order.trackingNumber || "") ||
             trackingCompany !== (order.trackingCompany || "") ||
-            trackingUrl !== (order.trackingUrl || "")
+            trackingUrl !== (order.trackingUrl || "") ||
+            holdReasonCode !== origHold ||
+            holdNote !== (order.holdNote || "")
         )
-    }, [order, fulfillmentStatus, trackingNumber, trackingCompany, trackingUrl])
+    }, [order, fulfillmentStatus, trackingNumber, trackingCompany, trackingUrl, holdReasonCode, holdNote])
+
+    const trackingLocked = fulfillmentStatus === "ON_HOLD"
+    const holdIncomplete = fulfillmentStatus === "ON_HOLD" && !holdReasonCode
+    const canSave = changed && !holdIncomplete && !holdModalOpen
+
+    const openHoldModal = (revertTo: string) => {
+        setStatusBeforeHoldModal(revertTo)
+        setModalReason(holdReasonCode || "")
+        setModalNote(holdReasonCode === "other" ? holdNote : "")
+        setHoldModalOpen(true)
+    }
+
+    const confirmHoldModal = () => {
+        if (!modalReason) {
+            toast.error("Select a hold reason")
+            return
+        }
+        if (modalReason === "other" && !modalNote.trim()) {
+            toast.error("Enter a note for Other")
+            return
+        }
+        setHoldReasonCode(modalReason)
+        setHoldNote(modalReason === "other" ? modalNote.trim() : "")
+        setFulfillmentStatus("ON_HOLD")
+        setHoldModalOpen(false)
+        setStatusBeforeHoldModal(null)
+    }
+
+    const cancelHoldModal = () => {
+        setHoldModalOpen(false)
+        if (statusBeforeHoldModal !== null) {
+            setFulfillmentStatus(statusBeforeHoldModal)
+            setStatusBeforeHoldModal(null)
+        }
+    }
+
+    const onStatusChange = (value: string) => {
+        if (value === "ON_HOLD") {
+            const prev = fulfillmentStatus
+            setFulfillmentStatus("ON_HOLD")
+            openHoldModal(prev)
+            return
+        }
+        setFulfillmentStatus(value)
+        setHoldReasonCode("")
+        setHoldNote("")
+    }
 
     const save = async () => {
-        if (!order) return
+        if (!order || holdIncomplete) return
         setSaving(true)
         try {
             const res = await fetch(`/api/supplier/orders/${order.id}`, {
@@ -110,22 +191,42 @@ export default function SupplierOrderDetailsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     fulfillmentStatus,
-                    trackingNumber,
-                    trackingCompany,
-                    trackingUrl,
+                    trackingNumber: trackingLocked ? null : trackingNumber || null,
+                    trackingCompany: trackingLocked ? null : trackingCompany || null,
+                    trackingUrl: trackingLocked ? null : trackingUrl || null,
+                    holdReasonCode: fulfillmentStatus === "ON_HOLD" ? holdReasonCode : null,
+                    holdNote:
+                        fulfillmentStatus === "ON_HOLD" && holdReasonCode === "other"
+                            ? holdNote.trim()
+                            : fulfillmentStatus === "ON_HOLD"
+                              ? null
+                              : null,
                 }),
             })
-            if (!res.ok) throw new Error("Failed to save")
+            const data = (await res.json().catch(() => ({}))) as {
+                message?: string
+                order?: SupplierOrder & { fulfillmentStatusDisplay?: string }
+            }
+            if (!res.ok) throw new Error(data.message || "Failed to save")
             toast.success("Order updated successfully")
+            const next = data.order
             setOrder({
                 ...order,
-                fulfillmentStatus,
-                trackingNumber,
-                trackingCompany,
-                trackingUrl,
+                fulfillmentStatus: next?.fulfillmentStatus ?? fulfillmentStatus,
+                trackingNumber: trackingLocked ? null : trackingNumber,
+                trackingCompany: trackingLocked ? null : trackingCompany,
+                trackingUrl: trackingLocked ? null : trackingUrl,
+                holdReasonCode: fulfillmentStatus === "ON_HOLD" ? holdReasonCode : null,
+                holdNote:
+                    fulfillmentStatus === "ON_HOLD" && holdReasonCode === "other"
+                        ? holdNote.trim()
+                        : fulfillmentStatus === "ON_HOLD"
+                          ? null
+                          : null,
+                holdReasonLabel: next?.holdReasonLabel ?? order.holdReasonLabel,
             })
-        } catch {
-            toast.error("Failed to update order")
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Failed to update order")
         } finally {
             setSaving(false)
         }
@@ -163,7 +264,7 @@ export default function SupplierOrderDetailsPage() {
                 </div>
                 <button
                     onClick={save}
-                    disabled={!changed || saving}
+                    disabled={!canSave || saving}
                     className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold inline-flex items-center gap-2"
                 >
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -205,23 +306,45 @@ export default function SupplierOrderDetailsPage() {
                         <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Order Status</label>
                         <select
                             value={fulfillmentStatus}
-                            onChange={(e) => setFulfillmentStatus(e.target.value)}
+                            onChange={(e) => onStatusChange(e.target.value)}
                             className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3"
                         >
                             <option value="UNFULFILLED">Unfulfilled</option>
                             <option value="IN_PROGRESS">In Progress</option>
+                            <option value="ON_HOLD">On hold</option>
                             <option value="SHIPPED">Shipped</option>
                             <option value="FULFILLED">Fulfilled</option>
                             <option value="CANCELLED">Cancelled</option>
                         </select>
                     </div>
 
+                    {fulfillmentStatus === "ON_HOLD" && holdReasonCode ? (
+                        <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 space-y-1">
+                            <p className="text-[11px] font-bold uppercase text-amber-200">Hold reason</p>
+                            <p className="text-sm text-white font-semibold">
+                                {SUPPLIER_HOLD_REASON_OPTIONS.find((o) => o.value === holdReasonCode)?.label ||
+                                    holdReasonCode}
+                            </p>
+                            {holdReasonCode === "other" && holdNote.trim() ? (
+                                <p className="text-xs text-amber-100/90 whitespace-pre-wrap">{holdNote}</p>
+                            ) : null}
+                            <button
+                                type="button"
+                                onClick={() => openHoldModal(fulfillmentStatus)}
+                                className="text-xs font-bold text-amber-200 underline mt-1"
+                            >
+                                Change reason
+                            </button>
+                        </div>
+                    ) : null}
+
                     <div>
                         <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Tracking Platform</label>
                         <select
                             value={trackingCompany}
                             onChange={(e) => setTrackingCompany(e.target.value)}
-                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3"
+                            disabled={trackingLocked}
+                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             <option value="">Select platform</option>
                             {SHOPIFY_TRACKING_COMPANIES.map((c) => (
@@ -236,7 +359,8 @@ export default function SupplierOrderDetailsPage() {
                             value={trackingNumber}
                             onChange={(e) => setTrackingNumber(e.target.value)}
                             placeholder="e.g. 1Z999AA10123456784"
-                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3"
+                            disabled={trackingLocked}
+                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                         />
                     </div>
 
@@ -246,9 +370,14 @@ export default function SupplierOrderDetailsPage() {
                             value={trackingUrl}
                             onChange={(e) => setTrackingUrl(e.target.value)}
                             placeholder="https://..."
-                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3"
+                            disabled={trackingLocked}
+                            className="w-full h-11 rounded-xl bg-white/10 border border-white/10 text-white px-3 disabled:opacity-40 disabled:cursor-not-allowed"
                         />
                     </div>
+
+                    {holdIncomplete && (
+                        <p className="text-amber-300 text-xs font-semibold">Choose a hold reason (use On hold or Change reason).</p>
+                    )}
 
                     {changed && (
                         <p className="text-emerald-400 text-xs font-semibold inline-flex items-center gap-1">
@@ -342,6 +471,84 @@ export default function SupplierOrderDetailsPage() {
                     ))}
                 </div>
             </div>
+
+            {holdModalOpen ? (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="hold-modal-title"
+                >
+                    <div className="w-full max-w-md rounded-2xl border border-white/15 bg-slate-900 p-5 shadow-xl space-y-4">
+                        <div className="flex items-start justify-between gap-2">
+                            <h2 id="hold-modal-title" className="text-lg font-bold text-white">
+                                On hold reason
+                            </h2>
+                            <button
+                                type="button"
+                                onClick={cancelHoldModal}
+                                className="p-1 rounded-lg text-slate-400 hover:bg-white/10 hover:text-white"
+                                aria-label="Close"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-sm text-slate-400">
+                            Select why this order is on hold. Required before you can save.
+                        </p>
+                        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
+                            {SUPPLIER_HOLD_REASON_OPTIONS.map((opt) => (
+                                <label
+                                    key={opt.value}
+                                    className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
+                                        modalReason === opt.value
+                                            ? "border-indigo-500/60 bg-indigo-500/15"
+                                            : "border-white/10 bg-white/5"
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="holdReason"
+                                        className="mt-1"
+                                        checked={modalReason === opt.value}
+                                        onChange={() => setModalReason(opt.value)}
+                                    />
+                                    <span className="text-sm text-white font-medium">{opt.label}</span>
+                                </label>
+                            ))}
+                        </div>
+                        {modalReason === "other" ? (
+                            <div>
+                                <label className="block text-xs uppercase text-slate-400 font-bold mb-2">Note</label>
+                                <textarea
+                                    value={modalNote}
+                                    onChange={(e) => setModalNote(e.target.value)}
+                                    rows={3}
+                                    maxLength={2000}
+                                    placeholder="Describe the hold…"
+                                    className="w-full rounded-xl bg-white/10 border border-white/10 text-white px-3 py-2 text-sm"
+                                />
+                            </div>
+                        ) : null}
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button
+                                type="button"
+                                onClick={cancelHoldModal}
+                                className="h-10 px-4 rounded-xl bg-white/10 text-white font-semibold"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmHoldModal}
+                                className="h-10 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold"
+                            >
+                                Confirm
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     )
 }
