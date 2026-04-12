@@ -52,15 +52,15 @@ export default function JunoEngineLayout({
     ]
 
     return (
-        <div className="h-full flex flex-col space-y-4 md:space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-shrink-0">
+        <div className="flex w-full flex-col gap-4 md:gap-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0">
                 <div>
                     <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">JUNO Engine</h1>
                     <p className="text-sm md:text-base text-slate-400 mt-1">Manage your communication and support infrastructure.</p>
                 </div>
             </div>
 
-            <div className="flex gap-2 md:gap-3 border-b border-white/10 overflow-x-auto flex-shrink-0">
+            <div className="flex gap-2 md:gap-3 border-b border-white/10 overflow-x-auto shrink-0">
                 {tabs.map((tab) => {
                     const isActive = pathname === tab.href
                     const Icon = tab.icon
@@ -80,9 +80,7 @@ export default function JunoEngineLayout({
                 })}
             </div>
 
-            <div className="flex-1 overflow-hidden">
-                {children}
-            </div>
+            <div className="min-h-0 w-full flex-1">{children}</div>
         </div>
     )
 }

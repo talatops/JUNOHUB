@@ -1,16 +1,21 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
+import toast from "react-hot-toast"
 import {
     Users,
     Search,
     MoreHorizontal,
     Mail,
-    Plus,
     Loader2,
     AlertCircle,
-    MapPin
+    MapPin,
+    ExternalLink,
+    Copy,
 } from "lucide-react"
+import { useTheme } from "@/components/ThemeProvider"
+import { cn } from "@/lib/utils"
 
 interface ShopifyCustomer {
     id: number
@@ -45,11 +50,93 @@ function formatCustomerLocation(default_address: ShopifyCustomer["default_addres
     return "Not provided"
 }
 
+const MENU_WIDTH_PX = 200
+
 export default function CustomersPage() {
+    const { theme } = useTheme()
+    const isLight = theme === "light"
+
     const [customers, setCustomers] = useState<ShopifyCustomer[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
     const [searchTerm, setSearchTerm] = useState("")
+    const [openMenuCustomerId, setOpenMenuCustomerId] = useState<number | null>(null)
+    const [menuRect, setMenuRect] = useState<{ top: number; left: number } | null>(null)
+    const [storeDomain, setStoreDomain] = useState<string | null>(null)
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    useEffect(() => {
+        const fetchStoreInfo = async () => {
+            try {
+                const res = await fetch("/api/stores")
+                if (res.ok) {
+                    const data = await res.json()
+                    const activeStore = data.stores?.find((s: { isActive: boolean }) => s.isActive)
+                    if (activeStore?.shopifyDomain) {
+                        const clean = String(activeStore.shopifyDomain)
+                            .replace(/^https?:\/\//, "")
+                            .replace(/\/$/, "")
+                        setStoreDomain(clean)
+                    }
+                }
+            } catch {
+                // ignore
+            }
+        }
+        void fetchStoreInfo()
+    }, [])
+
+    const closeMenu = useCallback(() => {
+        setOpenMenuCustomerId(null)
+        setMenuRect(null)
+    }, [])
+
+    useEffect(() => {
+        if (openMenuCustomerId === null) return
+        const onScroll = () => closeMenu()
+        window.addEventListener("scroll", onScroll, true)
+        return () => window.removeEventListener("scroll", onScroll, true)
+    }, [openMenuCustomerId, closeMenu])
+
+    const handleMenuToggle = (customerId: number, e: React.MouseEvent) => {
+        e.stopPropagation()
+        if (openMenuCustomerId === customerId) {
+            closeMenu()
+            return
+        }
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        const left = Math.min(
+            Math.max(8, rect.right - MENU_WIDTH_PX),
+            window.innerWidth - MENU_WIDTH_PX - 8,
+        )
+        setMenuRect({ top: rect.bottom + 4, left })
+        setOpenMenuCustomerId(customerId)
+    }
+
+    const viewInShopify = (customerId: number) => {
+        if (storeDomain) {
+            window.open(`https://${storeDomain}/admin/customers/${customerId}`, "_blank")
+        } else {
+            toast.error("Store domain not found. Check your store configuration.")
+        }
+        closeMenu()
+    }
+
+    const copyCustomerId = (customerId: number) => {
+        void navigator.clipboard.writeText(String(customerId))
+        toast.success("Customer ID copied")
+        closeMenu()
+    }
+
+    const copyEmail = (email: string) => {
+        void navigator.clipboard.writeText(email)
+        toast.success("Email copied")
+        closeMenu()
+    }
 
     useEffect(() => {
         const fetchCustomers = async () => {
@@ -84,16 +171,9 @@ export default function CustomersPage() {
 
     return (
         <div className="h-full flex flex-col space-y-4 md:space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 flex-shrink-0">
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Customers</h1>
-                    <p className="text-sm md:text-base text-slate-400 mt-1">View and manage your Shopify customer base.</p>
-                </div>
-                <div className="flex gap-3">
-                    <button className="h-10 md:h-11 px-4 md:px-6 bg-indigo-500 text-white rounded-xl font-bold flex items-center gap-2 hover:bg-indigo-600 border border-indigo-400/20 transition-all text-sm">
-                        <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Customer</span>
-                    </button>
-                </div>
+            <div className="flex-shrink-0">
+                <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">Customers</h1>
+                <p className="text-sm md:text-base text-slate-400 mt-1">View and manage your Shopify customer base.</p>
             </div>
 
             <div className="bg-white/5 backdrop-blur-xl rounded-xl md:rounded-2xl border border-white/10 overflow-hidden flex flex-col flex-1 min-h-0">
@@ -180,8 +260,23 @@ export default function CustomersPage() {
                                             <span className="text-xs text-slate-500 font-medium">{new Date(customer.created_at).toLocaleDateString()}</span>
                                         </td>
                                         <td className="px-4 md:px-8 py-3 md:py-4 text-right">
-                                            <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all">
-                                                <MoreHorizontal className="w-4 h-4 md:w-5 md:h-5" />
+                                            <button
+                                                type="button"
+                                                aria-expanded={openMenuCustomerId === customer.id}
+                                                aria-haspopup="menu"
+                                                onClick={(e) => handleMenuToggle(customer.id, e)}
+                                                className={cn(
+                                                    "rounded-lg p-2 transition-all",
+                                                    isLight
+                                                        ? openMenuCustomerId === customer.id
+                                                            ? "bg-indigo-50 text-indigo-600"
+                                                            : "text-slate-500 hover:bg-slate-100 hover:text-indigo-600"
+                                                        : openMenuCustomerId === customer.id
+                                                          ? "bg-white/10 text-indigo-400"
+                                                          : "text-slate-400 hover:bg-white/10 hover:text-indigo-400",
+                                                )}
+                                            >
+                                                <MoreHorizontal className="h-4 w-4 md:h-5 md:w-5" />
                                             </button>
                                         </td>
                                     </tr>
@@ -192,6 +287,75 @@ export default function CustomersPage() {
                     </div>
                 </div>
             </div>
+
+            {mounted &&
+                openMenuCustomerId !== null &&
+                menuRect !== null &&
+                createPortal(
+                    <>
+                        <div
+                            className="fixed inset-0 z-[100]"
+                            aria-hidden
+                            onClick={closeMenu}
+                        />
+                        <div
+                            role="menu"
+                            style={{
+                                position: "fixed",
+                                top: menuRect.top,
+                                left: menuRect.left,
+                                width: MENU_WIDTH_PX,
+                                zIndex: 101,
+                            }}
+                            className={cn(
+                                "overflow-hidden rounded-xl border shadow-xl backdrop-blur-xl",
+                                isLight
+                                    ? "border-slate-200 bg-white"
+                                    : "border-white/10 bg-slate-800/95",
+                            )}
+                        >
+                            {(() => {
+                                const c = customers.find((x) => x.id === openMenuCustomerId)
+                                if (!c) return null
+                                const itemCls = isLight
+                                    ? "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700"
+                                    : "flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-slate-200 transition-colors hover:bg-indigo-500 hover:text-white"
+                                return (
+                                    <>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => viewInShopify(c.id)}
+                                            className={itemCls}
+                                        >
+                                            <ExternalLink className="h-4 w-4 shrink-0" />
+                                            View in Shopify
+                                        </button>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => copyCustomerId(c.id)}
+                                            className={itemCls}
+                                        >
+                                            <Copy className="h-4 w-4 shrink-0" />
+                                            Copy customer ID
+                                        </button>
+                                        <button
+                                            type="button"
+                                            role="menuitem"
+                                            onClick={() => copyEmail(c.email)}
+                                            className={itemCls}
+                                        >
+                                            <Mail className="h-4 w-4 shrink-0" />
+                                            Copy email
+                                        </button>
+                                    </>
+                                )
+                            })()}
+                        </div>
+                    </>,
+                    document.body,
+                )}
         </div>
     )
 }

@@ -728,9 +728,9 @@ export default function JunoEngineModulesPage() {
         )
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 pb-28">
-            <div className="flex-shrink-0 space-y-5 mb-6">
-                <div>
+        <div className="flex w-full flex-col gap-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1 space-y-1">
                     <h1
                         className={cn(
                             "text-2xl md:text-3xl font-extrabold tracking-tight",
@@ -741,7 +741,7 @@ export default function JunoEngineModulesPage() {
                     </h1>
                     <p
                         className={cn(
-                            "text-sm mt-1 max-w-2xl",
+                            "text-sm max-w-2xl",
                             isLight ? "text-slate-600" : "text-slate-400",
                         )}
                     >
@@ -756,7 +756,48 @@ export default function JunoEngineModulesPage() {
                         </Link>
                         .
                     </p>
+                    <p
+                        className={cn(
+                            "text-xs pt-1",
+                            isLight ? "text-slate-500" : "text-slate-500",
+                        )}
+                    >
+                        Changes are local until you save.
+                    </p>
                 </div>
+                {activeStoreId && !loading ? (
+                    <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
+                        {toast ? (
+                            <p
+                                className={cn(
+                                    "max-w-xs text-right text-xs sm:max-w-sm",
+                                    toast.includes("fail") || toast.includes("Failed")
+                                        ? isLight
+                                            ? "text-amber-700"
+                                            : "text-amber-400"
+                                        : isLight
+                                          ? "text-emerald-700"
+                                          : "text-emerald-400/90",
+                                )}
+                            >
+                                {toast}
+                            </p>
+                        ) : null}
+                        <button
+                            type="button"
+                            disabled={saving}
+                            onClick={() => void saveChanges()}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50 sm:min-w-[10rem]"
+                        >
+                            {saving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                                <Save className="h-4 w-4" />
+                            )}
+                            Save changes
+                        </button>
+                    </div>
+                ) : null}
             </div>
 
             {!activeStoreId ? (
@@ -852,69 +893,6 @@ export default function JunoEngineModulesPage() {
                                 </div>
                             )
                         })}
-                    </div>
-
-                    <p
-                        className={cn(
-                            "text-xs mt-6",
-                            isLight ? "text-slate-500" : "text-slate-500",
-                        )}
-                    >
-                        Widget appearance:{" "}
-                        <Link
-                            href="/dashboard/juno-engine/storefront-chat"
-                            className="font-semibold text-indigo-500 hover:underline"
-                        >
-                            Storefront Chat Inbox
-                        </Link>
-                    </p>
-
-                    <div
-                        className={cn(
-                            "fixed bottom-0 left-0 right-0 md:left-72 z-[60] border-t px-4 py-3 md:px-8",
-                            isLight
-                                ? "border-slate-200 bg-white/95 backdrop-blur-md"
-                                : "border-white/10 bg-slate-950/95 backdrop-blur-md",
-                        )}
-                        style={{
-                            paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))",
-                        }}
-                    >
-                        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
-                            {toast ? (
-                                <p
-                                    className={cn(
-                                        "text-xs flex-1 min-w-0",
-                                        toast.includes("fail") || toast.includes("Failed")
-                                            ? isLight
-                                                ? "text-amber-700"
-                                                : "text-amber-400"
-                                            : isLight
-                                              ? "text-emerald-700"
-                                              : "text-emerald-400/90",
-                                    )}
-                                >
-                                    {toast}
-                                </p>
-                            ) : (
-                                <span className="text-xs text-slate-500 hidden sm:inline">
-                                    Changes are local until you save.
-                                </span>
-                            )}
-                            <button
-                                type="button"
-                                disabled={saving}
-                                onClick={() => void saveChanges()}
-                                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold disabled:opacity-50 shrink-0 shadow-lg shadow-indigo-900/20"
-                            >
-                                {saving ? (
-                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <Save className="w-4 h-4" />
-                                )}
-                                Save changes
-                            </button>
-                        </div>
                     </div>
 
                     {modal}
