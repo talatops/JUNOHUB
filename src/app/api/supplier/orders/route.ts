@@ -2,6 +2,10 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
+import {
+    SUPPLIER_HOLD_REASON_LABELS,
+    isSupplierHoldReasonCode,
+} from "@/lib/orders/supplierHoldReasons"
 
 /**
  * GET /api/supplier/orders
@@ -158,10 +162,16 @@ export async function GET() {
                 fulfillmentStatus: normalizeFulfillmentStatus(order.fulfillmentStatus),
                 status: normalizeFulfillmentStatus(order.fulfillmentStatus),
                 fulfillmentStatusDisplay: toVendorDisplayStatus(order.fulfillmentStatus),
-                trackingNumber: (order as unknown as { trackingNumber?: string | null }).trackingNumber,
-                trackingCompany: (order as unknown as { trackingCompany?: string | null }).trackingCompany,
-                trackingUrl: (order as unknown as { trackingUrl?: string | null }).trackingUrl,
-                pendingVendorSync: (order as unknown as { pendingVendorSync?: boolean }).pendingVendorSync ?? false,
+                trackingNumber: order.trackingNumber,
+                trackingCompany: order.trackingCompany,
+                trackingUrl: order.trackingUrl,
+                pendingVendorSync: order.pendingVendorSync,
+                holdReasonCode: order.holdReasonCode,
+                holdNote: order.holdNote,
+                holdReasonLabel:
+                    order.holdReasonCode && isSupplierHoldReasonCode(order.holdReasonCode)
+                        ? SUPPLIER_HOLD_REASON_LABELS[order.holdReasonCode]
+                        : null,
                 vendorName: order.store.businessName || order.store.shopifyStoreName,
                 createdAt: order.shopifyCreatedAt || order.createdAt,
                 store: order.store,

@@ -1,5 +1,7 @@
 import { z } from "zod"
 import { emailSchema } from "@/lib/validation"
+import { normalizeFulfillmentStatus } from "@/lib/orders/fulfillmentStatus"
+import { isSupplierHoldReasonCode } from "@/lib/orders/supplierHoldReasons"
 
 const totpCodeSchema = z
     .string()
@@ -171,10 +173,56 @@ function optionalTrackingField(maxLen: number) {
         .refine((v) => v === null || v.length <= maxLen, "Tracking value too long")
 }
 
+function optionalHoldNoteField() {
+    return z
+        .union([z.string(), z.null(), z.undefined()])
+        .transform((v) => {
+            if (v === undefined || v === null) return null
+            const t = String(v).trim()
+            return t === "" ? null : t.slice(0, 2000)
+        })
+}
+
+function optionalHoldReasonCodeField() {
+    return z
+        .union([z.string(), z.null(), z.undefined()])
+        .transform((v) => {
+            if (v === undefined || v === null) return null
+            const t = String(v).trim()
+            return t === "" ? null : t
+        })
+}
+
 /** PATCH /api/supplier/orders/[orderId] */
-export const supplierOrderPatchSchema = z.object({
-    fulfillmentStatus: z.union([z.string(), z.number(), z.null(), z.undefined()]).optional(),
-    trackingNumber: optionalTrackingField(500),
-    trackingCompany: optionalTrackingField(500),
-    trackingUrl: optionalTrackingField(2000),
-})
+export const supplierOrderPatchSchema = z
+    .object({
+        fulfillmentStatus: z.union([z.string(), z.number(), z.null(), z.undefined()]).optional(),
+        trackingNumber: optionalTrackingField(500),
+        trackingCompany: optionalTrackingField(500),
+        trackingUrl: optionalTrackingField(2000),
+        holdReasonCode: optionalHoldReasonCodeField(),
+        holdNote: optionalHoldNoteField(),
+    })
+    .superRefine((data, ctx) => {
+        const fsRaw = data.fulfillmentStatus
+        if (fsRaw === undefined || fsRaw === null) return
+
+        const canonical = normalizeFulfillmentStatus(String(fsRaw))
+        if (canonical !== "ON_HOLD") return
+
+        if (!data.holdReasonCode || !isSupplierHoldReasonCode(data.holdReasonCode)) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "holdReasonCode is required for On hold status",
+                path: ["holdReasonCode"],
+            })
+            return
+        }
+        if (data.holdReasonCode === "other" && !data.holdNote?.trim()) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Note is required when reason is Other",
+                path: ["holdNote"],
+            })
+        }
+    })

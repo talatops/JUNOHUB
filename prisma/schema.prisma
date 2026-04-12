@@ -189,6 +189,9 @@ model CachedOrder {
   currency            String?
   financialStatus     String?
   fulfillmentStatus   String?
+  /** When fulfillment is ON_HOLD: machine reason (see SUPPLIER_HOLD_REASON_CODES). */
+  holdReasonCode      String?
+  holdNote            String?  @db.Text
   trackingNumber      String?
   trackingCompany     String?
   trackingUrl         String?

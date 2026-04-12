@@ -2,7 +2,12 @@ import { NextResponse } from "next/server"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { normalizeFulfillmentStatus, toVendorDisplayStatus } from "@/lib/orders/fulfillmentStatus"
+import {
+    SUPPLIER_HOLD_REASON_LABELS,
+    isSupplierHoldReasonCode,
+} from "@/lib/orders/supplierHoldReasons"
 import { supplierOrderPatchSchema, validationErrorResponse } from "@/lib/api-schemas"
+import { runSupplierOrderShopifySync } from "@/lib/shopify/supplierOrderShopifySync"
 
 async function getSupplierContext(userId: string) {
     const profile = await prisma.supplierProfile.findUnique({
@@ -52,242 +57,6 @@ function isSupplierAllowedForOrder(
         const pid = item.product_id?.toString()
         return !!pid && syncedProductIds.has(pid)
     })
-}
-
-async function syncOrderToShopify(
-    storeId: string,
-    shopifyOrderId: string,
-    fulfillmentStatus: string,
-    trackingNumber: string | null,
-    trackingCompany: string | null,
-    trackingUrl: string | null,
-): Promise<{ ok: boolean; error?: string }> {
-    const canonical = normalizeFulfillmentStatus(fulfillmentStatus)
-    if (canonical !== "SHIPPED" && canonical !== "FULFILLED") {
-        // No fulfillment push needed for non-shipped statuses.
-        return { ok: true }
-    }
-    if (!trackingNumber || !trackingCompany) {
-        return { ok: false, error: "Tracking platform and tracking number are required for shipped/fulfilled sync." }
-    }
-
-    const store = await prisma.store.findUnique({
-        where: { id: storeId },
-        select: { shopifyDomain: true, shopifyAccessToken: true },
-    })
-    if (!store?.shopifyDomain || !store?.shopifyAccessToken) {
-        return { ok: false, error: "Shopify store not connected." }
-    }
-    const cleanDomain = store.shopifyDomain.trim().replace(/^https?:\/\//, "").replace(/\/$/, "")
-
-    const fetchScopes = async (): Promise<string[]> => {
-        try {
-            const res = await fetch(`https://${cleanDomain}/admin/oauth/access_scopes.json`, {
-                method: "GET",
-                headers: {
-                    "X-Shopify-Access-Token": store.shopifyAccessToken,
-                    "Content-Type": "application/json",
-                },
-            })
-            if (!res.ok) return []
-            const payload = (await res.json()) as { access_scopes?: Array<{ handle?: string }> }
-            return (payload.access_scopes || []).map((s) => s.handle || "").filter(Boolean)
-        } catch {
-            return []
-        }
-    }
-
-    const updateTrackingOnExistingFulfillment = async (): Promise<{ ok: boolean; error?: string }> => {
-        const listRes = await fetch(
-            `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillments.json`,
-            {
-                method: "GET",
-                headers: {
-                    "X-Shopify-Access-Token": store.shopifyAccessToken,
-                    "Content-Type": "application/json",
-                },
-            },
-        )
-        if (!listRes.ok) {
-            const details = await listRes.text().catch(() => "Unknown Shopify response")
-            return { ok: false, error: `Read existing fulfillments failed: ${details}` }
-        }
-
-        const listPayload = (await listRes.json()) as {
-            fulfillments?: Array<{ id: number; created_at?: string }>
-        }
-        const fulfillments = listPayload.fulfillments || []
-        if (fulfillments.length === 0) {
-            return { ok: false, error: "No existing fulfillment found to update tracking." }
-        }
-
-        const sorted = [...fulfillments].sort((a, b) => {
-            const aTs = a.created_at ? new Date(a.created_at).getTime() : 0
-            const bTs = b.created_at ? new Date(b.created_at).getTime() : 0
-            return bTs - aTs
-        })
-        const latest = sorted[0]
-
-        const updateRes = await fetch(
-            `https://${cleanDomain}/admin/api/2024-01/fulfillments/${latest.id}/update_tracking.json`,
-            {
-                method: "POST",
-                headers: {
-                    "X-Shopify-Access-Token": store.shopifyAccessToken,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    fulfillment: {
-                        notify_customer: false,
-                        tracking_info: {
-                            number: trackingNumber,
-                            company: trackingCompany,
-                            url: trackingUrl || undefined,
-                        },
-                    },
-                }),
-            },
-        )
-        if (!updateRes.ok) {
-            const details = await updateRes.text().catch(() => "Unknown Shopify response")
-            return { ok: false, error: `Update tracking on existing fulfillment failed: ${details}` }
-        }
-        return { ok: true }
-    }
-
-    const createLegacyFulfillmentFallback = async (): Promise<{ ok: boolean; error?: string }> => {
-        const orderRes = await fetch(
-            `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}.json?status=any`,
-            {
-                method: "GET",
-                headers: {
-                    "X-Shopify-Access-Token": store.shopifyAccessToken,
-                    "Content-Type": "application/json",
-                },
-            },
-        )
-        if (!orderRes.ok) {
-            const details = await orderRes.text().catch(() => "Unknown Shopify response")
-            return { ok: false, error: `Fallback fetch order failed: ${details}` }
-        }
-
-        const orderPayload = (await orderRes.json()) as {
-            order?: {
-                line_items?: Array<{ id: number; fulfillable_quantity?: number; quantity?: number }>
-            }
-        }
-        const lineItems = (orderPayload.order?.line_items || [])
-            .filter((li) => (li.fulfillable_quantity ?? li.quantity ?? 0) > 0)
-            .map((li) => ({
-                id: li.id,
-                quantity: li.fulfillable_quantity ?? li.quantity ?? 1,
-            }))
-
-        const legacyPayload = {
-            fulfillment: {
-                notify_customer: false,
-                tracking_number: trackingNumber,
-                tracking_company: trackingCompany,
-                tracking_urls: trackingUrl ? [trackingUrl] : undefined,
-                line_items: lineItems.length > 0 ? lineItems : undefined,
-            },
-        }
-
-        const legacyRes = await fetch(
-            `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillments.json`,
-            {
-                method: "POST",
-                headers: {
-                    "X-Shopify-Access-Token": store.shopifyAccessToken,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(legacyPayload),
-            },
-        )
-        if (!legacyRes.ok) {
-            const details = await legacyRes.text().catch(() => "Unknown Shopify response")
-            return { ok: false, error: `Legacy fulfillment failed: ${details}` }
-        }
-        return { ok: true }
-    }
-
-    const foRes = await fetch(
-        `https://${cleanDomain}/admin/api/2024-01/orders/${shopifyOrderId}/fulfillment_orders.json`,
-        {
-            method: "GET",
-            headers: {
-                "X-Shopify-Access-Token": store.shopifyAccessToken,
-                "Content-Type": "application/json",
-            },
-        },
-    )
-    if (!foRes.ok) {
-        const details = await foRes.text().catch(() => "Unknown Shopify response")
-        const fallback = await createLegacyFulfillmentFallback()
-        if (fallback.ok) return fallback
-        const scopes = await fetchScopes()
-        return {
-            ok: false,
-            error: `Failed to read fulfillment orders: ${details}. Fallback also failed: ${fallback.error}. Token scopes: [${scopes.join(", ")}]. Re-install/reconnect app after scope changes.`,
-        }
-    }
-
-    const foJson = (await foRes.json()) as {
-        fulfillment_orders?: Array<{ id: number; status?: string; request_status?: string }>
-    }
-    const allFulfillmentOrders = foJson.fulfillment_orders || []
-    const fulfillmentOrders = allFulfillmentOrders.filter((fo) => {
-        const status = String(fo.status || "").toLowerCase()
-        // Only try fulfillment orders that are still actionable.
-        return status && status !== "closed" && status !== "cancelled" && status !== "incomplete"
-    })
-    if (fulfillmentOrders.length === 0) {
-        const closedCount = allFulfillmentOrders.filter((fo) => String(fo.status || "").toLowerCase() === "closed").length
-        if (closedCount > 0) {
-            // Closed fulfillment orders are usually already fulfilled: update tracking on existing fulfillment.
-            const updated = await updateTrackingOnExistingFulfillment()
-            if (updated.ok) return updated
-            return { ok: false, error: `All fulfillment orders are closed. ${updated.error}` }
-        }
-        return { ok: false, error: "No actionable fulfillment orders available for this order." }
-    }
-
-    const payload = {
-        fulfillment: {
-            notify_customer: false,
-            tracking_info: {
-                number: trackingNumber,
-                company: trackingCompany,
-                url: trackingUrl || undefined,
-            },
-            line_items_by_fulfillment_order: fulfillmentOrders.map((f) => ({
-                fulfillment_order_id: f.id,
-            })),
-        },
-    }
-
-    const syncRes = await fetch(`https://${cleanDomain}/admin/api/2024-01/fulfillments.json`, {
-        method: "POST",
-        headers: {
-            "X-Shopify-Access-Token": store.shopifyAccessToken,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-    })
-    if (!syncRes.ok) {
-        const details = await syncRes.text().catch(() => "Unknown Shopify response")
-        const updated = await updateTrackingOnExistingFulfillment()
-        if (updated.ok) return updated
-        const fallback = await createLegacyFulfillmentFallback()
-        if (fallback.ok) return fallback
-        const scopes = await fetchScopes()
-        return {
-            ok: false,
-            error: `Shopify fulfillment sync failed: ${details}. Existing fulfillment tracking update failed: ${updated.error}. Fallback also failed: ${fallback.error}. Token scopes: [${scopes.join(", ")}]. Re-install/reconnect app after scope changes.`,
-        }
-    }
-
-    return { ok: true }
 }
 
 export async function GET(
@@ -372,9 +141,15 @@ export async function GET(
                 financialStatus: order.financialStatus,
                 fulfillmentStatus: normalizeFulfillmentStatus(order.fulfillmentStatus),
                 fulfillmentStatusDisplay: toVendorDisplayStatus(order.fulfillmentStatus),
-                trackingNumber: (order as unknown as { trackingNumber?: string | null }).trackingNumber,
-                trackingCompany: (order as unknown as { trackingCompany?: string | null }).trackingCompany,
-                trackingUrl: (order as unknown as { trackingUrl?: string | null }).trackingUrl,
+                trackingNumber: order.trackingNumber,
+                trackingCompany: order.trackingCompany,
+                trackingUrl: order.trackingUrl,
+                holdReasonCode: order.holdReasonCode,
+                holdNote: order.holdNote,
+                holdReasonLabel:
+                    order.holdReasonCode && isSupplierHoldReasonCode(order.holdReasonCode)
+                        ? SUPPLIER_HOLD_REASON_LABELS[order.holdReasonCode]
+                        : null,
                 createdAt: order.shopifyCreatedAt || order.createdAt,
                 lineItems,
                 customer,
@@ -404,7 +179,14 @@ export async function PATCH(
         if (!parsed.success) {
             return validationErrorResponse(parsed.error)
         }
-        const { fulfillmentStatus: fs, trackingNumber, trackingCompany, trackingUrl } = parsed.data
+        const {
+            fulfillmentStatus: fs,
+            trackingNumber: trIn,
+            trackingCompany: tcIn,
+            trackingUrl: tuIn,
+            holdReasonCode: hrIn,
+            holdNote: hnIn,
+        } = parsed.data
 
         const fulfillmentStatus = normalizeFulfillmentStatus(
             fs === undefined || fs === null ? undefined : String(fs),
@@ -417,17 +199,41 @@ export async function PATCH(
 
         const order = await prisma.cachedOrder.findFirst({
             where: { shopifyOrderId: orderId },
-            select: { id: true, storeId: true, lineItems: true },
+            select: {
+                id: true,
+                storeId: true,
+                lineItems: true,
+                fulfillmentStatus: true,
+            },
         })
         if (!order) return NextResponse.json({ message: "Order not found" }, { status: 404 })
         if (!isSupplierAllowedForOrder(ctx.syncsByStore, order.storeId, order.lineItems)) {
             return NextResponse.json({ message: "Order not accessible" }, { status: 403 })
         }
 
+        const previousCanonical = normalizeFulfillmentStatus(order.fulfillmentStatus)
+
+        let trackingNumber = trIn
+        let trackingCompany = tcIn
+        let trackingUrl = tuIn
+        let holdReasonCode: string | null = hrIn ?? null
+        let holdNote: string | null = hnIn ?? null
+
+        if (fulfillmentStatus === "ON_HOLD") {
+            trackingNumber = null
+            trackingCompany = null
+            trackingUrl = null
+        } else {
+            holdReasonCode = null
+            holdNote = null
+        }
+
         const updated = await prisma.cachedOrder.update({
             where: { id: order.id },
             data: {
                 fulfillmentStatus,
+                holdReasonCode,
+                holdNote,
                 trackingNumber,
                 trackingCompany,
                 trackingUrl,
@@ -435,21 +241,29 @@ export async function PATCH(
                 lastSupplierUpdateAt: new Date(),
                 lastSupplierUpdatedBy: session.user.id,
                 lastShopifySyncError: null,
-            } as unknown as Record<string, unknown>,
+            },
             select: {
                 shopifyOrderId: true,
                 fulfillmentStatus: true,
+                holdReasonCode: true,
+                holdNote: true,
             },
         })
 
-        const shopifySync = await syncOrderToShopify(
-            order.storeId,
-            orderId,
-            fulfillmentStatus,
+        const shopifySync = await runSupplierOrderShopifySync({
+            storeId: order.storeId,
+            shopifyOrderId: orderId,
+            previousCanonical,
+            newCanonical: fulfillmentStatus,
             trackingNumber,
             trackingCompany,
             trackingUrl,
-        )
+            holdCode:
+                fulfillmentStatus === "ON_HOLD" && holdReasonCode && isSupplierHoldReasonCode(holdReasonCode)
+                    ? holdReasonCode
+                    : null,
+            holdNote,
+        })
 
         if (shopifySync.ok) {
             await prisma.cachedOrder.update({
@@ -458,7 +272,7 @@ export async function PATCH(
                     pendingVendorSync: false,
                     lastShopifySyncAt: new Date(),
                     lastShopifySyncError: null,
-                } as unknown as Record<string, unknown>,
+                },
             })
         } else {
             await prisma.cachedOrder.update({
@@ -466,7 +280,7 @@ export async function PATCH(
                 data: {
                     pendingVendorSync: true,
                     lastShopifySyncError: shopifySync.error || "Unknown sync error",
-                } as unknown as Record<string, unknown>,
+                },
             })
         }
 
@@ -476,6 +290,10 @@ export async function PATCH(
                 trackingNumber,
                 trackingCompany,
                 trackingUrl,
+                holdReasonLabel:
+                    holdReasonCode && isSupplierHoldReasonCode(holdReasonCode)
+                        ? SUPPLIER_HOLD_REASON_LABELS[holdReasonCode]
+                        : null,
                 pendingVendorSync: !shopifySync.ok,
                 lastShopifySyncError: shopifySync.ok ? null : shopifySync.error || "Unknown sync error",
                 fulfillmentStatusDisplay: toVendorDisplayStatus(updated.fulfillmentStatus),
