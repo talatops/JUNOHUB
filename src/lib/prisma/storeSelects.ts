@@ -30,6 +30,7 @@ export const storeSelectGmailL1Context = {
     categoryMetadetailsEnabled: true,
     aiModules: true,
     sharedFieldAnswers: true,
+    gmailReplyTheme: true,
 } as const
 
 export const storeSelectPatchStorefrontAi = {
@@ -43,6 +44,7 @@ export const storeSelectPatchStorefrontAi = {
     aiModules: true,
     modulePolicies: true,
     sharedFieldAnswers: true,
+    gmailReplyTheme: true,
 } as const
 
 /** Session / OTP fields for L1 storefront replies */

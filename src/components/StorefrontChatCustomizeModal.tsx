@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Loader2, Palette, Save, Upload, WandSparkles, X } from "lucide-react"
 import { useTheme } from "@/components/ThemeProvider"
+import { publicAssetUrlForUi } from "@/lib/utils"
 
 export type StorefrontChatCustomization = {
     storefrontChatName: string
@@ -288,7 +289,11 @@ export default function StorefrontChatCustomizeModal({
                                             <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${form.storefrontChatBrandColor}22` }}>
                                                 {form.storefrontChatLogoUrl ? (
                                                     // eslint-disable-next-line @next/next/no-img-element
-                                                    <img src={form.storefrontChatLogoUrl} alt="Logo preview" className="w-5 h-5 object-contain rounded" />
+                                                    <img
+                                                        src={publicAssetUrlForUi(form.storefrontChatLogoUrl)}
+                                                        alt="Logo preview"
+                                                        className="w-5 h-5 object-contain rounded"
+                                                    />
                                                 ) : (
                                                     <Palette className="w-4 h-4" style={{ color: form.storefrontChatBrandColor }} />
                                                 )}

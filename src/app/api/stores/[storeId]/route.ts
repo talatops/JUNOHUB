@@ -17,6 +17,11 @@ import {
     removeThemeLiquidInjection,
     upsertThemeLiquidInjection
 } from "@/lib/shopify/theme"
+import {
+    gmailReplyThemeBodySchema,
+    parseGmailReplyThemeJson,
+    resolvedThemeFromBody,
+} from "@/lib/gmail/emailReplyTheme"
 
 /**
  * DELETE /api/stores/[storeId]
@@ -554,6 +559,7 @@ export async function GET(
             aiModules: unknown
             modulePolicies?: unknown
             sharedFieldAnswers?: unknown
+            gmailReplyTheme?: unknown
         }
 
         let store: StoreGetRow | null = null
@@ -567,6 +573,7 @@ export async function GET(
                     aiModules: true,
                     modulePolicies: true,
                     sharedFieldAnswers: true,
+                    gmailReplyTheme: true,
                 },
             })
         } catch (firstErr) {
@@ -581,6 +588,7 @@ export async function GET(
                     businessName: true,
                     categoryMetadetailsEnabled: true,
                     aiModules: true,
+                    gmailReplyTheme: true,
                 },
             })
         }
@@ -596,6 +604,12 @@ export async function GET(
             aiModules: store.aiModules,
             modulePolicies: parseModulePoliciesJson(store.modulePolicies ?? null),
             sharedFieldAnswers: parseSharedFieldAnswersJson(store.sharedFieldAnswers ?? null),
+            gmailReplyTheme:
+                store.gmailReplyTheme === undefined
+                    ? undefined
+                    : store.gmailReplyTheme === null
+                      ? null
+                      : parseGmailReplyThemeJson(store.gmailReplyTheme),
         })
     } catch (error) {
         console.error("Error reading store settings:", error)
@@ -697,6 +711,25 @@ export async function PATCH(
             reembedStructured = true
         }
 
+        if (data.gmailReplyTheme !== undefined) {
+            if (data.gmailReplyTheme === null) {
+                updatePayload.gmailReplyTheme = Prisma.JsonNull
+            } else {
+                const parsed = gmailReplyThemeBodySchema.safeParse(data.gmailReplyTheme)
+                if (!parsed.success) {
+                    return NextResponse.json(
+                        { message: "Invalid gmailReplyTheme", issues: parsed.error.flatten() },
+                        { status: 400 },
+                    )
+                }
+                const normalized = resolvedThemeFromBody(parsed.data)
+                // Plain JSON object for Prisma Json (avoids odd runtime serialization edge cases).
+                updatePayload.gmailReplyTheme = JSON.parse(
+                    JSON.stringify(normalized),
+                ) as Prisma.InputJsonValue
+            }
+        }
+
         const updatedStore = await prisma.store.update({
             where: { id: storeId },
             data: updatePayload,
@@ -744,6 +777,10 @@ export async function PATCH(
             aiModules: updatedStore.aiModules,
             modulePolicies: parseModulePoliciesJson(updatedStore.modulePolicies),
             sharedFieldAnswers: parseSharedFieldAnswersJson(updatedStore.sharedFieldAnswers),
+            gmailReplyTheme:
+                updatedStore.gmailReplyTheme == null
+                    ? null
+                    : parseGmailReplyThemeJson(updatedStore.gmailReplyTheme),
         })
     } catch (error) {
         console.error("Error updating store settings:", error)

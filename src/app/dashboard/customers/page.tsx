@@ -214,7 +214,9 @@ export default function CustomersPage() {
                             <thead>
                                 <tr className="bg-white/5 border-b border-white/10">
                                     <th className="px-4 md:px-8 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest min-w-[200px]">Customer</th>
-                                    <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Orders</th>
+                                    <th className="px-3 md:px-6 py-3 md:py-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                        Orders
+                                    </th>
                                     <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Spent</th>
                                     <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden md:table-cell">Location</th>
                                     <th className="px-3 md:px-6 py-3 md:py-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap hidden lg:table-cell">Member Since</th>
@@ -242,8 +244,8 @@ export default function CustomersPage() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-3 md:px-6 py-3 md:py-4 text-center">
-                                            <div className="px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg inline-flex items-center gap-1.5 font-black text-[10px]">
+                                        <td className="px-3 md:px-6 py-3 md:py-4 align-middle text-left">
+                                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-500/20 px-2 py-1 font-black text-[10px] text-indigo-400">
                                                 {customer.orders_count} ORDERS
                                             </div>
                                         </td>

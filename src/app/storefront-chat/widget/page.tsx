@@ -51,25 +51,37 @@ export default function StorefrontChatWidgetPage() {
     const otpInputRef = useRef<HTMLInputElement | null>(null)
 
     useEffect(() => {
-        // This page is rendered inside a storefront iframe. Force a neutral
-        // full-height canvas to avoid inheriting dark app-shell backgrounds.
+        // Embedded in a storefront iframe: one scroll surface only (the message list).
+        // If html/body can scroll, the wheel often moves the page scrollbar instead of chat.
         const html = document.documentElement
         const body = document.body
         const prevHtmlBg = html.style.backgroundColor
         const prevBodyBg = body.style.backgroundColor
         const prevBodyMargin = body.style.margin
         const prevBodyMinHeight = body.style.minHeight
+        const prevHtmlH = html.style.height
+        const prevHtmlOverflow = html.style.overflow
+        const prevBodyH = body.style.height
+        const prevBodyOverflow = body.style.overflow
 
         html.style.backgroundColor = "#ffffff"
         body.style.backgroundColor = "#ffffff"
         body.style.margin = "0"
-        body.style.minHeight = "100vh"
+        html.style.height = "100%"
+        html.style.overflow = "hidden"
+        body.style.height = "100%"
+        body.style.minHeight = "100%"
+        body.style.overflow = "hidden"
 
         return () => {
             html.style.backgroundColor = prevHtmlBg
             body.style.backgroundColor = prevBodyBg
             body.style.margin = prevBodyMargin
             body.style.minHeight = prevBodyMinHeight
+            html.style.height = prevHtmlH
+            html.style.overflow = prevHtmlOverflow
+            body.style.height = prevBodyH
+            body.style.overflow = prevBodyOverflow
         }
     }, [])
 
@@ -145,6 +157,18 @@ export default function StorefrontChatWidgetPage() {
             setTimeout(() => otpInputRef.current?.focus(), 0)
         }
     }, [otpPhase])
+
+    /** Parent storefront often receives wheel events before the iframe; capture + stop on the chat scroller. */
+    useEffect(() => {
+        if (!shop) return
+        const el = messagesScrollRef.current
+        if (!el) return
+        const stopWheelBubble = (e: WheelEvent) => {
+            e.stopPropagation()
+        }
+        el.addEventListener("wheel", stopWheelBubble, { capture: true })
+        return () => el.removeEventListener("wheel", stopWheelBubble, { capture: true })
+    }, [shop, messages.length])
 
     const sendOtp = async () => {
         if (!shop || !visitorId) return
@@ -272,10 +296,12 @@ export default function StorefrontChatWidgetPage() {
     }
 
     return (
-        <div className="flex h-screen w-screen min-h-0 flex-col overflow-hidden bg-white text-slate-900">
+        <div className="fixed inset-0 z-0 flex min-h-0 w-full flex-col overflow-hidden bg-white text-slate-900">
             <div
                 ref={messagesScrollRef}
-                className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 bg-gradient-to-b from-white to-slate-50 [scrollbar-gutter:stable]"
+                tabIndex={0}
+                className="min-h-0 flex-1 touch-pan-y overflow-y-auto overflow-x-hidden overscroll-y-contain p-4 bg-gradient-to-b from-white to-slate-50 [scrollbar-gutter:stable] outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/40"
+                style={{ WebkitOverflowScrolling: "touch" }}
             >
                 {sendError ? (
                     <div className="mb-3 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 text-xs font-medium">
