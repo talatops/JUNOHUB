@@ -690,7 +690,7 @@ model ChatMessage {
   /** Vendor store this thread belongs to (B2B JUNO CHAT). Null = legacy messages before per-store threading. */
   storeId                 String?
   kind                    ChatMessageKind @default(TEXT)
-  content                 String   @map("encryptedContent") @db.Text
+  content                 String   @db.Text
   attachment              Json?
 
   sender   User @relation("SentMessages", fields: [senderId], references: [id])
