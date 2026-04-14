@@ -5,7 +5,7 @@
 <h1 align="center">JUNO</h1>
 
 <p align="center">
-  🚀 Modern commerce & AI‑powered support infrastructure for Shopify‑based dropshipping businesses.
+  🚀 Modern commerce & AI‑powered support infrastructure for Shopify based dropshipping businesses.
 </p>
 
 <p align="center">
