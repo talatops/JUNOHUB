@@ -12,6 +12,8 @@ export type OpenAiChatOptions = {
     model?: string
     maxTokens?: number
     temperature?: number
+    /** Request strict JSON object output when supported. */
+    jsonObject?: boolean
 }
 
 /**
@@ -39,6 +41,7 @@ export async function openaiChatCompletion(
             messages,
             max_tokens: options.maxTokens ?? 512,
             temperature: options.temperature ?? 0.3,
+            ...(options.jsonObject ? { response_format: { type: "json_object" as const } } : {}),
         })
         const text = res.choices[0]?.message?.content?.trim() ?? null
         if (!text) {

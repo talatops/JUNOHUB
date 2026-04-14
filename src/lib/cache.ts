@@ -243,9 +243,21 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
         const pendingIds = new Set(pendingRows.map((r) => r.shopifyOrderId))
         const existingRows = await prisma.cachedOrder.findMany({
             where: { storeId, shopifyOrderId: { in: orderIds } },
-            select: { shopifyOrderId: true, fulfillmentStatus: true },
+            select: {
+                shopifyOrderId: true,
+                fulfillmentStatus: true,
+                holdReasonCode: true,
+            },
         })
-        const existingById = new Map(existingRows.map((r) => [r.shopifyOrderId, r.fulfillmentStatus]))
+        const existingById = new Map(
+            existingRows.map((r) => [
+                r.shopifyOrderId,
+                {
+                    fulfillmentStatus: r.fulfillmentStatus,
+                    holdReasonCode: r.holdReasonCode,
+                },
+            ]),
+        )
 
         // Use upsert for each order to handle duplicates gracefully
         // This ensures webhooks can update orders concurrently without conflicts
@@ -276,9 +288,12 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
                     totalPrice: order.total_price || "0",
                     currency: order.currency || null,
                     financialStatus: order.financial_status || null,
-                    fulfillmentStatus: pendingIds.has(order.id.toString())
-                        ? existingById.get(order.id.toString()) || null
-                        : order.fulfillment_status || null,
+                    fulfillmentStatus:
+                        pendingIds.has(order.id.toString()) ||
+                        (existingById.get(order.id.toString())?.fulfillmentStatus === "ON_HOLD" &&
+                            !!existingById.get(order.id.toString())?.holdReasonCode)
+                            ? existingById.get(order.id.toString())?.fulfillmentStatus || null
+                            : order.fulfillment_status || null,
                     lineItems: (order.line_items || []) as Prisma.InputJsonValue,
                     customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
                     shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,
@@ -481,13 +496,21 @@ export async function updateSingleProduct(storeId: string, product: ShopifyProdu
  * Update a single order in cache (for webhook updates)
  */
 export async function updateSingleOrder(storeId: string, order: ShopifyOrderRecord) {
-    const pendingRows = await prisma.$queryRaw<Array<{ pendingVendorSync: boolean; fulfillmentStatus: string | null }>>`
-        SELECT "pendingVendorSync", "fulfillmentStatus"
+    const pendingRows = await prisma.$queryRaw<
+        Array<{
+            pendingVendorSync: boolean
+            fulfillmentStatus: string | null
+            holdReasonCode: string | null
+        }>
+    >`
+        SELECT "pendingVendorSync", "fulfillmentStatus", "holdReasonCode"
         FROM "CachedOrder"
         WHERE "storeId" = ${storeId} AND "shopifyOrderId" = ${order.id.toString()}
         LIMIT 1
     `
     const shouldPreserve = pendingRows[0]?.pendingVendorSync === true
+    const hasSupplierHold =
+        pendingRows[0]?.fulfillmentStatus === "ON_HOLD" && !!pendingRows[0]?.holdReasonCode
     const preservedStatus = pendingRows[0]?.fulfillmentStatus ?? null
 
     await prisma.cachedOrder.upsert({
@@ -505,7 +528,8 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             totalPrice: order.total_price || "0",
             currency: order.currency || null,
             financialStatus: order.financial_status || null,
-            fulfillmentStatus: shouldPreserve ? preservedStatus : order.fulfillment_status || null,
+            fulfillmentStatus:
+                shouldPreserve || hasSupplierHold ? preservedStatus : order.fulfillment_status || null,
             lineItems: (order.line_items || []) as Prisma.InputJsonValue,
             customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
             shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,
@@ -517,7 +541,8 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             totalPrice: order.total_price || "0",
             currency: order.currency || null,
             financialStatus: order.financial_status || null,
-            fulfillmentStatus: shouldPreserve ? preservedStatus : order.fulfillment_status || null,
+            fulfillmentStatus:
+                shouldPreserve || hasSupplierHold ? preservedStatus : order.fulfillment_status || null,
             lineItems: (order.line_items || []) as Prisma.InputJsonValue,
             customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
             shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,

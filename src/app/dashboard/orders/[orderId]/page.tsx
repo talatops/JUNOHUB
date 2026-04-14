@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { ArrowLeft, ShoppingBag, User, Calendar, DollarSign, Package, MapPin, Phone, Mail, CheckCircle2, Clock, Loader2, AlertCircle, Truck } from "lucide-react"
+import { useTheme } from "@/components/ThemeProvider"
 
 interface LineItem {
     id: number
@@ -72,6 +73,8 @@ export default function OrderDetailsPage() {
     const router = useRouter()
     const params = useParams()
     const orderId = params?.orderId as string
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     const [order, setOrder] = useState<OrderDetails | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
@@ -228,7 +231,9 @@ export default function OrderDetailsPage() {
                                         order.fulfillment_status === "fulfilled"
                                             ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                                             : order.fulfillment_status === "on_hold"
-                                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/35"
+                                              ? isLight
+                                                  ? "bg-amber-50 text-amber-800 border border-amber-300"
+                                                  : "bg-amber-500/20 text-amber-300 border border-amber-500/35"
                                               : "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                                     }`}
                                 >
@@ -274,15 +279,33 @@ export default function OrderDetailsPage() {
                             <p className="text-xs text-red-300 mt-2">{order.last_shopify_sync_error}</p>
                         )}
                         {(order.fulfillment_status === "on_hold" || order.hold_reason_label) && (
-                            <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-2">
-                                <p className="text-xs font-bold uppercase tracking-wider text-amber-200">
+                            <div
+                                className={`mt-4 rounded-xl border p-4 space-y-2 ${
+                                    isLight
+                                        ? "border-amber-300 bg-amber-50"
+                                        : "border-amber-500/30 bg-amber-500/10"
+                                }`}
+                            >
+                                <p
+                                    className={`text-xs font-bold uppercase tracking-wider ${
+                                        isLight ? "text-amber-800" : "text-amber-200"
+                                    }`}
+                                >
                                     Supplier hold
                                 </p>
                                 {order.hold_reason_label ? (
-                                    <p className="text-sm text-white font-semibold">{order.hold_reason_label}</p>
+                                    <p className={`text-sm font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
+                                        {order.hold_reason_label}
+                                    </p>
                                 ) : null}
                                 {order.hold_note?.trim() ? (
-                                    <p className="text-sm text-amber-100/90 whitespace-pre-wrap">{order.hold_note}</p>
+                                    <p
+                                        className={`text-sm whitespace-pre-wrap ${
+                                            isLight ? "text-amber-800/90" : "text-amber-100/90"
+                                        }`}
+                                    >
+                                        {order.hold_note}
+                                    </p>
                                 ) : null}
                                 {!order.hold_reason_label && !order.hold_note?.trim() ? (
                                     <p className="text-sm text-slate-400">Reason details not available.</p>

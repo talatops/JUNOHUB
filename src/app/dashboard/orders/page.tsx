@@ -178,10 +178,15 @@ export default function OrdersPage() {
     })
 
     const getStatusStyles = (status: string | null) => {
-        switch (status) {
+        const normalized = (status || "").trim().toLowerCase()
+        switch (normalized) {
             case "fulfilled": return "bg-emerald-500/20 text-emerald-400"
             case "partial": return "bg-yellow-500/20 text-yellow-400"
-            default: return "bg-blue-500/20 text-blue-400"
+            default:
+                if (normalized === "on_hold" || normalized === "on hold") {
+                    return "bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/35"
+                }
+                return "bg-blue-500/20 text-blue-400"
         }
     }
 
@@ -340,8 +345,15 @@ export default function OrdersPage() {
                                             Payment: {order.financial_status}
                                         </span>
                                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 ${getStatusStyles(order.fulfillment_status)}`}>
-                                            {order.fulfillment_status === "fulfilled" ? <CheckCircle2 className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
-                                            {order.fulfillment_status || "Unfulfilled"}
+                                            {(order.fulfillment_status || "").trim().toLowerCase() === "fulfilled" ? (
+                                                <CheckCircle2 className="w-3 h-3" />
+                                            ) : (
+                                                <Clock className="w-3 h-3" />
+                                            )}
+                                            {(order.fulfillment_status || "").trim().toLowerCase() === "on_hold" ||
+                                            (order.fulfillment_status || "").trim().toLowerCase() === "on hold"
+                                                ? "On hold"
+                                                : order.fulfillment_status || "Unfulfilled"}
                                         </span>
                                         {order.pending_vendor_sync && (
                                             <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">

@@ -31,24 +31,23 @@ export const L1_MODULE_CUSTOMER_LABEL: Record<L1Module, string> = {
 
 type VendorUiModule = Exclude<L1Module, "UNKNOWN">
 
-/** Knowledge modules shown under “Knowledge” (FAQ is a separate card on the dashboard). */
-export const L1_KNOWLEDGE_MODULES_UI = [
+/**
+ * Canonical module order for dashboard settings.
+ * Groups below are derived from `MODULE_MANIFESTS` (single source of truth for pillar).
+ */
+const MODULE_UI_ORDER: VendorUiModule[] = [
+    "FAQ",
+    "CATEGORY_METADETAILS",
     "STORE_LOCAL",
     "FEEDBACK",
     "HUMAN_ESCALATION",
     "PRODUCT_FIT",
-] as const satisfies readonly VendorUiModule[]
-
-export const L1_TRANSACTIONAL_MODULES_UI = [
+    "INVENTORY_STOCK",
     "ORDER_STATUS",
     "ORDER_SUMMARY",
     "SHIPPING_TRACKING",
     "ORDER_CANCEL",
     "REFUND_STATUS",
-    "INVENTORY_STOCK",
-] as const satisfies readonly VendorUiModule[]
-
-export const L1_TICKET_MODULES_UI = [
     "RETURN_EXCHANGE",
     "ORDER_CHANGE",
     "COMPLAINT",
@@ -57,7 +56,20 @@ export const L1_TICKET_MODULES_UI = [
     "PAYMENT_PROBLEM",
     "WARRANTY",
     "WRONG_ITEM",
-] as const satisfies readonly VendorUiModule[]
+]
+
+/** Knowledge modules shown under “Knowledge” (FAQ + metadetails are separate cards). */
+export const L1_KNOWLEDGE_MODULES_UI = MODULE_UI_ORDER.filter(
+    (m) => m !== "FAQ" && m !== "CATEGORY_METADETAILS" && MODULE_MANIFESTS[m].pillar === "K",
+)
+
+export const L1_TRANSACTIONAL_MODULES_UI = MODULE_UI_ORDER.filter(
+    (m) => MODULE_MANIFESTS[m].pillar === "T",
+)
+
+export const L1_TICKET_MODULES_UI = MODULE_UI_ORDER.filter(
+    (m) => MODULE_MANIFESTS[m].pillar === "X",
+)
 
 /** Short dashboard card titles (grid + modal heading). */
 export const L1_MODULE_CARD_TITLE: Record<Exclude<L1Module, "UNKNOWN">, string> = {

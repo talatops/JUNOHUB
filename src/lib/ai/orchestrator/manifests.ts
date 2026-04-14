@@ -18,7 +18,7 @@ export const MODULE_MANIFESTS: Record<L1Module, ModuleManifest> = {
     SHIPPING_TRACKING: { pillar: "T", typicalSlots: ["order_ref"] },
     ORDER_CANCEL: { pillar: "T", typicalSlots: ["order_ref"] },
     REFUND_STATUS: { pillar: "T", typicalSlots: ["order_ref"] },
-    INVENTORY_STOCK: { pillar: "T", typicalSlots: ["product_query"] },
+    INVENTORY_STOCK: { pillar: "K", typicalSlots: ["product_query"] },
     RETURN_EXCHANGE: { pillar: "X", typicalSlots: ["order_ref", "reason"] },
     ORDER_CHANGE: { pillar: "X", typicalSlots: ["order_ref", "change_request"] },
     COMPLAINT: { pillar: "X", typicalSlots: ["issue"] },

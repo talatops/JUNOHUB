@@ -9,6 +9,8 @@ import {
   MessageCircleQuestion,
   Send,
   Sparkles,
+  Mail,
+  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -72,6 +74,14 @@ export default function TicketDetailPage() {
   const [msgBySupplier, setMsgBySupplier] = useState<Record<string, string>>({})
   const [draftingSupplierId, setDraftingSupplierId] = useState<string | null>(null)
   const [sendingSupplierId, setSendingSupplierId] = useState<string | null>(null)
+  const [supplierModalOpen, setSupplierModalOpen] = useState(false)
+  const [customerModalOpen, setCustomerModalOpen] = useState(false)
+  const [customerTo, setCustomerTo] = useState("")
+  const [customerSubject, setCustomerSubject] = useState("")
+  const [customerBody, setCustomerBody] = useState("")
+  const [draftingCustomer, setDraftingCustomer] = useState(false)
+  const [sendingCustomer, setSendingCustomer] = useState(false)
+  const [customerError, setCustomerError] = useState<string | null>(null)
 
   useEffect(() => {
     const loadTicket = async () => {
@@ -103,6 +113,12 @@ export default function TicketDetailPage() {
 
     void loadTicket()
   }, [params.ticketId])
+
+  useEffect(() => {
+    if (!ticket) return
+    setCustomerTo(ticket.customerEmail || "")
+    setCustomerSubject(`Re: ${ticket.rootSubject || ticket.subject || "Your support request"}`)
+  }, [ticket])
 
   const loadAskSupplierPreview = async () => {
     const ref = orderRefInput.trim()
@@ -209,6 +225,68 @@ export default function TicketDetailPage() {
     }
   }
 
+  const draftCustomerEmail = async () => {
+    if (!ticket) return
+    setDraftingCustomer(true)
+    setCustomerError(null)
+    try {
+      const res = await fetch("/api/juno-engine/tickets/email-customer/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId: ticket.id }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || "Draft failed")
+      if (typeof data.subject === "string" && data.subject.trim()) {
+        setCustomerSubject(data.subject)
+      }
+      if (typeof data.body === "string") {
+        setCustomerBody(data.body)
+      }
+    } catch (e) {
+      setCustomerError(e instanceof Error ? e.message : "Draft failed")
+    } finally {
+      setDraftingCustomer(false)
+    }
+  }
+
+  const sendCustomerEmail = async () => {
+    if (!ticket) return
+    const to = customerTo.trim()
+    const subject = customerSubject.trim()
+    const body = customerBody.trim()
+    if (!to || !subject || !body) {
+      setCustomerError("To, subject, and body are required.")
+      return
+    }
+    setSendingCustomer(true)
+    setCustomerError(null)
+    try {
+      const res = await fetch("/api/juno-engine/tickets/email-customer/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticketId: ticket.id,
+          to,
+          subject,
+          body,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.message || "Send failed")
+      setCustomerModalOpen(false)
+      setCustomerBody("")
+      setCustomerError(null)
+    } catch (e) {
+      setCustomerError(e instanceof Error ? e.message : "Send failed")
+    } finally {
+      setSendingCustomer(false)
+    }
+  }
+
+  const cleanDisplayText = (text: string): string =>
+    text.replace(/^Storefront escalation from visitor [^:]+:\s*/i, "").trim()
+
   const getStatusStyles = (status: TicketStatus | string) => {
     switch (status) {
       case "open":
@@ -300,7 +378,247 @@ export default function TicketDetailPage() {
               </div>
             </div>
 
-            {/* Ask supplier (per supplier, optional) */}
+            <div
+              className={cn(
+                "inline-flex items-center gap-2 p-1 rounded-xl border flex-shrink-0 w-fit",
+                isLight ? "bg-white border-slate-200" : "bg-white/5 border-white/10",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setSupplierModalOpen(true)}
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold text-xs inline-flex items-center gap-2 transition-colors",
+                  isLight
+                    ? "bg-indigo-600 text-white hover:bg-indigo-500"
+                    : "bg-indigo-600 text-white hover:bg-indigo-500",
+                )}
+              >
+                <MessageCircleQuestion className="w-4 h-4" />
+                Chat with supplier
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomerModalOpen(true)}
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold text-xs inline-flex items-center gap-2 border transition-colors",
+                  isLight
+                    ? "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+                    : "bg-white/10 text-white border-white/10 hover:bg-white/15",
+                )}
+              >
+                <Mail className="w-4 h-4" />
+                Email customer
+              </button>
+            </div>
+
+            {/* Ask supplier modal */}
+            {supplierModalOpen && (
+              <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center">
+                <div className={cn(
+                  "w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border p-5 space-y-4",
+                  isLight ? "bg-white border-slate-200" : "bg-slate-900 border-white/10"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <h2 className={cn("text-sm font-black uppercase tracking-wider", isLight ? "text-slate-900" : "text-white")}>
+                      Chat with supplier
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setSupplierModalOpen(false)}
+                      className={cn("p-2 rounded-lg", isLight ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10")}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className={cn("text-xs", isLight ? "text-slate-600" : "text-slate-400")}>
+                    Load suppliers for an order, then draft/send a per-supplier message.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      placeholder="Order # (e.g. 1002)"
+                      value={orderRefInput}
+                      onChange={(e) => setOrderRefInput(e.target.value)}
+                      className={cn(
+                        "flex-1 h-10 px-3 rounded-xl border text-sm font-medium",
+                        isLight
+                          ? "bg-slate-50 border-slate-200 text-slate-900"
+                          : "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+                      )}
+                    />
+                    <button
+                      type="button"
+                      disabled={askPreviewLoading}
+                      onClick={() => void loadAskSupplierPreview()}
+                      className="h-10 px-4 rounded-xl font-bold text-sm bg-indigo-600 text-white hover:bg-indigo-500"
+                    >
+                      {askPreviewLoading ? "Loading…" : "Load suppliers"}
+                    </button>
+                  </div>
+                  {askPreviewError && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">{askPreviewError}</p>
+                  )}
+                  {askPreview?.order && askPreview.groups.length > 0 && (
+                    <div className="space-y-4">
+                      <p
+                        className={cn(
+                          "text-xs font-bold",
+                          isLight ? "text-slate-700" : "text-slate-300",
+                        )}
+                      >
+                        Order #{askPreview.order.orderNumber} — message each supplier separately.
+                      </p>
+                      {askPreview.groups.map((g) => (
+                        <div
+                          key={g.supplierUserId}
+                          className={cn(
+                            "rounded-xl border p-4 space-y-2",
+                            isLight ? "bg-slate-50 border-slate-200" : "bg-black/20 border-white/10",
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span
+                              className={cn(
+                                "text-sm font-black",
+                                isLight ? "text-slate-900" : "text-white",
+                              )}
+                            >
+                              {g.companyName}
+                            </span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                disabled={draftingSupplierId === g.supplierUserId}
+                                onClick={() => void draftForSupplier(g.supplierUserId)}
+                                className={cn(
+                                  "h-8 px-3 rounded-lg text-xs font-bold flex items-center gap-1",
+                                  isLight
+                                    ? "bg-white border border-slate-200 text-slate-800"
+                                    : "bg-white/10 text-slate-200",
+                                )}
+                              >
+                                <Sparkles className="w-3.5 h-3.5" />
+                                {draftingSupplierId === g.supplierUserId ? "Draft…" : "Draft"}
+                              </button>
+                              <button
+                                type="button"
+                                disabled={sendingSupplierId === g.supplierUserId}
+                                onClick={() => void sendToSupplier(g.supplierUserId)}
+                                className="h-8 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white flex items-center gap-1"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                {sendingSupplierId === g.supplierUserId ? "…" : "Send"}
+                              </button>
+                            </div>
+                          </div>
+                          <ul
+                            className={cn(
+                              "text-[11px] list-disc list-inside",
+                              isLight ? "text-slate-600" : "text-slate-400",
+                            )}
+                          >
+                            {g.lines.map((l) => (
+                              <li key={`${g.supplierUserId}-${l.lineIndex}`}>
+                                {l.title}
+                                {l.sku ? ` (${l.sku})` : ""} × {l.quantity}
+                              </li>
+                            ))}
+                          </ul>
+                          <textarea
+                            value={msgBySupplier[g.supplierUserId] || ""}
+                            onChange={(e) =>
+                              setMsgBySupplier((prev) => ({
+                                ...prev,
+                                [g.supplierUserId]: e.target.value,
+                              }))
+                            }
+                            placeholder="Your question to this supplier…"
+                            rows={4}
+                            className={cn(
+                              "w-full rounded-xl border p-3 text-sm resize-y min-h-[96px]",
+                              isLight
+                                ? "bg-white border-slate-200 text-slate-900"
+                                : "bg-white/5 border-white/10 text-white placeholder:text-slate-500",
+                            )}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Email customer modal */}
+            {customerModalOpen && (
+              <div className="fixed inset-0 z-[120] bg-black/50 backdrop-blur-sm p-4 flex items-center justify-center">
+                <div className={cn(
+                  "w-full max-w-2xl rounded-2xl border p-5 space-y-4",
+                  isLight ? "bg-white border-slate-200" : "bg-slate-900 border-white/10"
+                )}>
+                  <div className="flex items-center justify-between">
+                    <h2 className={cn("text-sm font-black uppercase tracking-wider", isLight ? "text-slate-900" : "text-white")}>
+                      Email customer
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerModalOpen(false)}
+                      className={cn("p-2 rounded-lg", isLight ? "text-slate-500 hover:bg-slate-100" : "text-slate-400 hover:bg-white/10")}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    <input
+                      type="email"
+                      value={customerTo}
+                      onChange={(e) => setCustomerTo(e.target.value)}
+                      placeholder="Customer email"
+                      className={cn("w-full h-10 px-3 rounded-xl border text-sm", isLight ? "bg-slate-50 border-slate-200 text-slate-900" : "bg-white/5 border-white/10 text-white")}
+                    />
+                    <input
+                      type="text"
+                      value={customerSubject}
+                      onChange={(e) => setCustomerSubject(e.target.value)}
+                      placeholder="Subject"
+                      className={cn("w-full h-10 px-3 rounded-xl border text-sm", isLight ? "bg-slate-50 border-slate-200 text-slate-900" : "bg-white/5 border-white/10 text-white")}
+                    />
+                    <textarea
+                      value={customerBody}
+                      onChange={(e) => setCustomerBody(e.target.value)}
+                      placeholder="Write your email body..."
+                      rows={8}
+                      className={cn("w-full rounded-xl border p-3 text-sm", isLight ? "bg-slate-50 border-slate-200 text-slate-900" : "bg-white/5 border-white/10 text-white")}
+                    />
+                    {customerError ? <p className="text-xs text-amber-500">{customerError}</p> : null}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void draftCustomerEmail()}
+                        disabled={draftingCustomer}
+                        className={cn("h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1", isLight ? "bg-white border border-slate-200 text-slate-800" : "bg-white/10 text-slate-200")}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {draftingCustomer ? "Draft…" : "Draft"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void sendCustomerEmail()}
+                        disabled={sendingCustomer}
+                        className="h-9 px-3 rounded-lg text-xs font-bold bg-indigo-600 text-white flex items-center gap-1"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {sendingCustomer ? "Sending…" : "Send"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Ask supplier (legacy inline section hidden in favor of modal actions) */}
+            <div className="hidden">
             <div
               className={cn(
                 "rounded-2xl border p-5 flex flex-col gap-4 flex-shrink-0",
@@ -448,6 +766,7 @@ export default function TicketDetailPage() {
                 </div>
               )}
             </div>
+            </div>
 
             {/* Conversation timeline - Full width corners chat style */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-4 -mr-4 space-y-8 pb-10 custom-scrollbar">
@@ -455,7 +774,7 @@ export default function TicketDetailPage() {
                 const isIncoming =
                   message.trigger === "GMAIL_INCOMING" || message.status === "RECEIVED"
 
-                const fullText = message.bodyPreview || ""
+                const fullText = cleanDisplayText(message.bodyPreview || "")
                 const lines = fullText.split(/\r?\n/)
                 const isExpanded = !!expandedMessages[message.id]
                 const hasMore = lines.length > 2

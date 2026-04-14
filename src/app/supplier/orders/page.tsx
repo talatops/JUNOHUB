@@ -10,9 +10,12 @@ import {
     Package,
     ChevronRight
 } from "lucide-react"
+import { useTheme } from "@/components/ThemeProvider"
 
 export default function SupplierOrdersPage() {
     const router = useRouter()
+    const { theme } = useTheme()
+    const isLight = theme === "light"
     const [orders, setOrders] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState("")
@@ -135,14 +138,16 @@ export default function SupplierOrdersPage() {
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                                                 (order.status || "").toUpperCase() === "FULFILLED" ? "bg-emerald-500/20 text-emerald-400" :
                                                 (order.status || "").toUpperCase() === "SHIPPED" || (order.status || "").toUpperCase() === "IN_PROGRESS" ? "bg-yellow-500/20 text-yellow-400" :
-                                                (order.status || "").toUpperCase() === "ON_HOLD" ? "bg-amber-500/20 text-amber-300" :
+                                                (order.status || "").toUpperCase() === "ON_HOLD"
+                                                    ? isLight
+                                                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                                                        : "bg-amber-500/20 text-amber-300"
+                                                    :
                                                 (order.status || "").toUpperCase() === "CANCELLED" ? "bg-red-500/20 text-red-400" :
                                                 "bg-blue-500/20 text-blue-400"
                                             }`}>
                                                 {(order.status || "").toUpperCase() === "ON_HOLD"
-                                                    ? order.holdReasonLabel
-                                                        ? `On hold · ${order.holdReasonLabel}`
-                                                        : "On hold"
+                                                    ? "On hold"
                                                     : order.status || "UNFULFILLED"}
                                             </span>
                                         </td>

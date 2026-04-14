@@ -1,4 +1,4 @@
-import { groqChatCompletion } from "@/lib/ai/groqClient"
+import { aiChatCompletion } from "@/lib/ai/chatCompletion"
 import { parseJsonObject } from "@/lib/ai/gmailTaxonomy"
 import { logger } from "@/lib/logger"
 
@@ -32,7 +32,7 @@ Respond with JSON only:
 If unsure, set flagged to false.`
 
 /**
- * Screen inbound mail before auto-reply. Returns null if Groq is unavailable — caller should proceed (fail-open).
+ * Screen inbound mail before auto-reply. Returns null if model call is unavailable — caller should proceed (fail-open).
  */
 export async function screenInboundEmailForAbuse(
     subject: string,
@@ -40,7 +40,7 @@ export async function screenInboundEmailForAbuse(
 ): Promise<InboundSafetyScreenResult | null> {
     const user = `Subject: ${subject.slice(0, 500)}\n\nBody (excerpt):\n${bodyExcerpt.slice(0, 3500)}`
 
-    const { content, error } = await groqChatCompletion(
+    const { content, error } = await aiChatCompletion(
         [
             { role: "system", content: SAFETY_SYSTEM },
             { role: "user", content: user },
@@ -49,7 +49,7 @@ export async function screenInboundEmailForAbuse(
     )
 
     if (!content) {
-        logger.warn("Gmail safety screen skipped (Groq unavailable)", { error })
+        logger.warn("Gmail safety screen skipped (model unavailable)", { error })
         return null
     }
 

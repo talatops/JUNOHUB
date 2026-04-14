@@ -322,19 +322,39 @@ export default function SupplierOrderDetailsPage() {
                     </div>
 
                     {fulfillmentStatus === "ON_HOLD" && holdReasonCode ? (
-                        <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 space-y-1">
-                            <p className="text-[11px] font-bold uppercase text-amber-200">Hold reason</p>
-                            <p className="text-sm text-white font-semibold">
+                        <div
+                            className={`rounded-xl border p-3 space-y-1 ${
+                                isLight
+                                    ? "border-amber-300 bg-amber-50"
+                                    : "border-amber-500/35 bg-amber-500/10"
+                            }`}
+                        >
+                            <p
+                                className={`text-[11px] font-bold uppercase ${
+                                    isLight ? "text-amber-800" : "text-amber-200"
+                                }`}
+                            >
+                                Hold reason
+                            </p>
+                            <p className={`text-sm font-semibold ${isLight ? "text-slate-900" : "text-white"}`}>
                                 {SUPPLIER_HOLD_REASON_OPTIONS.find((o) => o.value === holdReasonCode)?.label ||
                                     holdReasonCode}
                             </p>
                             {holdReasonCode === "other" && holdNote.trim() ? (
-                                <p className="text-xs text-amber-100/90 whitespace-pre-wrap">{holdNote}</p>
+                                <p
+                                    className={`text-xs whitespace-pre-wrap ${
+                                        isLight ? "text-amber-800/90" : "text-amber-100/90"
+                                    }`}
+                                >
+                                    {holdNote}
+                                </p>
                             ) : null}
                             <button
                                 type="button"
                                 onClick={() => openHoldModal(fulfillmentStatus)}
-                                className="text-xs font-bold text-amber-200 underline mt-1"
+                                className={`text-xs font-bold underline mt-1 ${
+                                    isLight ? "text-amber-800" : "text-amber-200"
+                                }`}
                             >
                                 Change reason
                             </button>
@@ -379,7 +399,9 @@ export default function SupplierOrderDetailsPage() {
                     </div>
 
                     {holdIncomplete && (
-                        <p className="text-amber-300 text-xs font-semibold">Choose a hold reason (use On hold or Change reason).</p>
+                        <p className={`text-xs font-semibold ${isLight ? "text-amber-800" : "text-amber-300"}`}>
+                            Choose a hold reason (use On hold or Change reason).
+                        </p>
                     )}
 
                     {changed && (
@@ -400,11 +422,11 @@ export default function SupplierOrderDetailsPage() {
                         <p className="text-white font-semibold">
                             {[order.customer?.first_name, order.customer?.last_name].filter(Boolean).join(" ") || "—"}
                         </p>
-                        <p className="text-slate-300 inline-flex items-center gap-2 break-all">
+                        <p className="text-slate-300 flex items-center gap-2 break-all">
                             <Mail className="w-3.5 h-3.5 text-slate-500" />
                             {order.customer?.email || order.email || "Email: --"}
                         </p>
-                        <p className="text-slate-300 inline-flex items-center gap-2">
+                        <p className="text-slate-300 flex items-center gap-2">
                             <Phone className="w-3.5 h-3.5 text-slate-500" />
                             {order.customer?.phone || "Phone: --"}
                         </p>
