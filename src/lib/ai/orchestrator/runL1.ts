@@ -36,6 +36,8 @@ const WIDGET_CANCEL_GENERAL_HELP =
 
 const FAQ_DISABLED_FALLBACK =
     "I don't know about this—please contact our support team for help."
+const OUT_OF_SCOPE_WIDGET_FALLBACK =
+    "I can only help with this store's products, orders, shipping, returns, and policies. Please ask a store-related question."
 
 /** Limit customer-supplied text size (prompt injection + token cost). */
 const L1_MAX_CUSTOMER_MESSAGE_CHARS = 6000
@@ -201,6 +203,61 @@ function isGenericDeliveryEtaQuestion(message: string): boolean {
     return !orderSpecificSignals
 }
 
+function isClearlyOutOfScopeMessage(message: string): boolean {
+    const text = message.trim().toLowerCase()
+    if (!text) return false
+
+    // Basic math / homework / coding assistant requests that are unrelated to storefront support.
+    if (
+        /(^|\b)(solve|calculate|what is|what's)\s+[\d\s+\-*/().^=]+(\?|$)/i.test(text) ||
+        /(^|\b)(math|algebra|geometry|calculus|equation|integral|derivative|prime number)(\b|$)/i.test(
+            text,
+        ) ||
+        /(^|\b)(write code|debug|python|javascript|typescript|java|c\+\+|sql query)(\b|$)/i.test(
+            text,
+        )
+    ) {
+        return true
+    }
+
+    // Storefront-relevant keywords should keep normal handling.
+    if (
+        /(order|track|shipping|delivery|return|refund|exchange|cancel|address|product|size|stock|policy|warranty|payment|store|vendor|supplier)/i.test(
+            text,
+        )
+    ) {
+        return false
+    }
+
+    // Generic knowledge chatter is out of scope for the storefront widget.
+    if (
+        /(who is|who was|capital of|weather|news|joke|translate|recipe|movie|song|history|science|politics)/i.test(
+            text,
+        )
+    ) {
+        return true
+    }
+
+    return false
+}
+
+function extractLastCustomerContext(
+    history: RunL1Input["history"],
+    currentMessage: string,
+): string | null {
+    const normalizedCurrent = currentMessage.trim().toLowerCase()
+    for (let i = history.length - 1; i >= 0; i--) {
+        const msg = history[i]
+        if (msg.senderType === "AI" || msg.role === "assistant") continue
+        const text = (msg.content || "").trim()
+        if (!text) continue
+        if (text.length < 3) continue
+        if (text.toLowerCase() === normalizedCurrent) continue
+        return text.slice(0, 240)
+    }
+    return null
+}
+
 async function composeReply(params: {
     storeName: string
     storeReference: string
@@ -281,11 +338,30 @@ function isPolicyLikeReturnOrChangeQuestion(message: string, module: L1Module): 
 }
 
 export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result> {
+    if (input.channel === "widget" && isClearlyOutOfScopeMessage(input.message)) {
+        return {
+            text: OUT_OF_SCOPE_WIDGET_FALLBACK,
+            meta: {
+                module: "UNKNOWN",
+                pillar: "K",
+                usedTools: [],
+                kbHits: 0,
+                productHits: 0,
+            },
+        }
+    }
+
+    const lastCustomerContext = extractLastCustomerContext(input.history, input.message)
+    const effectiveMessage =
+        lastCustomerContext
+            ? `${input.message}\nPrior customer context from this same conversation: ${lastCustomerContext}`
+            : input.message
+
     const modules = parseAiModulesJson(input.aiModulesJson)
     const sharedAnswers = parseSharedFieldAnswersJson(input.sharedFieldAnswersJson)
     const retrieval = await getBlendedStorefrontContext({
         storeId: input.storeId,
-        query: input.message,
+        query: effectiveMessage,
     })
     const kbContext =
         retrieval.items.length > 0
@@ -294,11 +370,11 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
                   .join("\n")
             : ""
 
-    const routed = await routeCustomerIntent(input.message)
+    const routed = await routeCustomerIntent(effectiveMessage)
     let activeModule: L1Module = routed.module
     if (
         (activeModule === "SHIPPING_TRACKING" || activeModule === "ORDER_STATUS") &&
-        isGenericDeliveryEtaQuestion(input.message)
+        isGenericDeliveryEtaQuestion(effectiveMessage)
     ) {
         activeModule = "FAQ"
     }
@@ -324,8 +400,9 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     const type1Facts = formatSharedFieldsForModule(activeModule, sharedAnswers)
     const preferKnowledgeReplyOverTicket =
         activeModule === "RETURN_EXCHANGE" || activeModule === "ORDER_CHANGE"
-            ? isPolicyLikeReturnOrChangeQuestion(input.message, activeModule)
+            ? isPolicyLikeReturnOrChangeQuestion(effectiveMessage, activeModule)
             : false
+    const forceKnowledgeOnly = activeModule === "WARRANTY"
     const categoryMetadetailsOn =
         input.categoryMetadetailsEnabled !== undefined &&
         input.categoryMetadetailsEnabled !== null
@@ -408,7 +485,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         ordersForEmail.length > 0 &&
         (activeModule === "ORDER_SUMMARY" || activeModule === "ORDER_STATUS")
     ) {
-        const listMode = detectOrderListMode(input.message)
+        const listMode = detectOrderListMode(effectiveMessage)
         if (listMode) {
             return {
                 text: buildOrderListText(ordersForEmail, listMode),
@@ -435,7 +512,11 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         ]
             .filter(Boolean)
             .join("\n\n")
-        if (pillar === "X" && isAutomationEnabled(modules, activeModule, "ticket")) {
+        if (
+            pillar === "X" &&
+            isAutomationEnabled(modules, activeModule, "ticket") &&
+            !forceKnowledgeOnly
+        ) {
             return {
                 text: ticketHandoffText(activeModule, input.storeName),
                 meta: {
@@ -449,7 +530,8 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
         if (
             pillar === "T" &&
-            isAutomationEnabled(modules, activeModule, "ticket")
+            isAutomationEnabled(modules, activeModule, "ticket") &&
+            !forceKnowledgeOnly
         ) {
             return {
                 text: ticketHandoffText(activeModule, input.storeName),
@@ -465,7 +547,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         const text = await composeReply({
             storeName: input.storeName,
             storeReference: facts.trim() ? facts : EMPTY_STORE_REFERENCE,
-            message: input.message,
+            message: effectiveMessage,
             history: historyToGroq(input.history),
         })
         return {
@@ -484,6 +566,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         pillar === "X" &&
         ordersForEmail.length > 0 &&
         isAutomationEnabled(modules, activeModule, "ticket") &&
+        !forceKnowledgeOnly &&
         !preferKnowledgeReplyOverTicket
     ) {
         return {
@@ -498,11 +581,11 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    const hints = extractOrderNumberHints(input.message)
+    const hints = extractOrderNumberHints(effectiveMessage)
     const hintText =
         input.channel === "email"
-            ? `${input.message}\n${(input.history || []).map((h) => h.content).join("\n")}`
-            : input.message
+            ? `${effectiveMessage}\n${(input.history || []).map((h) => h.content).join("\n")}`
+            : effectiveMessage
 
     const disambiguate =
         customerEmail &&
@@ -517,18 +600,39 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         customerEmail != null &&
         ORDER_DETAIL_MODULES.includes(activeModule) &&
         !input.boundShopifyOrderId
-            ? pickMentionedOrderId(input.message, ordersForEmail)
+            ? pickMentionedOrderId(effectiveMessage, ordersForEmail)
             : null
     const effectiveBoundShopifyOrderId =
         mentionedOrderId ??
         (shouldAutoPickLatestOrder && ordersForEmail[0]
             ? ordersForEmail[0].shopifyOrderId
             : input.boundShopifyOrderId ?? null)
+    const hasExplicitOrderHint = hints.length > 0
+
+    if (
+        ORDER_DETAIL_MODULES.includes(activeModule) &&
+        customerEmail &&
+        hasExplicitOrderHint &&
+        !mentionedOrderId &&
+        isAutomationEnabled(modules, activeModule, "verifiedLookup")
+    ) {
+        return {
+            text: "I could not find that order number for your verified email. Please double-check the order number and try again.",
+            meta: {
+                module: activeModule,
+                pillar,
+                usedTools: ["list_orders"],
+                kbHits: retrieval.kbCount,
+                productHits: retrieval.productCount,
+            },
+        }
+    }
 
     if (
         ORDER_DETAIL_MODULES.includes(activeModule) &&
         customerEmail &&
         disambiguate &&
+        !hasExplicitOrderHint &&
         !effectiveBoundShopifyOrderId &&
         isAutomationEnabled(modules, activeModule, "verifiedLookup")
     ) {
@@ -602,7 +706,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
             isAutomationEnabled(modules, activeModule, "knowledge")) ||
         (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule))
     if (runProductSearch) {
-        const hits = await searchProductsForStore(input.storeId, input.message, 5)
+        const hits = await searchProductsForStore(input.storeId, effectiveMessage, 5)
         usedTools.push("search_products")
         if (hits.length) {
             productFacts = hits
@@ -635,7 +739,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     const text = await composeReply({
         storeName: input.storeName,
         storeReference: facts.trim() ? facts : EMPTY_STORE_REFERENCE,
-        message: input.message,
+        message: effectiveMessage,
         history: historyToGroq(input.history),
     })
 

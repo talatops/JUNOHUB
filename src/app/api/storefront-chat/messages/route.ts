@@ -8,6 +8,8 @@ import { generateStorefrontReply } from "@/lib/ai/storefrontGroq"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { storefrontChatPostSchema } from "@/lib/api-schemas/public"
 import { validationErrorResponse } from "@/lib/api-schemas/validate"
+import { extractOrderNumberHints } from "@/lib/ai/gmailContext"
+import { getOrderDetailForVerifiedEmail } from "@/lib/ai/tools/orderTools"
 
 function normalizeShopDomain(input: string) {
     return input
@@ -28,6 +30,32 @@ function shopVariants(cleanDomain: string) {
 }
 
 const STOREFRONT_TICKET_TRIGGER = "STOREFRONT_TICKET"
+const ESCALATION_ALREADY_DISPATCHED_REPLY =
+    "Your request is already dispatched to our human support team. Please wait for the follow-up email from our team."
+const ORDER_VERIFICATION_REQUIRED_REPLY =
+    "To help with order-specific requests, please verify your email first using the Order help section below."
+const ORDER_NOT_FOUND_FOR_VERIFIED_EMAIL_REPLY =
+    "I could not find that order for your verified email. Please double-check the order number and try again."
+
+function formatEscalationModuleLabel(moduleName?: string): string {
+    const raw = (moduleName || "CUSTOMER_SUPPORT").trim()
+    return raw
+        .split(/[_\s]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join(" ")
+}
+
+function buildStorefrontTicketSubject(moduleName?: string): string {
+    return `${formatEscalationModuleLabel(moduleName)} Request`
+}
+
+function buildOrderScopedTicketSubject(moduleName?: string, orderNumber?: string | null): string {
+    const base = buildStorefrontTicketSubject(moduleName)
+    const clean = (orderNumber || "").replace(/^\s*#?\s*/, "").trim()
+    if (!clean) return base
+    return `${base} - Order ${clean}`
+}
 
 function shouldCreateEscalationTicket(ai: { content: string; meta?: { usedTools?: string[]; module?: string } }): boolean {
     if (Array.isArray(ai.meta?.usedTools) && ai.meta.usedTools.includes("ticket_intake")) {
@@ -122,10 +150,11 @@ export async function POST(req: Request) {
 
         const recentHistory = await prisma.storefrontChatMessage.findMany({
             where: { conversationId: conversation.id },
-            orderBy: { createdAt: "asc" },
-            take: 10,
+            orderBy: { createdAt: "desc" },
+            take: 4,
             select: { senderType: true, content: true },
         })
+        const historyForAi = recentHistory.reverse()
 
         const sessionOk =
             Boolean(conversation.emailVerifiedAt) &&
@@ -137,7 +166,7 @@ export async function POST(req: Request) {
             storeName: store.businessName || "Our store",
             query: trimmedContent,
             visitorId,
-            history: recentHistory.map((m) => ({
+            history: historyForAi.map((m) => ({
                 senderType: m.senderType,
                 content: m.content,
             })),
@@ -149,51 +178,78 @@ export async function POST(req: Request) {
             boundShopifyOrderId: conversation.boundShopifyOrderId,
         })
 
+        const convoEmail = await prisma.storefrontChatConversation.findUnique({
+            where: { id: conversation.id },
+            select: { customerEmail: true },
+        })
+        const ticketTo =
+            convoEmail?.customerEmail?.trim().toLowerCase() ||
+            customerEmail?.trim().toLowerCase() ||
+            `visitor+${visitorId}@storefront.local`
+        const isEscalation = shouldCreateEscalationTicket(ai)
+        const verifiedEmail =
+            sessionOk && conversation.assertedEmail
+                ? conversation.assertedEmail.trim().toLowerCase()
+                : null
+        const requestedOrderHint = extractOrderNumberHints(trimmedContent)[0] ?? null
+        const hasOrderSpecificRequest = Boolean(requestedOrderHint)
+        const verifiedOrder =
+            isEscalation && verifiedEmail && requestedOrderHint
+                ? await getOrderDetailForVerifiedEmail(store.id, verifiedEmail, {
+                      orderNumberHint: requestedOrderHint,
+                  })
+                : null
+        const ticketSubject = buildOrderScopedTicketSubject(ai.meta?.module, verifiedOrder?.orderNumber)
+
+        // Security-first guardrail:
+        // For order-specific requests, only escalate when the referenced order is verified for the
+        // currently verified email session.
+        const blockedForMissingVerification = isEscalation && hasOrderSpecificRequest && !verifiedEmail
+        const blockedForOrderMismatch = isEscalation && hasOrderSpecificRequest && verifiedEmail && !verifiedOrder
+
+        const existingEscalation =
+            isEscalation && !blockedForMissingVerification && !blockedForOrderMismatch
+            ? await prisma.emailLog.findFirst({
+                  where: {
+                      storeId: store.id,
+                      trigger: STOREFRONT_TICKET_TRIGGER,
+                      to: ticketTo,
+                      subject: ticketSubject,
+                  },
+                  select: { id: true },
+              })
+            : null
+
+        const alreadyEscalated = isEscalation && Boolean(existingEscalation)
+        const aiContent = blockedForMissingVerification
+            ? ORDER_VERIFICATION_REQUIRED_REPLY
+            : blockedForOrderMismatch
+              ? ORDER_NOT_FOUND_FOR_VERIFIED_EMAIL_REPLY
+              : alreadyEscalated
+                ? ESCALATION_ALREADY_DISPATCHED_REPLY
+                : ai.content
+
         const aiMessage = await prisma.storefrontChatMessage.create({
             data: {
                 conversationId: conversation.id,
                 senderType: "AI",
-                content: ai.content
+                content: aiContent
             },
             select: { id: true, createdAt: true, senderType: true, content: true }
         })
 
-        if (shouldCreateEscalationTicket(ai)) {
+        if (
+            isEscalation &&
+            !alreadyEscalated &&
+            !blockedForMissingVerification &&
+            !blockedForOrderMismatch
+        ) {
             try {
                 const owner = await prisma.store.findUnique({
                     where: { id: store.id },
                     select: { userId: true },
                 })
-                const convoEmail = await prisma.storefrontChatConversation.findUnique({
-                    where: { id: conversation.id },
-                    select: { customerEmail: true },
-                })
-                const ticketTo =
-                    convoEmail?.customerEmail?.trim().toLowerCase() ||
-                    customerEmail?.trim().toLowerCase() ||
-                    `visitor+${visitorId}@storefront.local`
-                const ticketSubject = `[Storefront] ${ai.meta.module} · ${conversation.id}`
-
-                const existing = await prisma.emailLog.findFirst({
-                    where: {
-                        storeId: store.id,
-                        to: ticketTo,
-                        subject: ticketSubject,
-                        trigger: STOREFRONT_TICKET_TRIGGER,
-                    },
-                    select: { id: true },
-                })
-
-                if (existing) {
-                    await prisma.emailLog.update({
-                        where: { id: existing.id },
-                        data: {
-                            bodyPreview: trimmedContent.slice(0, 2000),
-                            sentAt: new Date(),
-                            status: "SENT",
-                        },
-                    })
-                } else if (owner?.userId) {
+                if (owner?.userId) {
                     await prisma.emailLog.create({
                         data: {
                             userId: owner.userId,

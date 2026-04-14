@@ -11,6 +11,58 @@ type WidgetMessage = {
     senderType: "CUSTOMER" | "AI"
 }
 
+function isLikelyHttpUrl(value: string) {
+    return /^https?:\/\/[^\s)]+$/i.test(value.trim())
+}
+
+function renderMessageContent(content: string) {
+    // Supports both markdown links: [label](https://...)
+    // and plain URLs in free text.
+    const markdownOrUrl = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)]+)/gi
+    const nodes: Array<React.ReactNode> = []
+    let lastIndex = 0
+    let match: RegExpExecArray | null
+
+    while ((match = markdownOrUrl.exec(content)) !== null) {
+        const [full] = match
+        const start = match.index
+        const end = start + full.length
+
+        if (start > lastIndex) {
+            nodes.push(content.slice(lastIndex, start))
+        }
+
+        const markdownLabel = match[1]
+        const markdownUrl = match[2]
+        const plainUrl = match[3]
+        const href = markdownUrl || plainUrl || ""
+
+        if (isLikelyHttpUrl(href)) {
+            nodes.push(
+                <a
+                    key={`${start}-${href}`}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 break-all text-indigo-600 hover:text-indigo-700"
+                >
+                    {markdownLabel || href}
+                </a>
+            )
+        } else {
+            nodes.push(full)
+        }
+
+        lastIndex = end
+    }
+
+    if (lastIndex < content.length) {
+        nodes.push(content.slice(lastIndex))
+    }
+
+    return nodes
+}
+
 function getOrCreateVisitorId(shop: string) {
     const key = `juno_storefront_visitor_id_${shop}`
     try {
@@ -34,6 +86,7 @@ export default function StorefrontChatWidgetPage() {
     const [sending, setSending] = useState(false)
     const [sendError, setSendError] = useState<string | null>(null)
     const [loadingHistory, setLoadingHistory] = useState(false)
+    const [aiTyping, setAiTyping] = useState(false)
 
     const [verifyEmail, setVerifyEmail] = useState("")
     const [otpCode, setOtpCode] = useState("")
@@ -250,6 +303,19 @@ export default function StorefrontChatWidgetPage() {
         if (!shop || !visitorId) return
         const text = composer.trim()
         if (!text) return
+        const typingStartedAt = Date.now()
+
+        const optimisticCustomerMessage: WidgetMessage = {
+            id: `local_customer_${Date.now()}`,
+            content: text,
+            senderType: "CUSTOMER",
+            createdAt: new Date().toISOString(),
+        }
+
+        setMessages((prev) => [...prev, optimisticCustomerMessage])
+        setComposer("")
+        setAiTyping(true)
+        setTimeout(() => composerRef.current?.focus(), 0)
 
         try {
             setSendError(null)
@@ -267,31 +333,25 @@ export default function StorefrontChatWidgetPage() {
 
             const returned = Array.isArray(data?.messages) ? data.messages : []
             if (returned.length) {
-                setMessages(prev => [
-                    ...prev,
-                    ...returned.map((m: any) => ({
-                        id: String(m.id || `local_${Date.now()}`),
-                        content: String(m.content || ""),
-                        senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
-                        createdAt: String(m.createdAt || new Date().toISOString())
-                    }))
-                ])
-            } else {
-                setMessages(prev => [
-                    ...prev,
-                    {
-                        id: `local_${Date.now()}`,
-                        content: text,
-                        senderType: "CUSTOMER",
-                        createdAt: new Date().toISOString()
-                    }
-                ])
+                const returnedTyped = returned.map((m: any) => ({
+                    id: String(m.id || `local_${Date.now()}`),
+                    content: String(m.content || ""),
+                    senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
+                    createdAt: String(m.createdAt || new Date().toISOString())
+                }))
+                const aiReplies = returnedTyped.filter((m: WidgetMessage) => m.senderType === "AI")
+                const elapsed = Date.now() - typingStartedAt
+                const minTypingMs = 1000
+                if (elapsed < minTypingMs) {
+                    await new Promise((resolve) => setTimeout(resolve, minTypingMs - elapsed))
+                }
+                setMessages(prev => [...prev, ...aiReplies])
             }
-            setComposer("")
-            setTimeout(() => composerRef.current?.focus(), 0)
         } catch (e: any) {
             setSendError(e?.message || "Failed to send message")
+            setMessages((prev) => prev.filter((m) => m.id !== optimisticCustomerMessage.id))
         } finally {
+            setAiTyping(false)
             setSending(false)
         }
     }
@@ -342,10 +402,21 @@ export default function StorefrontChatWidgetPage() {
                                             : "bg-indigo-600 text-white"
                                     }`}
                                 >
-                                    {m.content}
+                                    {renderMessageContent(m.content)}
                                 </div>
                             </div>
                         ))}
+                        {aiTyping ? (
+                            <div className="flex justify-start">
+                                <div className="max-w-[88%] px-3 py-3 rounded-2xl bg-white border border-slate-200">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.2s]" />
+                                        <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce [animation-delay:-0.1s]" />
+                                        <span className="w-2 h-2 rounded-full bg-slate-400 animate-bounce" />
+                                    </div>
+                                </div>
+                            </div>
+                        ) : null}
                         <div ref={messagesEndRef} />
                     </div>
                 )}
