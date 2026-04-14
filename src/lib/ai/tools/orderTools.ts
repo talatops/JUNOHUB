@@ -82,6 +82,7 @@ export type OrderDetailRow = {
     currency: string | null
     financialStatus: string | null
     fulfillmentStatus: string | null
+    holdReasonCode: string | null
     trackingNumber: string | null
     trackingCompany: string | null
     trackingUrl: string | null
@@ -130,6 +131,7 @@ export async function getOrderDetailForVerifiedEmail(
                 currency,
                 "financialStatus",
                 "fulfillmentStatus",
+                "holdReasonCode",
                 "trackingNumber",
                 "trackingCompany",
                 "trackingUrl",

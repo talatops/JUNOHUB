@@ -129,7 +129,7 @@ export async function generateAutoReplyPreview(
 
     const confidenceMin = parseEnvFloat("GMAIL_CLASSIFY_CONFIDENCE_MIN", 0.5)
     const lowConfidenceSuppressOrders =
-        classifyResult.source === "groq" &&
+        classifyResult.source !== "fallback" &&
         classification.confidence < confidenceMin &&
         orderHints.length === 0 &&
         !isOffTopic &&

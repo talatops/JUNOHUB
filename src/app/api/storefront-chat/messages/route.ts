@@ -27,6 +27,23 @@ function shopVariants(cleanDomain: string) {
     return Array.from(v)
 }
 
+const STOREFRONT_TICKET_TRIGGER = "STOREFRONT_TICKET"
+
+function shouldCreateEscalationTicket(ai: { content: string; meta?: { usedTools?: string[]; module?: string } }): boolean {
+    if (Array.isArray(ai.meta?.usedTools) && ai.meta.usedTools.includes("ticket_intake")) {
+        return true
+    }
+    if (ai.meta?.module === "HUMAN_ESCALATION") {
+        return true
+    }
+    const text = (ai.content || "").toLowerCase()
+    return (
+        text.includes("human will follow up") ||
+        text.includes("passed your request to our team") ||
+        text.includes("passed your request to the team")
+    )
+}
+
 export async function POST(req: Request) {
     try {
         const rate = await applyRateLimit(req, "public:storefront-chat", {
@@ -140,6 +157,60 @@ export async function POST(req: Request) {
             },
             select: { id: true, createdAt: true, senderType: true, content: true }
         })
+
+        if (shouldCreateEscalationTicket(ai)) {
+            try {
+                const owner = await prisma.store.findUnique({
+                    where: { id: store.id },
+                    select: { userId: true },
+                })
+                const convoEmail = await prisma.storefrontChatConversation.findUnique({
+                    where: { id: conversation.id },
+                    select: { customerEmail: true },
+                })
+                const ticketTo =
+                    convoEmail?.customerEmail?.trim().toLowerCase() ||
+                    customerEmail?.trim().toLowerCase() ||
+                    `visitor+${visitorId}@storefront.local`
+                const ticketSubject = `[Storefront] ${ai.meta.module} · ${conversation.id}`
+
+                const existing = await prisma.emailLog.findFirst({
+                    where: {
+                        storeId: store.id,
+                        to: ticketTo,
+                        subject: ticketSubject,
+                        trigger: STOREFRONT_TICKET_TRIGGER,
+                    },
+                    select: { id: true },
+                })
+
+                if (existing) {
+                    await prisma.emailLog.update({
+                        where: { id: existing.id },
+                        data: {
+                            bodyPreview: trimmedContent.slice(0, 2000),
+                            sentAt: new Date(),
+                            status: "SENT",
+                        },
+                    })
+                } else if (owner?.userId) {
+                    await prisma.emailLog.create({
+                        data: {
+                            userId: owner.userId,
+                            storeId: store.id,
+                            to: ticketTo,
+                            subject: ticketSubject,
+                            bodyPreview: trimmedContent.slice(0, 2000),
+                            isAutomated: true,
+                            trigger: STOREFRONT_TICKET_TRIGGER,
+                            status: "SENT",
+                        },
+                    })
+                }
+            } catch (ticketErr) {
+                console.error("[STOREFRONT_TICKET_CREATE_ERR]", ticketErr)
+            }
+        }
 
         return NextResponse.json({
             success: true,

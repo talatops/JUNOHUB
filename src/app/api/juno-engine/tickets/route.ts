@@ -20,6 +20,26 @@ function normalizeSubject(subject: string | null): string {
     return s || "No subject"
 }
 
+function decodeHtmlEntities(input: string | null | undefined): string {
+    const text = (input || "").trim()
+    if (!text) return ""
+    return text
+        .replace(/&#(\d+);/g, (_, n: string) => {
+            const code = Number.parseInt(n, 10)
+            return Number.isFinite(code) ? String.fromCharCode(code) : _
+        })
+        .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => {
+            const code = Number.parseInt(hex, 16)
+            return Number.isFinite(code) ? String.fromCharCode(code) : _
+        })
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+}
+
 export async function GET() {
     try {
         const session = await auth()
@@ -84,6 +104,7 @@ export async function GET() {
               AND (
                 "isAutomated" = TRUE
                 OR "trigger" = 'GMAIL_INCOMING'
+                OR "trigger" = 'TICKET_CUSTOMER_REPLY'
               )
             ORDER BY "sentAt" DESC
             LIMIT 200
@@ -120,7 +141,7 @@ export async function GET() {
             const baseMessage: TicketMessage = {
                 id: log.id,
                 subject: log.subject || rootSubject,
-                bodyPreview: log.bodyPreview,
+                bodyPreview: decodeHtmlEntities(log.bodyPreview),
                 status: log.status,
                 trigger: log.trigger,
                 sentAt: log.sentAt.toISOString(),
@@ -136,7 +157,7 @@ export async function GET() {
                     status: log.status,
                     updatedAt: log.sentAt.toISOString(),
                     messagesCount: 1,
-                    lastMessageSnippet: log.bodyPreview || "",
+                    lastMessageSnippet: decodeHtmlEntities(log.bodyPreview),
                     messages: [baseMessage],
                 })
             } else {
@@ -147,7 +168,17 @@ export async function GET() {
             }
         }
 
-        const tickets = Array.from(ticketsMap.values())
+        const tickets = Array.from(ticketsMap.values()).filter((t) => {
+            const latest = t.messages[0]
+            const storefrontEscalationThread = t.messages.some((m) => m.trigger === "STOREFRONT_TICKET")
+            const resolvedByVendorEmail = latest?.trigger === "TICKET_CUSTOMER_REPLY"
+            // Hide resolved storefront escalation threads after vendor sends customer email.
+            // If customer replies later (GMAIL_INCOMING), latest trigger changes and thread reappears.
+            if (storefrontEscalationThread && resolvedByVendorEmail) {
+                return false
+            }
+            return true
+        })
 
         return NextResponse.json({ tickets })
     } catch (error) {

@@ -1,5 +1,6 @@
 import { logger } from "@/lib/logger"
 import { runL1Orchestrator } from "@/lib/ai/orchestrator/runL1"
+import { activeAiProvider } from "@/lib/ai/chatCompletion"
 
 type HistoryMessage = {
     senderType: "CUSTOMER" | "AI"
@@ -51,6 +52,7 @@ export async function generateStorefrontReply(params: {
     logger.info("[STOREFRONT_AI_REPLY]", {
         storeId,
         visitorId,
+        provider: activeAiProvider(),
         queryLength: query.length,
         kbHits: result.meta.kbHits,
         productHits: result.meta.productHits,

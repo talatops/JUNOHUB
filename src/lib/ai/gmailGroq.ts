@@ -1,4 +1,4 @@
-import { groqChatCompletion } from "@/lib/ai/groqClient"
+import { aiChatCompletion, activeAiProvider } from "@/lib/ai/chatCompletion"
 import {
     normalizeClassification,
     parseJsonObject,
@@ -26,8 +26,8 @@ Respond with JSON only: {"intent":"...","mood":"...","confidence":0.0-1.0,"short
 
 export type ClassifyCustomerEmailResult = {
     classification: GmailClassification
-    /** `fallback` when Groq was unavailable or returned unparseable JSON. */
-    source: "groq" | "fallback"
+    /** `fallback` when model call was unavailable or returned unparseable JSON. */
+    source: "openai" | "groq" | "fallback"
 }
 
 export async function classifyCustomerEmail(
@@ -36,7 +36,7 @@ export async function classifyCustomerEmail(
 ): Promise<ClassifyCustomerEmailResult> {
     const user = `Subject: ${subject.slice(0, 500)}\n\nMessage (excerpt):\n${bodyExcerpt.slice(0, 3500)}`
 
-    const { content, error } = await groqChatCompletion(
+    const { content, error } = await aiChatCompletion(
         [
             { role: "system", content: CLASSIFY_SYSTEM },
             { role: "user", content: user },
@@ -45,7 +45,7 @@ export async function classifyCustomerEmail(
     )
 
     if (!content) {
-        logger.info("Gmail classification skipped (Groq unavailable)", { error })
+        logger.info("Gmail classification skipped (model unavailable)", { error })
         return { classification: normalizeClassification({}), source: "fallback" }
     }
 
@@ -63,6 +63,6 @@ export async function classifyCustomerEmail(
             short_summary:
                 typeof parsed.short_summary === "string" ? parsed.short_summary : undefined,
         }),
-        source: "groq",
+        source: activeAiProvider(),
     }
 }
