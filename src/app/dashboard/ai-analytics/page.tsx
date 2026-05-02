@@ -19,6 +19,7 @@ import {
 } from "recharts"
 import { Loader2, Sparkles } from "lucide-react"
 import { useTheme } from "@/components/ThemeProvider"
+import { chartTooltipProps } from "@/lib/charts/rechartsTooltip"
 import { cn } from "@/lib/utils"
 
 type ModelEvaluationPayload = {
@@ -120,8 +121,7 @@ export default function AiAnalyticsPage() {
 
     const chartMuted = isLight ? "#64748b" : "#94a3b8"
     const gridStroke = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
-    const tooltipBg = isLight ? "#ffffff" : "#0f172a"
-    const tooltipBorder = isLight ? "#e2e8f0" : "rgba(255,255,255,0.12)"
+    const tt = useMemo(() => chartTooltipProps(isLight), [isLight])
 
     const barData = useMemo(
         () =>
@@ -284,15 +284,7 @@ export default function AiAnalyticsPage() {
                                                 tickLine={false}
                                                 tickFormatter={(v) => `${v}%`}
                                             />
-                                            <Tooltip
-                                                contentStyle={{
-                                                    borderRadius: 12,
-                                                    border: `1px solid ${tooltipBorder}`,
-                                                    background: tooltipBg,
-                                                    fontWeight: 600,
-                                                }}
-                                                formatter={(v) => [`${Number(v ?? 0)}%`, "F1"]}
-                                            />
+                                            <Tooltip {...tt} formatter={(v) => [`${Number(v ?? 0)}%`, "F1"]} />
                                             <Line type="monotone" dataKey="f1" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
                                         </LineChart>
                                     </ResponsiveContainer>
@@ -402,12 +394,7 @@ export default function AiAnalyticsPage() {
                                             tickLine={false}
                                         />
                                         <Tooltip
-                                            contentStyle={{
-                                                borderRadius: 12,
-                                                border: `1px solid ${tooltipBorder}`,
-                                                background: tooltipBg,
-                                                fontWeight: 600,
-                                            }}
+                                            {...tt}
                                             formatter={(value, _name, item) => {
                                                 const g = (item as { payload?: { gmailAutoReplies?: number } })?.payload
                                                     ?.gmailAutoReplies
@@ -460,13 +447,8 @@ export default function AiAnalyticsPage() {
                                             tickLine={false}
                                         />
                                         <Tooltip
+                                            {...tt}
                                             cursor={{ fill: isLight ? "rgba(99,102,241,0.06)" : "rgba(255,255,255,0.05)" }}
-                                            contentStyle={{
-                                                borderRadius: 12,
-                                                border: `1px solid ${tooltipBorder}`,
-                                                background: tooltipBg,
-                                                fontWeight: 600,
-                                            }}
                                         />
                                         <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={18}>
                                             {barData.map((entry, i) => (
@@ -508,14 +490,9 @@ export default function AiAnalyticsPage() {
                                             tickLine={false}
                                             tickFormatter={(v) => `${v}m`}
                                         />
-                                        <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                                        <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600, color: chartMuted }} />
                                         <Tooltip
-                                            contentStyle={{
-                                                borderRadius: 12,
-                                                border: `1px solid ${tooltipBorder}`,
-                                                background: tooltipBg,
-                                                fontWeight: 600,
-                                            }}
+                                            {...tt}
                                             formatter={(value, name) =>
                                                 name === "AI"
                                                     ? [`${Number(value ?? 0)} min (median)`, "AI"]

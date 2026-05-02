@@ -34,6 +34,7 @@ import {
     Legend,
 } from "recharts"
 import { useTheme } from "@/components/ThemeProvider"
+import { chartTooltipProps } from "@/lib/charts/rechartsTooltip"
 import { cn } from "@/lib/utils"
 
 type TimeRange = "7days" | "30days" | "1year"
@@ -212,6 +213,7 @@ export default function DashboardPage() {
     const currency = business?.currency ?? "USD"
     const gridStroke = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
     const chartMuted = isLight ? "#64748b" : "#94a3b8"
+    const chartTt = chartTooltipProps(isLight)
     const donutColors = ["#6366f1", "#a855f7", "#f43f5e", "#f97316"]
 
     const kpiAccent: Record<string, string> = {
@@ -384,12 +386,7 @@ export default function DashboardPage() {
                                         tickFormatter={(v) => formatMoney(Number(v), currency)}
                                     />
                                     <Tooltip
-                                        contentStyle={{
-                                            borderRadius: 12,
-                                            border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.12)",
-                                            background: isLight ? "#fff" : "#0f172a",
-                                            fontWeight: 700,
-                                        }}
+                                        {...chartTt}
                                         formatter={(v) => [formatMoney(Number(v ?? 0), currency), "Profit (est.)"]}
                                     />
                                     <Bar dataKey="profit" fill="#22c55e" radius={[6, 6, 0, 0]} />
@@ -425,16 +422,13 @@ export default function DashboardPage() {
                                             <Cell key={i} fill={donutColors[i % donutColors.length]} />
                                         ))}
                                     </Pie>
-                                    <Legend verticalAlign="middle" align="right" layout="vertical" wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
-                                    <Tooltip
-                                        formatter={(v) => formatMoney(Number(v ?? 0), currency)}
-                                        contentStyle={{
-                                            borderRadius: 12,
-                                            border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.12)",
-                                            background: isLight ? "#fff" : "#0f172a",
-                                            fontWeight: 700,
-                                        }}
+                                    <Legend
+                                        verticalAlign="middle"
+                                        align="right"
+                                        layout="vertical"
+                                        wrapperStyle={{ fontSize: 11, fontWeight: 600, color: chartMuted }}
                                     />
+                                    <Tooltip {...chartTt} formatter={(v) => formatMoney(Number(v ?? 0), currency)} />
                                 </PieChart>
                             </ResponsiveContainer>
                         </div>
@@ -479,8 +473,8 @@ export default function DashboardPage() {
                     <div className={cn("px-4 md:px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2", isLight ? "border-slate-100" : "border-white/10")}>
                         <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>Product-level margins (est.)</h3>
                     </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                    <div className="table-horizontal-scroll">
+                        <table className="w-full text-sm min-w-[520px]">
                             <thead>
                                 <tr className={cn("text-left text-[10px] uppercase font-bold tracking-wider", isLight ? "bg-slate-50 text-slate-500" : "bg-white/[0.06] text-slate-400")}>
                                     <th className="px-4 py-3">Product</th>
@@ -520,7 +514,9 @@ export default function DashboardPage() {
                         )}
                     >
                         <Lightbulb className={cn("w-5 h-5 shrink-0 mt-0.5", isLight ? "text-amber-600" : "text-amber-300")} />
-                        <p className={cn("text-sm font-medium leading-relaxed", isLight ? "text-amber-950" : "text-amber-50")}>{business.aiInsight}</p>
+                        <p className={cn("text-sm font-medium leading-relaxed", isLight ? "text-amber-950" : "text-amber-50")}>
+                            {business.aiInsight}
+                        </p>
                     </div>
                 </div>
             )}
@@ -590,13 +586,9 @@ export default function DashboardPage() {
                                     tickFormatter={(val) => `$${val > 999 ? (val / 1000).toFixed(1) + "k" : val}`}
                                 />
                                 <Tooltip
+                                    {...chartTt}
                                     contentStyle={{
-                                        borderRadius: "12px",
-                                        border: isLight ? "1px solid #e2e8f0" : "1px solid rgba(255,255,255,0.1)",
-                                        background: isLight ? "#ffffff" : "#0f172a",
-                                        color: isLight ? "#1e293b" : "#f1f5f9",
-                                        fontWeight: 700,
-                                        boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
+                                        ...chartTt.contentStyle,
                                         backdropFilter: isLight ? "none" : "blur(12px)",
                                     }}
                                     formatter={(value) => {

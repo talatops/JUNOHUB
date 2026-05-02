@@ -199,9 +199,10 @@ html {
   -webkit-transform: translateZ(0);
 }
 
-/* Scrollbar styling */
+/* Scrollbar styling — width + height so horizontal tracks aren’t oversized fat bars */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -216,6 +217,30 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(16, 185, 129, 0.5);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-track {
+  background: var(--dashboard-bg, #f9fafb);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.18);
+}
+
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(79, 70, 229, 0.35);
+}
+
+/* Nested horizontal scroll (e.g. data tables): thin bar, avoids a heavy slab above footers */
+.table-horizontal-scroll {
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+html[data-theme="light"] .table-horizontal-scroll {
+  scrollbar-color: rgba(15, 23, 42, 0.22) transparent;
 }
 
 /* Smooth scrolling container optimization */

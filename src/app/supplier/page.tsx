@@ -255,8 +255,9 @@ export default function SupplierDashboardPage() {
                                     <XAxis dataKey="label" tick={{ fill: "rgb(148 163 184)", fontSize: 12 }} />
                                     <YAxis tick={{ fill: "rgb(148 163 184)", fontSize: 12 }} />
                                     <Tooltip
-                                        contentStyle={{ backgroundColor: "rgb(30 41 59)", border: "1px solid rgb(51 65 85)", borderRadius: "8px" }}
+                                        contentStyle={{ backgroundColor: "rgb(30 41 59)", border: "1px solid rgb(51 65 85)", borderRadius: "8px", color: "rgb(248 250 252)" }}
                                         labelStyle={{ color: "rgb(248 250 252)" }}
+                                        itemStyle={{ color: "rgb(248 250 252)" }}
                                         formatter={(value) => {
                                             const num =
                                                 typeof value === "number" ? value : Number(value)
