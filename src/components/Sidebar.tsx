@@ -17,7 +17,8 @@ import {
     Layers,
     HelpCircle,
     MessageCircle,
-    Store
+    Store,
+    BarChart3,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTheme } from "@/components/ThemeProvider"
@@ -29,6 +30,12 @@ const routes = [
         icon: LayoutDashboard,
         href: "/dashboard",
         color: "text-indigo-500",
+    },
+    {
+        label: "AI Analytics",
+        icon: BarChart3,
+        href: "/dashboard/ai-analytics",
+        color: "text-green-500",
     },
     {
         label: "Inventory",
