@@ -25,6 +25,12 @@ import {
     selectVariantForCart,
 } from "@/lib/storefront-chat/cartLinks"
 import { productSearchHitToActionProduct, searchProductsForStore } from "@/lib/ai/tools/productTools"
+import {
+    classifyAiResolution,
+    classifyCustomerSentiment,
+    logAiAnalyticsEvent,
+    logAiAnalyticsEvents,
+} from "@/lib/analytics/aiEvents"
 
 function normalizeShopDomain(input: string) {
     return input
@@ -423,6 +429,39 @@ export async function POST(req: Request) {
             select: { id: true, createdAt: true, senderType: true, content: true, actions: true }
         })
 
+        void logAiAnalyticsEvents([
+            {
+                storeId: store.id,
+                conversationId: conversation.id,
+                messageId: customerMessage.id,
+                eventType: "customer_question",
+                sentiment: classifyCustomerSentiment(customerContent),
+                metadata: {
+                    actionType: action?.type ?? null,
+                    contentPreview: customerContent.slice(0, 500),
+                },
+                createdAt: customerMessage.createdAt,
+            },
+            ...(action
+                ? [
+                      {
+                          storeId: store.id,
+                          conversationId: conversation.id,
+                          messageId: customerMessage.id,
+                          eventType:
+                              action.type === "upsell_suggestion"
+                                  ? ("upsell_clicked" as const)
+                                  : ("add_to_cart_clicked" as const),
+                          productId: action.productId,
+                          variantId: action.variantId ?? null,
+                          quantity: action.quantity,
+                          metadata: { sourceMessageId: action.sourceMessageId ?? null },
+                          createdAt: customerMessage.createdAt,
+                      },
+                  ]
+                : []),
+        ])
+
         const pendingCartProduct = parsePendingCartProduct(conversation.l1State)
         const existingCartLines = parseCartLines(conversation.l1State)
         const cartResponse = action
@@ -462,6 +501,50 @@ export async function POST(req: Request) {
                 },
                 select: { id: true, createdAt: true, senderType: true, content: true, actions: true },
             })
+
+            const openCartAction = cartResponse.actions.find((a) => a.type === "open_cart")
+            const openCartProduct = openCartAction?.product
+            void logAiAnalyticsEvents([
+                {
+                    storeId: store.id,
+                    conversationId: conversation.id,
+                    messageId: aiMessage.id,
+                    eventType: "ai_answered",
+                    resolutionStatus: "resolved_by_ai",
+                    productId: openCartProduct?.productId ?? null,
+                    variantId: openCartProduct?.variantId ?? null,
+                    quantity: openCartProduct?.quantity ?? null,
+                    metadata: {
+                        contentPreview: cartResponse.content.slice(0, 500),
+                        cartLines: cartResponse.cartLines,
+                    },
+                    createdAt: aiMessage.createdAt,
+                },
+                {
+                    storeId: store.id,
+                    conversationId: conversation.id,
+                    messageId: aiMessage.id,
+                    eventType: "cart_link_generated",
+                    productId: openCartProduct?.productId ?? null,
+                    variantId: openCartProduct?.variantId ?? null,
+                    quantity: openCartProduct?.quantity ?? null,
+                    metadata: {
+                        cartUrl: openCartAction?.cartUrl ?? null,
+                        cartLines: cartResponse.cartLines,
+                    },
+                    createdAt: aiMessage.createdAt,
+                },
+                {
+                    storeId: store.id,
+                    conversationId: conversation.id,
+                    messageId: aiMessage.id,
+                    eventType: "resolved_by_ai",
+                    productId: openCartProduct?.productId ?? null,
+                    variantId: openCartProduct?.variantId ?? null,
+                    metadata: { reason: "cart_permalink_generated" },
+                    createdAt: aiMessage.createdAt,
+                },
+            ])
 
             await prisma.storefrontChatConversation.update({
                 where: { id: conversation.id },
@@ -581,6 +664,68 @@ export async function POST(req: Request) {
             select: { id: true, createdAt: true, senderType: true, content: true, actions: true }
         })
 
+        const resolutionStatus = classifyAiResolution({
+            content: aiContent,
+            usedTools: ai.meta?.usedTools,
+            module: ai.meta?.module,
+        })
+        const upsellActions = aiActions.filter((a) => a.type === "upsell_suggestion")
+        void logAiAnalyticsEvents([
+            {
+                storeId: store.id,
+                conversationId: conversation.id,
+                messageId: aiMessage.id,
+                eventType: "ai_answered",
+                resolutionStatus,
+                metadata: {
+                    module: ai.meta?.module ?? null,
+                    usedTools: ai.meta?.usedTools ?? [],
+                    contentPreview: aiContent.slice(0, 500),
+                },
+                createdAt: aiMessage.createdAt,
+            },
+            ...(resolutionStatus === "resolved_by_ai"
+                ? [
+                      {
+                          storeId: store.id,
+                          conversationId: conversation.id,
+                          messageId: aiMessage.id,
+                          eventType: "resolved_by_ai" as const,
+                          resolutionStatus,
+                          metadata: { module: ai.meta?.module ?? null },
+                          createdAt: aiMessage.createdAt,
+                      },
+                  ]
+                : resolutionStatus === "needs_follow_up"
+                  ? [
+                        {
+                            storeId: store.id,
+                            conversationId: conversation.id,
+                            messageId: aiMessage.id,
+                            eventType: "unresolved_question" as const,
+                            resolutionStatus,
+                            metadata: { module: ai.meta?.module ?? null },
+                            createdAt: aiMessage.createdAt,
+                        },
+                    ]
+                  : []),
+            ...upsellActions.map((upsell) => ({
+                storeId: store.id,
+                conversationId: conversation.id,
+                messageId: aiMessage.id,
+                eventType: "upsell_shown" as const,
+                productId: upsell.product.productId,
+                variantId: upsell.product.variantId ?? null,
+                quantity: upsell.product.quantity ?? 1,
+                amount: upsell.product.price ? Number(upsell.product.price) || null : null,
+                metadata: {
+                    title: upsell.product.title,
+                    productType: upsell.product.productType ?? null,
+                },
+                createdAt: aiMessage.createdAt,
+            })),
+        ])
+
         if (aiContent === ai.content) {
             await prisma.storefrontChatConversation.update({
                 where: { id: conversation.id },
@@ -610,6 +755,18 @@ export async function POST(req: Request) {
                             isAutomated: true,
                             trigger: STOREFRONT_TICKET_TRIGGER,
                             status: "SENT",
+                        },
+                    })
+                    void logAiAnalyticsEvent({
+                        storeId: store.id,
+                        conversationId: conversation.id,
+                        messageId: aiMessage.id,
+                        eventType: "ticket_created",
+                        resolutionStatus: "escalated",
+                        metadata: {
+                            to: ticketTo,
+                            subject: ticketSubject,
+                            module: ai.meta?.module ?? null,
                         },
                     })
                 }

@@ -271,6 +271,56 @@ function extractLastCustomerContext(
     return null
 }
 
+function normalizeProductMatchText(input: string): string {
+    return input.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim()
+}
+
+function significantProductTerms(input: string): Set<string> {
+    const ignored = new Set([
+        "want",
+        "buy",
+        "some",
+        "sort",
+        "kind",
+        "need",
+        "looking",
+        "please",
+        "product",
+        "item",
+        "with",
+        "that",
+        "this",
+        "have",
+        "show",
+    ])
+    return new Set(
+        normalizeProductMatchText(input)
+            .split(" ")
+            .filter((term) => term.length >= 3 && !ignored.has(term)),
+    )
+}
+
+function chooseProductHitForActions(
+    hits: ProductSearchHit[],
+    replyText: string,
+    customerMessage: string,
+): ProductSearchHit | null {
+    const reply = normalizeProductMatchText(replyText)
+    const mentioned = hits.find((hit) => {
+        const title = normalizeProductMatchText(hit.title)
+        return title.length > 0 && reply.includes(title)
+    })
+    if (mentioned) return mentioned
+
+    const queryTerms = significantProductTerms(customerMessage)
+    if (queryTerms.size === 0) return hits[0] ?? null
+
+    return (
+        hits.find((hit) => hit.tokens.some((token) => queryTerms.has(token))) ??
+        null
+    )
+}
+
 async function composeReply(params: {
     storeName: string
     storeReference: string
@@ -745,27 +795,6 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
-    const actions: StorefrontChatAction[] = []
-    let pendingCartProduct: StorefrontActionProduct | null = null
-    if (input.channel === "widget" && productHits.length > 0) {
-        const primaryHit = productHits[0]
-        const primaryProduct = productSearchHitToActionProduct(primaryHit)
-        if (primaryProduct) {
-            pendingCartProduct = primaryProduct
-            actions.push(buildAddToCartAction(primaryProduct, "primary"))
-            const upsells = await findAutomaticUpsellCandidates({
-                storeId: input.storeId,
-                baseProduct: primaryProduct,
-                query: effectiveMessage,
-                limit: 1,
-            })
-            if (upsells[0]) {
-                usedTools.push("automatic_upsell")
-                actions.push(buildUpsellSuggestionAction(upsells[0], primaryProduct.title))
-            }
-        }
-    }
-
     const facts = [
         type1Facts,
         kbContext ? `Knowledge:\n${kbContext}` : "",
@@ -781,6 +810,27 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         message: effectiveMessage,
         history: historyToGroq(input.history),
     })
+
+    const actions: StorefrontChatAction[] = []
+    let pendingCartProduct: StorefrontActionProduct | null = null
+    if (input.channel === "widget" && productHits.length > 0) {
+        const primaryHit = chooseProductHitForActions(productHits, text, effectiveMessage)
+        const primaryProduct = primaryHit ? productSearchHitToActionProduct(primaryHit) : null
+        if (primaryProduct) {
+            pendingCartProduct = primaryProduct
+            actions.push(buildAddToCartAction(primaryProduct, "primary"))
+            const upsells = await findAutomaticUpsellCandidates({
+                storeId: input.storeId,
+                baseProduct: primaryProduct,
+                query: effectiveMessage,
+                limit: 1,
+            })
+            if (upsells[0]) {
+                usedTools.push("automatic_upsell")
+                actions.push(buildUpsellSuggestionAction(upsells[0], primaryProduct.title))
+            }
+        }
+    }
 
     logger.info("[L1_ORCHESTRATOR]", {
         storeId: input.storeId,

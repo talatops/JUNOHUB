@@ -73,11 +73,33 @@ function imageUrlFromImages(images: unknown): string | null {
 }
 
 function termsFromText(text: string) {
+    const ignored = new Set([
+        "want",
+        "wants",
+        "buy",
+        "some",
+        "sort",
+        "kind",
+        "need",
+        "needs",
+        "looking",
+        "please",
+        "product",
+        "products",
+        "item",
+        "items",
+        "show",
+        "have",
+        "with",
+        "that",
+        "this",
+        "your",
+    ])
     return text
         .toLowerCase()
         .split(/[^a-z0-9]+/g)
         .map((t) => t.trim())
-        .filter((t) => t.length >= 2)
+        .filter((t) => t.length >= 2 && !ignored.has(t))
 }
 
 export function productSearchHitToActionProduct(hit: ProductSearchHit): StorefrontActionProduct | null {
@@ -125,14 +147,22 @@ export async function searchProductsForStore(
 
         const scored: { p: (typeof products)[0]; score: number }[] = []
         for (const p of products) {
-            const hay = `${p.title} ${p.productType ?? ""} ${JSON.stringify(p.variants)} ${metafieldsToSummary(p.metafields) ?? ""}`.toLowerCase()
+            const title = p.title.toLowerCase()
+            const productType = (p.productType ?? "").toLowerCase()
+            const variantsText = JSON.stringify(p.variants).toLowerCase()
+            const metafieldsText = (metafieldsToSummary(p.metafields) ?? "").toLowerCase()
+            const hay = `${title} ${productType} ${variantsText} ${metafieldsText}`
             let score = 0
             for (const t of terms) {
+                if (title.includes(t)) score += 8
+                if (productType.includes(t)) score += 4
+                if (variantsText.includes(t)) score += 2
+                if (metafieldsText.includes(t)) score += 1
                 if (hay.includes(t)) score += 1
             }
             if (score > 0) scored.push({ p, score })
         }
-        scored.sort((a, b) => b.score - a.score)
+        scored.sort((a, b) => b.score - a.score || a.p.title.localeCompare(b.p.title))
 
         return scored.slice(0, limit).map(({ p }) => {
             const variants = extractCartableVariants(p.variants)

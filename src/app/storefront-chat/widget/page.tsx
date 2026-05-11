@@ -442,6 +442,32 @@ export default function StorefrontChatWidgetPage() {
         )
     }
 
+    const reportWidgetEvent = (message: WidgetMessage, action: Extract<WidgetAction, { type: "open_cart" }>) => {
+        if (!shop || !visitorId) return
+        const payload = JSON.stringify({
+            shop,
+            visitorId,
+            type: "cart_link_opened",
+            productId: action.product?.productId,
+            variantId: action.product?.variantId,
+            sourceMessageId: message.id,
+        })
+        try {
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon("/api/storefront-chat/events", new Blob([payload], { type: "application/json" }))
+                return
+            }
+        } catch {
+            /* ignore and fallback */
+        }
+        void fetch("/api/storefront-chat/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: payload,
+            keepalive: true,
+        }).catch(() => {})
+    }
+
     const renderMessageActions = (message: WidgetMessage) => {
         if (message.senderType !== "AI" || !message.actions?.length) return null
 
@@ -453,7 +479,10 @@ export default function StorefrontChatWidgetPage() {
                             <button
                                 key={`${message.id}-${action.type}-${index}`}
                                 type="button"
-                                onClick={() => window.open(action.cartUrl, "_blank", "noopener,noreferrer")}
+                                onClick={() => {
+                                    reportWidgetEvent(message, action)
+                                    window.open(action.cartUrl, "_blank", "noopener,noreferrer")
+                                }}
                                 className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 hover:bg-emerald-100"
                             >
                                 {action.label}
@@ -469,10 +498,10 @@ export default function StorefrontChatWidgetPage() {
                             >
                                 <div className="flex gap-2">
                                     {action.product.imageUrl ? (
-                                        <img
-                                            src={action.product.imageUrl}
-                                            alt=""
-                                            className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
+                                        <span
+                                            aria-hidden="true"
+                                            className="h-12 w-12 flex-shrink-0 rounded-lg bg-slate-100 bg-cover bg-center"
+                                            style={{ backgroundImage: `url(${action.product.imageUrl})` }}
                                         />
                                     ) : null}
                                     <div className="min-w-0 flex-1">

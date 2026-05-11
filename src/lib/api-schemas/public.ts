@@ -52,6 +52,15 @@ export const storefrontChatActionSchema = z.object({
     sourceMessageId: z.string().trim().max(128).optional(),
 })
 
+export const storefrontChatEventSchema = z.object({
+    shop: storefrontShopSchema,
+    visitorId: storefrontVisitorIdSchema,
+    type: z.enum(["cart_link_opened"]),
+    productId: z.string().trim().min(1).max(128).optional(),
+    variantId: z.string().trim().min(1).max(128).optional(),
+    sourceMessageId: z.string().trim().max(128).optional(),
+})
+
 /** Anonymous storefront widget message */
 export const storefrontChatPostSchema = z
     .object({
@@ -149,6 +158,7 @@ export const storefrontOtpVerifySchema = z.object({
 export type NewsletterSubscribeInput = z.infer<typeof newsletterSubscribeSchema>
 export type StorefrontChatPostInput = z.infer<typeof storefrontChatPostSchema>
 export type StorefrontChatActionInput = z.infer<typeof storefrontChatActionSchema>
+export type StorefrontChatEventInput = z.infer<typeof storefrontChatEventSchema>
 export type ChatMessagePostInput = z.infer<typeof chatMessagePostSchema>
 export type StorefrontOtpRequestInput = z.infer<typeof storefrontOtpRequestSchema>
 export type StorefrontOtpVerifyInput = z.infer<typeof storefrontOtpVerifySchema>

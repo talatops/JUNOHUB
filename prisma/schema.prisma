@@ -26,28 +26,28 @@ model User {
   image         String?
   password      String?
   role          UserRole  @default(VENDOR)
-  
-  activeStoreId String?   // Track which store is currently active
-  
+
+  activeStoreId String? // Track which store is currently active
+
   // MFA (Multi-Factor Authentication)
-  mfaEnabled    Boolean   @default(false)
-  mfaSecret     String?   // Encrypted TOTP secret
-  
+  mfaEnabled Boolean @default(false)
+  mfaSecret  String? // Encrypted TOTP secret
+
   // Relations
-  sentMessages     ChatMessage[] @relation("SentMessages")
-  receivedMessages ChatMessage[] @relation("ReceivedMessages")
-  accounts      Account[]
-  sessions      Session[]
-  stores        Store[]   // Changed from singular to support multiple stores
-  supplierProfile SupplierProfile?
-  notifications Notification[]
-  gmailIntegration GmailIntegration?
-  emailLogs     EmailLog[]
+  sentMessages            ChatMessage[]           @relation("SentMessages")
+  receivedMessages        ChatMessage[]           @relation("ReceivedMessages")
+  accounts                Account[]
+  sessions                Session[]
+  stores                  Store[] // Changed from singular to support multiple stores
+  supplierProfile         SupplierProfile?
+  notifications           Notification[]
+  gmailIntegration        GmailIntegration?
+  emailLogs               EmailLog[]
   gmailInboundAutoReplies GmailInboundAutoReply[]
-  pushSubscriptions PushSubscription[]
-  
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  pushSubscriptions       PushSubscription[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // Auth.js / NextAuth Prisma adapter models (required for OAuth e.g. Google)
@@ -57,12 +57,12 @@ model Account {
   type              String
   provider          String
   providerAccountId String
-  refresh_token     String?  @db.Text
-  access_token      String?  @db.Text
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
   expires_at        Int?
   token_type        String?
   scope             String?
-  id_token          String?  @db.Text
+  id_token          String? @db.Text
   session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -88,101 +88,122 @@ model VerificationToken {
 }
 
 model Store {
-  id               String   @id @default(cuid())
-  userId           String   // Removed @unique to allow multiple stores per user
-  user             User     @relation(fields: [userId], references: [id])
-  
-  businessName     String
-  email            String
-  timezone         String
-  country          String
-  
+  id     String @id @default(cuid())
+  userId String // Removed @unique to allow multiple stores per user
+  user   User   @relation(fields: [userId], references: [id])
+
+  businessName String
+  email        String
+  timezone     String
+  country      String
+
   // Shopify Credentials
-  shopifyStoreName String
-  shopifyDomain    String
-  shopifyApiKey    String
-  shopifyApiSecret String
+  shopifyStoreName   String
+  shopifyDomain      String
+  shopifyApiKey      String
+  shopifyApiSecret   String
   shopifyAccessToken String
-  
+
   onboardingComplete Boolean @default(false)
-  isActive         Boolean  @default(true)  // Track if this is the active store
+  isActive           Boolean @default(true) // Track if this is the active store
 
   // Customer-facing storefront widget (floating chat) enablement.
-  storefrontChatEnabled Boolean @default(false)
-  /** After OTP verify, widget session length (minutes). Clamped server-side (e.g. 5–10080). Default 60. */
-  storefrontOtpSessionMinutes Int @default(60)
-  storefrontChatName String?
-  storefrontChatTagline String?
-  storefrontChatBrandColor String?
-  storefrontChatFontFamily String?
-  storefrontChatLogoUrl String?
+  storefrontChatEnabled       Boolean @default(false)
+  /**
+   * After OTP verify, widget session length (minutes). Clamped server-side (e.g. 5–10080). Default 60.
+   */
+  storefrontOtpSessionMinutes Int     @default(60)
+  storefrontChatName          String?
+  storefrontChatTagline       String?
+  storefrontChatBrandColor    String?
+  storefrontChatFontFamily    String?
+  storefrontChatLogoUrl       String?
 
-  /** Primary knowledge source: structured questionnaire vs uploaded documents (mutually exclusive). */
-  knowledgeBaseMode   KnowledgeBaseMode @default(UNSET)
-  /** Saved structured KB answers (version, per-field text, misc). Embedded as STRUCTURED chunks. */
-  knowledgeTemplate   Json?
+  /**
+   * Primary knowledge source: structured questionnaire vs uploaded documents (mutually exclusive).
+   */
+  knowledgeBaseMode KnowledgeBaseMode @default(UNSET)
+  /**
+   * Saved structured KB answers (version, per-field text, misc). Embedded as STRUCTURED chunks.
+   */
+  knowledgeTemplate Json?
 
-  /** When true, L1 may use DB-backed category/product metafield tools for customer answers. */
+  /**
+   * When true, L1 may use DB-backed category/product metafield tools for customer answers.
+   */
   categoryMetadetailsEnabled Boolean @default(false)
-  /** Per-module AI enablement, e.g. { "FAQ": true, "ORDER_STATUS": true }. */
-  aiModules           Json?
-  /** FAQ-style policy text per L1 module for embeddings, e.g. { "ORDER_STATUS": "..." }. */
-  modulePolicies      Json?
-  /** Vendor Type-1 answers keyed by shared_field_id (sf_*); one value per key store-wide (§4.2). */
-  sharedFieldAnswers  Json?
+  /**
+   * Per-module AI enablement, e.g. { "FAQ": true, "ORDER_STATUS": true }.
+   */
+  aiModules                  Json?
+  /**
+   * FAQ-style policy text per L1 module for embeddings, e.g. { "ORDER_STATUS": "..." }.
+   */
+  modulePolicies             Json?
+  /**
+   * Vendor Type-1 answers keyed by shared_field_id (sf_*); one value per key store-wide (§4.2).
+   */
+  sharedFieldAnswers         Json?
 
-  /** Optional Gmail auto-reply HTML theming (colors, font, logo URL). Merged with defaults server-side. */
-  gmailReplyTheme     Json?
+  /**
+   * Optional Gmail auto-reply HTML theming (colors, font, logo URL). Merged with defaults server-side.
+   */
+  gmailReplyTheme Json?
 
   /**
    * When set, supplier-reported stock (ProductSync snapshot) below this value can trigger
    * B2B low-stock chat to linked suppliers. Null = off for this signal.
    */
-  lowStockThreshold          Int?
+  lowStockThreshold        Int?
   /**
    * When set, total Shopify variant inventory (sum of inventory_quantity) below this value
    * triggers an in-app notification to the vendor (restock / Load stock). Null = off.
    */
-  lowStockShopifyThreshold   Int?
+  lowStockShopifyThreshold Int?
 
   // Relations
-  connections      Connection[]
-  cachedProducts   CachedProduct[]
-  cachedOrders     CachedOrder[]
-  cachedCustomers  CachedCustomer[]
-  storefrontChatConversations StorefrontChatConversation[]
-  syncMetadata     SyncMetadata[]
-  invitations      Invitation[]
-  productSyncs     ProductSync[]
-  supplierProductOffers SupplierProductOffer[]
-  knowledgeDocuments KnowledgeDocument[]
-  faqItems        FaqItem[]
-  knowledgeChunks KnowledgeChunk[]
-  emailLogs       EmailLog[]
-  flaggedEmails   FlaggedEmail[]
-  gmailInboundAutoReplies GmailInboundAutoReply[]
-  templates       Template[]
-  chatMessages    ChatMessage[]
-  lowStockAlertStates LowStockAlertState[]
+  connections                      Connection[]
+  cachedProducts                   CachedProduct[]
+  cachedOrders                     CachedOrder[]
+  cachedCustomers                  CachedCustomer[]
+  storefrontChatConversations      StorefrontChatConversation[]
+  syncMetadata                     SyncMetadata[]
+  invitations                      Invitation[]
+  productSyncs                     ProductSync[]
+  supplierProductOffers            SupplierProductOffer[]
+  knowledgeDocuments               KnowledgeDocument[]
+  faqItems                         FaqItem[]
+  knowledgeChunks                  KnowledgeChunk[]
+  emailLogs                        EmailLog[]
+  flaggedEmails                    FlaggedEmail[]
+  gmailInboundAutoReplies          GmailInboundAutoReply[]
+  templates                        Template[]
+  chatMessages                     ChatMessage[]
+  aiAnalyticsEvents                AiAnalyticsEvent[]
+  lowStockAlertStates              LowStockAlertState[]
   lowStockShopifyVendorAlertStates LowStockShopifyVendorAlertState[]
-  supplierAutomationLogs SupplierAutomationLog[]
-  
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  
-  @@index([userId])  // Add index for performance
+  supplierAutomationLogs           SupplierAutomationLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId]) // Add index for performance
 }
 
-/** Dedupes low-stock B2B notifications per store + product + supplier while supplier-reported qty stays below threshold. */
+/**
+ * Dedupes low-stock B2B notifications per store + product + supplier while supplier-reported qty stays below threshold.
+ */
 model LowStockAlertState {
-  id                 String   @id @default(cuid())
-  storeId            String
-  store              Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  shopifyProductId   String
-  supplierId         String
-  supplier           SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  id                  String          @id @default(cuid())
+  storeId             String
+  store               Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId    String
+  supplierId          String
+  supplier            SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
   lastSeenSupplierQty Int?
-  /** Set when we sent a low-stock alert; cleared when supplier qty is back >= threshold. */
+  /**
+   * Set when we sent a low-stock alert; cleared when supplier qty is back >= threshold.
+   */
   lastNotifiedBelowAt DateTime?
 
   createdAt DateTime @default(now())
@@ -193,15 +214,19 @@ model LowStockAlertState {
   @@index([supplierId])
 }
 
-/** Dedupes Shopify low-stock vendor notifications per store + product while total stays below threshold. */
+/**
+ * Dedupes Shopify low-stock vendor notifications per store + product while total stays below threshold.
+ */
 model LowStockShopifyVendorAlertState {
-  id                    String   @id @default(cuid())
-  storeId               String
-  store                 Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  shopifyProductId      String
-  lastSeenShopifyTotal  Int?
-  /** Set when we created a vendor notification; cleared when Shopify total is back >= threshold. */
-  lastNotifiedBelowAt   DateTime?
+  id                   String    @id @default(cuid())
+  storeId              String
+  store                Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyProductId     String
+  lastSeenShopifyTotal Int?
+  /**
+   * Set when we created a vendor notification; cleared when Shopify total is back >= threshold.
+   */
+  lastNotifiedBelowAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -216,14 +241,14 @@ enum SupplierAutomationKind {
 }
 
 model SupplierAutomationLog {
-  id               String   @id @default(cuid())
+  id               String                 @id @default(cuid())
   storeId          String
-  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store            Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
   kind             SupplierAutomationKind
   shopifyProductId String?
   supplierUserId   String?
   ticketKey        String?
-  messagePreview   String   @db.Text
+  messagePreview   String                 @db.Text
 
   createdAt DateTime @default(now())
 
@@ -232,151 +257,157 @@ model SupplierAutomationLog {
 }
 
 model CachedProduct {
-  id                String   @id @default(cuid())
-  shopifyProductId  String
-  storeId           String
-  title             String
-  vendor            String?
-  productType       String?
-  status            String?
-  variants          Json     // Store variants as JSON
-  images            Json     // Store images as JSON
-  /** Shopify product metafields (incl. category / taxonomy fields from admin) for automation & search. */
-  metafields        Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  lastSyncedAt      DateTime @default(now())
-  
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  id               String   @id @default(cuid())
+  shopifyProductId String
+  storeId          String
+  title            String
+  vendor           String?
+  productType      String?
+  status           String?
+  variants         Json // Store variants as JSON
+  images           Json // Store images as JSON
+  /**
+   * Shopify product metafields (incl. category / taxonomy fields from admin) for automation & search.
+   */
+  metafields       Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  lastSyncedAt     DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@unique([shopifyProductId, storeId])
   @@index([storeId])
 }
 
 model CachedOrder {
-  id                  String   @id @default(cuid())
-  shopifyOrderId      String
-  storeId             String
-  orderNumber         String
-  email               String?
-  totalPrice          String
-  currency            String?
-  financialStatus     String?
-  fulfillmentStatus   String?
-  /** When fulfillment is ON_HOLD: machine reason (see SUPPLIER_HOLD_REASON_CODES). */
-  holdReasonCode      String?
-  holdNote            String?  @db.Text
-  trackingNumber      String?
-  trackingCompany     String?
-  trackingUrl         String?
-  pendingVendorSync   Boolean  @default(false)
-  lastSupplierUpdateAt DateTime?
+  id                    String    @id @default(cuid())
+  shopifyOrderId        String
+  storeId               String
+  orderNumber           String
+  email                 String?
+  totalPrice            String
+  currency              String?
+  financialStatus       String?
+  fulfillmentStatus     String?
+  /**
+   * When fulfillment is ON_HOLD: machine reason (see SUPPLIER_HOLD_REASON_CODES).
+   */
+  holdReasonCode        String?
+  holdNote              String?   @db.Text
+  trackingNumber        String?
+  trackingCompany       String?
+  trackingUrl           String?
+  pendingVendorSync     Boolean   @default(false)
+  lastSupplierUpdateAt  DateTime?
   lastSupplierUpdatedBy String?
-  lastShopifySyncAt   DateTime?
-  lastShopifySyncError String?
-  lineItems           Json     // Store line items as JSON
-  customer            Json?    // Store customer info as JSON
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  lastSyncedAt        DateTime @default(now())
-  shopifyCreatedAt    DateTime?
-  
-  store               Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  lastShopifySyncAt     DateTime?
+  lastShopifySyncError  String?
+  lineItems             Json // Store line items as JSON
+  customer              Json? // Store customer info as JSON
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  lastSyncedAt          DateTime  @default(now())
+  shopifyCreatedAt      DateTime?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@unique([shopifyOrderId, storeId])
   @@index([storeId])
   @@index([shopifyCreatedAt])
 }
 
 model CachedCustomer {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   shopifyCustomerId String
   storeId           String
   email             String?
   firstName         String?
   lastName          String?
-  ordersCount       Int      @default(0)
+  ordersCount       Int       @default(0)
   totalSpent        String?
   phone             String?
   tags              String?
-  /** Shopify REST `default_address` snapshot for vendor UI (city, country, etc.). */
+  /**
+   * Shopify REST `default_address` snapshot for vendor UI (city, country, etc.).
+   */
   defaultAddress    Json?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  lastSyncedAt      DateTime @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastSyncedAt      DateTime  @default(now())
   shopifyCreatedAt  DateTime?
-  
-  store             Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@unique([shopifyCustomerId, storeId])
   @@index([storeId])
 }
 
 model SyncMetadata {
-  id            String   @id @default(cuid())
-  storeId       String
-  resourceType  String   // "products", "orders", "customers"
-  lastSyncAt    DateTime @default(now())
-  syncStatus    String   @default("success") // "success", "failed", "in_progress"
-  recordCount   Int      @default(0)
-  errorMessage  String?
-  
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  
+  id           String   @id @default(cuid())
+  storeId      String
+  resourceType String // "products", "orders", "customers"
+  lastSyncAt   DateTime @default(now())
+  syncStatus   String   @default("success") // "success", "failed", "in_progress"
+  recordCount  Int      @default(0)
+  errorMessage String?
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
   @@unique([storeId, resourceType])
   @@index([storeId])
 }
 
 model SupplierProfile {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  user         User     @relation(fields: [userId], references: [id])
-  
-  companyName  String
-  description  String?
-  
-  // Relations
-  connections  Connection[]
-  products     Product[]
-  invitations  Invitation[]
-  productSyncs ProductSync[]
-  supplierProductOffers SupplierProductOffer[]
-  lowStockAlertStates LowStockAlertState[]
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  companyName String
+  description String?
+
+  // Relations
+  connections           Connection[]
+  products              Product[]
+  invitations           Invitation[]
+  productSyncs          ProductSync[]
+  supplierProductOffers SupplierProductOffer[]
+  lowStockAlertStates   LowStockAlertState[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Connection {
-  id         String   @id @default(cuid())
+  id         String          @id @default(cuid())
   storeId    String
-  store      Store    @relation(fields: [storeId], references: [id])
+  store      Store           @relation(fields: [storeId], references: [id])
   supplierId String
   supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
-  
-  status     ConnectionStatus @default(PENDING)
-  
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+
+  status ConnectionStatus @default(PENDING)
+
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  supplierProductOffers SupplierProductOffer[]
 
   @@unique([storeId, supplierId])
-  supplierProductOffers SupplierProductOffer[]
 }
 
 model Invitation {
-  id          String   @id @default(cuid())
-  token       String   @unique
-  storeId     String
-  store       Store    @relation(fields: [storeId], references: [id])
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  
-  email       String   // Supplier email to send invitation to
-  expiresAt   DateTime
-  used        Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
-  usedAt      DateTime?
+  id         String          @id @default(cuid())
+  token      String          @unique
+  storeId    String
+  store      Store           @relation(fields: [storeId], references: [id])
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  email     String // Supplier email to send invitation to
+  expiresAt DateTime
+  used      Boolean  @default(false)
+
+  createdAt DateTime  @default(now())
+  usedAt    DateTime?
 
   @@index([token])
   @@index([supplierId])
@@ -390,37 +421,37 @@ enum ConnectionStatus {
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  
+  id         String          @id @default(cuid())
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
   title       String
   description String?
   price       Float
   sku         String?
   imageUrl    String?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  offers      SupplierProductOffer[]
+
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+  offers    SupplierProductOffer[]
 }
 
 model SupplierProductOffer {
-  id           String   @id @default(cuid())
+  id           String          @id @default(cuid())
   productId    String
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   storeId      String
-  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store        Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
   connectionId String
-  connection   Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  connection   Connection      @relation(fields: [connectionId], references: [id], onDelete: Cascade)
   supplierId   String
   supplier     SupplierProfile @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
-  price        Float
-  quantity     Int
+  price    Float
+  quantity Int
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([productId, storeId])
   @@index([storeId])
@@ -435,26 +466,26 @@ enum ProductSyncStatus {
 }
 
 model ProductSync {
-  id          String   @id @default(cuid())
-  storeId     String
-  store       Store    @relation(fields: [storeId], references: [id])
-  supplierId  String
-  supplier    SupplierProfile @relation(fields: [supplierId], references: [id])
-  
-  shopifyProductId String  // Shopify product ID from vendor's store
+  id         String          @id @default(cuid())
+  storeId    String
+  store      Store           @relation(fields: [storeId], references: [id])
+  supplierId String
+  supplier   SupplierProfile @relation(fields: [supplierId], references: [id])
+
+  shopifyProductId    String // Shopify product ID from vendor's store
   shopifyProductTitle String
-  shopifyProductData Json?  // Store full product data for reference
-  
-  status      ProductSyncStatus @default(PENDING)
-  
+  shopifyProductData  Json? // Store full product data for reference
+
+  status ProductSyncStatus @default(PENDING)
+
   // Metadata
-  requestedBy String  // userId of vendor who requested
+  requestedBy String // userId of vendor who requested
   acceptedAt  DateTime?
   rejectedAt  DateTime?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([storeId, supplierId, shopifyProductId])
   @@index([storeId])
   @@index([supplierId])
@@ -463,20 +494,20 @@ model ProductSync {
 }
 
 model GmailIntegration {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  accessToken   String   @db.Text
-  refreshToken  String?  @db.Text
-  expiresAt     DateTime
-  
-  email         String   // Gmail email address
-  scope         String   // OAuth scopes granted
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken  String   @db.Text
+  refreshToken String?  @db.Text
+  expiresAt    DateTime
+
+  email String // Gmail email address
+  scope String // OAuth scopes granted
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
 }
 
@@ -493,28 +524,30 @@ enum NotificationType {
 }
 
 model Notification {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  type      NotificationType
-  title     String
-  message   String
-  read      Boolean  @default(false)
-  readAt    DateTime?
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type    NotificationType
+  title   String
+  message String
+  read    Boolean          @default(false)
+  readAt  DateTime?
+
   // Optional metadata for linking to related entities
-  metadata  Json?    // Store related IDs (connectionId, invitationId, etc.)
-  
+  metadata Json? // Store related IDs (connectionId, invitationId, etc.)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   @@index([userId])
   @@index([userId, read])
   @@index([createdAt])
 }
 
-/** One row per inbound Gmail message id that received an auto-reply (idempotency). */
+/**
+ * One row per inbound Gmail message id that received an auto-reply (idempotency).
+ */
 model GmailInboundAutoReply {
   id             String   @id @default(cuid())
   userId         String
@@ -529,26 +562,26 @@ model GmailInboundAutoReply {
 }
 
 model EmailLog {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storeId     String?
-  store       Store?   @relation(fields: [storeId], references: [id])
+  id      String  @id @default(cuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storeId String?
+  store   Store?  @relation(fields: [storeId], references: [id])
 
   to          String
   subject     String
   bodyPreview String?
 
   // Whether this email was triggered automatically by the system
-  isAutomated Boolean  @default(false)
-  trigger     String?  // e.g. "GMAIL_AUTO_REPLY", "TICKET_CREATED"
+  isAutomated Boolean @default(false)
+  trigger     String? // e.g. "GMAIL_AUTO_REPLY", "TICKET_CREATED"
 
-  status      String   // "SENT" | "FAILED"
+  status            String // "SENT" | "FAILED"
   providerMessageId String?
-  errorMessage String?
+  errorMessage      String?
 
-  sentAt      DateTime @default(now())
-  createdAt   DateTime @default(now())
+  sentAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([storeId, sentAt])
   @@index([userId, sentAt])
@@ -561,16 +594,16 @@ enum FlaggedEmailPriority {
 }
 
 model FlaggedEmail {
-  id         String              @id @default(cuid())
-  storeId    String
-  store      Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  subject    String              @db.Text
-  from       String              // Sender email
-  reason     String              @db.Text
-  priority   FlaggedEmailPriority @default(MEDIUM)
-  messageId  String?             // Gmail message id for future sync
-  flaggedAt  DateTime            @default(now())
-  createdAt  DateTime            @default(now())
+  id        String               @id @default(cuid())
+  storeId   String
+  store     Store                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  subject   String               @db.Text
+  from      String // Sender email
+  reason    String               @db.Text
+  priority  FlaggedEmailPriority @default(MEDIUM)
+  messageId String? // Gmail message id for future sync
+  flaggedAt DateTime             @default(now())
+  createdAt DateTime             @default(now())
 
   @@index([storeId])
   @@index([storeId, flaggedAt])
@@ -596,40 +629,40 @@ enum KnowledgeBaseMode {
 }
 
 model KnowledgeDocument {
-  id          String                  @id @default(cuid())
-  storeId     String
-  store       Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  title       String
-  fileName    String
-  mimeType    String
-  sizeBytes   Int
-  status      KnowledgeDocumentStatus @default(UPLOADED)
+  title        String
+  fileName     String
+  mimeType     String
+  sizeBytes    Int
+  status       KnowledgeDocumentStatus @default(UPLOADED)
   errorMessage String?
 
   // Where the raw file is stored (local path or object storage key)
   storagePath String
 
   // Relations
-  chunks      KnowledgeChunk[]
+  chunks KnowledgeChunk[]
 
-  createdAt   DateTime                @default(now())
-  updatedAt   DateTime                @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storeId])
 }
 
 model FaqItem {
-  id        String   @id @default(cuid())
-  storeId   String
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  question  String
-  answer    String
-  tags      Json?
+  question String
+  answer   String
+  tags     Json?
 
   // Relations
-  chunks    KnowledgeChunk[]
+  chunks KnowledgeChunk[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -638,25 +671,25 @@ model FaqItem {
 }
 
 model KnowledgeChunk {
-  id          String                 @id @default(cuid())
-  storeId     String
-  store       Store                  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
-  documentId  String?
-  document    KnowledgeDocument?     @relation(fields: [documentId], references: [id])
+  documentId String?
+  document   KnowledgeDocument? @relation(fields: [documentId], references: [id])
 
-  faqItemId   String?
-  faqItem     FaqItem?               @relation(fields: [faqItemId], references: [id])
+  faqItemId String?
+  faqItem   FaqItem? @relation(fields: [faqItemId], references: [id])
 
-  sourceType  KnowledgeChunkSourceType
-  content     String
-  metadata    Json?
+  sourceType KnowledgeChunkSourceType
+  content    String
+  metadata   Json?
 
   // pgvector-backed column; accessed via raw SQL for similarity search
-  embedding   Unsupported("vector")
+  embedding Unsupported("vector")
 
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storeId])
   @@index([documentId])
@@ -664,37 +697,39 @@ model KnowledgeChunk {
 }
 
 model Template {
-  id          String   @id @default(cuid())
-  storeId     String
-  store       Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  id      String @id @default(cuid())
+  storeId String
+  store   Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   name        String
   intent      String
   mood        String
   description String?
 
-  body        String   // Template body (HTML or plain text with {{variables}})
-  variables   Json?    // Optional metadata describing expected variables
-  isHtml      Boolean  @default(true)
+  body      String // Template body (HTML or plain text with {{variables}})
+  variables Json? // Optional metadata describing expected variables
+  isHtml    Boolean @default(true)
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([storeId])
 }
 
 model ChatMessage {
-  id                      String   @id @default(cuid())
-  senderId                String
-  receiverId              String
-  /** Vendor store this thread belongs to (B2B JUNO CHAT). Null = legacy messages before per-store threading. */
-  storeId                 String?
-  kind                    ChatMessageKind @default(TEXT)
-  content                 String   @db.Text
-  attachment              Json?
+  id         String          @id @default(cuid())
+  senderId   String
+  receiverId String
+  /**
+   * Vendor store this thread belongs to (B2B JUNO CHAT). Null = legacy messages before per-store threading.
+   */
+  storeId    String?
+  kind       ChatMessageKind @default(TEXT)
+  content    String          @db.Text
+  attachment Json?
 
-  sender   User @relation("SentMessages", fields: [senderId], references: [id])
-  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id])
+  sender   User   @relation("SentMessages", fields: [senderId], references: [id])
+  receiver User   @relation("ReceivedMessages", fields: [receiverId], references: [id])
   store    Store? @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
@@ -710,57 +745,94 @@ enum StorefrontChatSenderType {
 }
 
 model StorefrontChatConversation {
-  id            String   @id @default(cuid())
+  id            String  @id @default(cuid())
   storeId       String
-  store         Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store         Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   visitorId     String
   customerEmail String?
 
-  /** Email the customer entered for OTP (asserted order email). */
+  /**
+   * Email the customer entered for OTP (asserted order email).
+   */
   assertedEmail       String?
   emailVerifiedAt     DateTime?
-  /** Verified session TTL (e.g. 1h from verification). */
+  /**
+   * Verified session TTL (e.g. 1h from verification).
+   */
   sessionExpiresAt    DateTime?
-  /** After order disambiguation, pinned Shopify order id for this session. */
+  /**
+   * After order disambiguation, pinned Shopify order id for this session.
+   */
   boundShopifyOrderId String?
-  /** SHA-256 hex of OTP + store-visitor salt; cleared after verify. */
+  /**
+   * SHA-256 hex of OTP + store-visitor salt; cleared after verify.
+   */
   otpHash             String?
   otpExpiresAt        DateTime?
-  /** L1 orchestrator: phase, module, slots (JSON). */
+  /**
+   * L1 orchestrator: phase, module, slots (JSON).
+   */
   l1State             Json?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  messages      StorefrontChatMessage[]
+  messages StorefrontChatMessage[]
 
   @@unique([storeId, visitorId])
   @@index([storeId])
 }
 
 model StorefrontChatMessage {
-  id             String   @id @default(cuid())
+  id             String                     @id @default(cuid())
   conversationId String
-  conversation  StorefrontChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  senderType    StorefrontChatSenderType
-  content       String   @db.Text
-  actions       Json?
+  conversation   StorefrontChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderType     StorefrontChatSenderType
+  content        String                     @db.Text
+  actions        Json?
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([conversationId, createdAt])
 }
 
+model AiAnalyticsEvent {
+  id               String   @id @default(cuid())
+  storeId          String
+  store            Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  conversationId   String?
+  messageId        String?
+  eventType        String
+  source           String
+  productId        String?
+  variantId        String?
+  quantity         Int?
+  amount           Float?
+  currency         String?
+  sentiment        String?
+  resolutionStatus String?
+  orderId          String?
+  attributionType  String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+
+  @@index([storeId, eventType, createdAt])
+  @@index([storeId, createdAt])
+  @@index([conversationId])
+  @@index([productId])
+  @@index([orderId])
+}
+
 model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  endpoint  String   @unique
-  p256dh    String   // Public key for encryption
-  auth      String   // Authentication secret
-  
-  userAgent String?  // Optional: device/browser info
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint String @unique
+  p256dh   String // Public key for encryption
+  auth     String // Authentication secret
+
+  userAgent String? // Optional: device/browser info
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

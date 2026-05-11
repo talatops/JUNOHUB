@@ -3,6 +3,7 @@ import {
     newsletterSubscribeSchema,
     storefrontChatPostSchema,
     storefrontChatActionSchema,
+    storefrontChatEventSchema,
     chatMessagePostSchema,
     CHAT_MESSAGE_CONTENT_MAX,
     CHAT_ATTACHMENT_JSON_MAX,
@@ -70,6 +71,29 @@ describe("storefrontChatActionSchema", () => {
                 type: "add_to_cart",
                 productId: "123",
                 quantity: 11,
+            }).success,
+        ).toBe(false)
+    })
+})
+
+describe("storefrontChatEventSchema", () => {
+    it("accepts cart-link-opened events", () => {
+        const result = storefrontChatEventSchema.safeParse({
+            shop: "x.myshopify.com",
+            visitorId: "v1",
+            type: "cart_link_opened",
+            productId: "p1",
+            variantId: "v1",
+        })
+        expect(result.success).toBe(true)
+    })
+
+    it("rejects unknown storefront analytics events", () => {
+        expect(
+            storefrontChatEventSchema.safeParse({
+                shop: "x.myshopify.com",
+                visitorId: "v1",
+                type: "checkout_started",
             }).success,
         ).toBe(false)
     })

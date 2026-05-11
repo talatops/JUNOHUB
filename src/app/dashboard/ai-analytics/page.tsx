@@ -7,82 +7,107 @@ import {
     Bar,
     BarChart,
     CartesianGrid,
+    Cell,
     Legend,
     Line,
     LineChart,
-    ReferenceLine,
     ResponsiveContainer,
     Tooltip,
     XAxis,
     YAxis,
-    Cell,
 } from "recharts"
 import { Loader2, Sparkles } from "lucide-react"
 import { useTheme } from "@/components/ThemeProvider"
 import { chartTooltipProps } from "@/lib/charts/rechartsTooltip"
 import { cn } from "@/lib/utils"
 
-type ModelEvaluationPayload = {
-    modelName: string
-    pipelineVersion: string
-    evaluationWindow: string
-    sampleSize: number
-    accuracyPct: number
-    precisionPct: number
-    recallPct: number
-    f1Pct: number
-    confusionMatrix: {
-        truePositive: number
-        falsePositive: number
-        falseNegative: number
-        trueNegative: number
-    }
-    monthlyF1Pct: { month: string; f1: number }[]
+type TimelineRow = {
+    key: string
+    label: string
+    directUpsellRevenue: number
+    directCrossSellRevenue: number
+    aiAssistedRevenue: number
+    questions: number
+    resolvedByAi: number
+    unresolvedQuestions: number
+    ticketsCreated: number
+    upsellShown: number
+    upsellClicked: number
+    cartActions: number
+    positiveSentiment: number
+    neutralSentiment: number
+    negativeSentiment: number
+    urgentSentiment: number
 }
 
 type AiAnalyticsPayload = {
-    modelEvaluation: ModelEvaluationPayload
-    automationSeries: {
-        month: string
-        storefrontAiSharePct: number
-        gmailAutoReplies: number
-        volumes: { aiMessages: number; customerMessages: number }
-    }[]
-    messageVolumeByType: { name: string; count: number }[]
-    responseTime: {
+    generatedAt: string
+    range: string
+    grain: string
+    revenueImpact: {
+        currency: string
+        directUpsellRevenue: number
+        directCrossSellRevenue: number
+        aiAssistedRevenue: number
+        aiCartConversionRate: number
+        averageAiInfluencedOrderValue: number
+        pendingAttributionCount: number
+        methodology: string
+    }
+    customerExperience: {
+        sentimentMix: {
+            totals: Record<"positive" | "neutral" | "negative" | "urgent" | "unknown", number>
+            percentages: Record<"positive" | "neutral" | "negative" | "urgent" | "unknown", number>
+        }
+        unresolvedQuestionRate: number
+        escalationRate: number
+        unresolvedQuestions: number
+        ticketsCreated: number
+        negativeOrUrgent: number
+    }
+    automationOutcomes: {
+        questionsAnswered: number
+        aiAnswers: number
+        resolvedByAi: number
+        ticketsCreated: number
         aiMedianSeconds: number
         manualMedianMinutes: number
         sampleAiPairs: number
         sampleManualPairs: number
-        byMonth: { month: string; aiMinutes: number; manualMinutes: number }[]
+        hoursSavedEstimate: number
+        resolutionRate: number
     }
-    attributedSupportSales: {
-        totalAmount: number
-        currency: string
-        rows: {
-            id: string
-            initials: string
-            label: string
-            summary: string
-            amount: number | null
-            currency: string
-            channel: "AI"
-            updatedAt: string
-        }[]
+    demandSignals: {
+        curiousProductQuestionCount: number
+        topProductQuestions: { name: string; count: number }[]
+        highInterestProducts: { name: string; count: number }[]
+        questionMix: { name: string; count: number }[]
     }
-    totals: {
+    timeline: TimelineRow[]
+    technicalDiagnostics: {
+        hiddenByDefault: boolean
         storefrontAiMessages: number
         storefrontCustomerMessages: number
-        gmailAutoReplies: number
+        analyticsEvents: number
+        cachedOrders: number
     }
 }
 
-const INTENT_COLORS: Record<string, string> = {
-    WISMO: "#3b82f6",
-    Returns: "#f97316",
-    "Product Qs": "#a855f7",
-    Shipping: "#22c55e",
-    General: "#94a3b8",
+const RANGE_OPTIONS = [
+    { value: "today", label: "Today" },
+    { value: "7d", label: "7 days" },
+    { value: "30d", label: "30 days" },
+    { value: "90d", label: "90 days" },
+    { value: "12m", label: "12 months" },
+    { value: "year", label: "Year" },
+    { value: "all", label: "All" },
+] as const
+
+const SENTIMENT_COLORS = {
+    positive: "#22c55e",
+    neutral: "#94a3b8",
+    negative: "#f97316",
+    urgent: "#ef4444",
 }
 
 function formatMoney(amount: number, currency: string) {
@@ -93,23 +118,62 @@ function formatMoney(amount: number, currency: string) {
     }
 }
 
+function formatPercent(value: number) {
+    return `${value.toFixed(value % 1 === 0 ? 0 : 1)}%`
+}
+
+function EmptyState({ children, isLight }: { children: string; isLight: boolean }) {
+    return (
+        <div className={cn("rounded-xl border p-6 text-sm text-center", isLight ? "border-slate-100 bg-slate-50 text-slate-500" : "border-white/10 bg-white/[0.04] text-slate-400")}>
+            {children}
+        </div>
+    )
+}
+
+function MetricCard({
+    title,
+    value,
+    helper,
+    accent,
+    isLight,
+}: {
+    title: string
+    value: string
+    helper: string
+    accent: string
+    isLight: boolean
+}) {
+    return (
+        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+            <p className={cn("text-[11px] uppercase tracking-widest font-black", isLight ? "text-slate-500" : "text-slate-400")}>
+                {title}
+            </p>
+            <p className={cn("text-2xl md:text-3xl font-black mt-2 tabular-nums", accent)}>{value}</p>
+            <p className={cn("text-xs mt-2 leading-relaxed", isLight ? "text-slate-500" : "text-slate-400")}>{helper}</p>
+        </div>
+    )
+}
+
 export default function AiAnalyticsPage() {
     const { theme } = useTheme()
     const isLight = theme === "light"
+    const [range, setRange] = useState("30d")
     const [data, setData] = useState<AiAnalyticsPayload | null>(null)
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
         let cancelled = false
+        setLoading(true)
+        setError(null)
         ;(async () => {
             try {
-                const res = await fetch("/api/dashboard/ai-analytics")
+                const res = await fetch(`/api/dashboard/ai-analytics?range=${encodeURIComponent(range)}`)
                 const json = await res.json().catch(() => null)
                 if (!res.ok) throw new Error(json?.message || "Failed to load analytics")
                 if (!cancelled) setData(json)
             } catch (e) {
-                if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+                if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load analytics")
             } finally {
                 if (!cancelled) setLoading(false)
             }
@@ -117,63 +181,58 @@ export default function AiAnalyticsPage() {
         return () => {
             cancelled = true
         }
-    }, [])
+    }, [range])
 
     const chartMuted = isLight ? "#64748b" : "#94a3b8"
     const gridStroke = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.08)"
     const tt = useMemo(() => chartTooltipProps(isLight), [isLight])
-
-    const barData = useMemo(
-        () =>
-            (data?.messageVolumeByType ?? []).map((r) => ({
-                ...r,
-                fill: INTENT_COLORS[r.name] ?? "#6366f1",
-            })),
-        [data?.messageVolumeByType],
-    )
-
-    const responseBars = useMemo(() => {
-        const rows = data?.responseTime.byMonth ?? []
-        return rows.map((r) => ({
-            month: r.month,
-            AI: r.aiMinutes > 0 ? r.aiMinutes : 0,
-            Manual: r.manualMinutes > 0 ? r.manualMinutes : 0,
-        }))
-    }, [data?.responseTime.byMonth])
+    const timeline = data?.timeline ?? []
+    const sentimentBars = useMemo(() => {
+        const totals = data?.customerExperience.sentimentMix.totals
+        if (!totals) return []
+        return [
+            { name: "Positive", count: totals.positive, fill: SENTIMENT_COLORS.positive },
+            { name: "Neutral", count: totals.neutral, fill: SENTIMENT_COLORS.neutral },
+            { name: "Negative", count: totals.negative, fill: SENTIMENT_COLORS.negative },
+            { name: "Urgent", count: totals.urgent, fill: SENTIMENT_COLORS.urgent },
+        ]
+    }, [data?.customerExperience.sentimentMix.totals])
 
     return (
         <div className="space-y-6 md:space-y-8 max-w-[1400px] mx-auto">
-            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+            <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
                         <Sparkles className={cn("w-7 h-7", isLight ? "text-indigo-600" : "text-indigo-400")} />
-                        <h1
-                            className={cn(
-                                "text-2xl md:text-3xl font-extrabold tracking-tight",
-                                isLight ? "text-slate-900" : "text-white",
-                            )}
-                        >
-                            AI Analytics
+                        <h1 className={cn("text-2xl md:text-3xl font-extrabold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
+                            AI Business Analytics
                         </h1>
                     </div>
-                    <p className={cn("text-sm md:text-base max-w-2xl", isLight ? "text-slate-500" : "text-slate-400")}>
-                        Live metrics from storefront AI replies, Gmail automation, JUNO Chat response times, and
-                        storefront sessions linked to Shopify orders.
+                    <p className={cn("text-sm md:text-base max-w-3xl", isLight ? "text-slate-500" : "text-slate-400")}>
+                        Outcome metrics for revenue, customer experience, automation, and demand signals from AI-assisted storefront journeys.
                     </p>
                 </div>
-                {data && (
-                    <div
-                        className={cn(
-                            "text-xs font-semibold rounded-xl px-4 py-2 border",
-                            isLight ? "bg-white border-slate-200 text-slate-600" : "bg-white/5 border-white/10 text-slate-300",
-                        )}
-                    >
-                        <span className="opacity-70">Last 6 months · AI msgs </span>
-                        <span className="text-emerald-500">{data.totals.storefrontAiMessages}</span>
-                        <span className="opacity-70"> · Gmail auto </span>
-                        <span className="text-sky-400">{data.totals.gmailAutoReplies}</span>
-                    </div>
-                )}
+                <div className="flex flex-wrap gap-2">
+                    {RANGE_OPTIONS.map((option) => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => setRange(option.value)}
+                            className={cn(
+                                "rounded-xl border px-3 py-2 text-xs font-black transition",
+                                range === option.value
+                                    ? isLight
+                                        ? "bg-indigo-600 border-indigo-600 text-white"
+                                        : "bg-indigo-500 border-indigo-400 text-white"
+                                    : isLight
+                                      ? "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                                      : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10",
+                            )}
+                        >
+                            {option.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {loading && (
@@ -181,418 +240,186 @@ export default function AiAnalyticsPage() {
                     <Loader2 className="w-10 h-10 animate-spin text-indigo-400" />
                 </div>
             )}
+
             {error && (
-                <div
-                    className={cn(
-                        "rounded-2xl border p-6 text-sm font-medium",
-                        isLight ? "bg-rose-50 border-rose-100 text-rose-800" : "bg-rose-950/40 border-rose-900/50 text-rose-100",
-                    )}
-                >
+                <div className={cn("rounded-2xl border p-6 text-sm font-medium", isLight ? "bg-rose-50 border-rose-100 text-rose-800" : "bg-rose-950/40 border-rose-900/50 text-rose-100")}>
                     {error}
                 </div>
             )}
 
             {!loading && data && (
                 <>
-                    <div
-                        className={cn(
-                            "p-4 md:p-6 rounded-xl md:rounded-2xl border",
-                            isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
-                        )}
-                    >
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-6">
-                            <div>
-                                <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-                                    Model performance
-                                </h3>
-                                <p className={cn("text-xs mt-1 max-w-xl", isLight ? "text-slate-500" : "text-slate-400")}>
-                                    Intent routing and reply-quality classification tracked against assistant-handled
-                                    conversations on your storefront and Gmail automation pipeline.
-                                </p>
-                            </div>
-                            <div
-                                className={cn(
-                                    "text-[11px] font-semibold space-y-1 rounded-xl px-4 py-3 border shrink-0",
-                                    isLight ? "bg-slate-50 border-slate-100 text-slate-600" : "bg-white/[0.06] border-white/10 text-slate-300",
-                                )}
-                            >
-                                <p>
-                                    <span className={cn("opacity-70 font-bold uppercase tracking-wide", isLight ? "" : "")}>Model </span>
-                                    <span className={isLight ? "text-slate-900" : "text-white"}>{data.modelEvaluation.modelName}</span>
-                                </p>
-                                <p>
-                                    <span className="opacity-70 font-bold uppercase tracking-wide">Release </span>
-                                    <span className={isLight ? "text-slate-900" : "text-white"}>{data.modelEvaluation.pipelineVersion}</span>
-                                </p>
-                                <p className="opacity-80">{data.modelEvaluation.evaluationWindow}</p>
-                                <p>
-                                    <span className="opacity-70">Weighted eval samples </span>
-                                    <span className={isLight ? "text-indigo-600" : "text-indigo-300"}>
-                                        {data.modelEvaluation.sampleSize.toLocaleString()}
-                                    </span>
-                                </p>
-                            </div>
-                        </div>
+                    <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <MetricCard
+                            title="Direct AI upsell revenue"
+                            value={formatMoney(data.revenueImpact.directUpsellRevenue, data.revenueImpact.currency)}
+                            helper="Only counts AI-suggested products later found in matching Shopify orders."
+                            accent={isLight ? "text-emerald-700" : "text-emerald-400"}
+                            isLight={isLight}
+                        />
+                        <MetricCard
+                            title="AI-assisted revenue"
+                            value={formatMoney(data.revenueImpact.aiAssistedRevenue, data.revenueImpact.currency)}
+                            helper="Full order revenue after prior AI engagement in the same customer/order window."
+                            accent={isLight ? "text-indigo-700" : "text-indigo-300"}
+                            isLight={isLight}
+                        />
+                        <MetricCard
+                            title="Unresolved questions"
+                            value={data.customerExperience.unresolvedQuestions.toLocaleString()}
+                            helper={`${formatPercent(data.customerExperience.unresolvedQuestionRate)} unresolved rate across customer questions.`}
+                            accent={isLight ? "text-orange-700" : "text-orange-300"}
+                            isLight={isLight}
+                        />
+                        <MetricCard
+                            title="Hours saved estimate"
+                            value={`${data.automationOutcomes.hoursSavedEstimate.toLocaleString()}h`}
+                            helper="Estimated from AI answer volume and median manual response time where samples exist."
+                            accent={isLight ? "text-sky-700" : "text-sky-300"}
+                            isLight={isLight}
+                        />
+                    </section>
 
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6">
-                            {(
-                                [
-                                    { label: "Accuracy", value: data.modelEvaluation.accuracyPct, accent: "text-emerald-500" },
-                                    { label: "Precision", value: data.modelEvaluation.precisionPct, accent: "text-sky-500" },
-                                    { label: "Recall", value: data.modelEvaluation.recallPct, accent: "text-violet-500" },
-                                    { label: "F1 score", value: data.modelEvaluation.f1Pct, accent: "text-indigo-500" },
-                                ] as const
-                            ).map((m) => (
-                                <div
-                                    key={m.label}
-                                    className={cn(
-                                        "rounded-xl border p-4",
-                                        isLight ? "bg-slate-50/90 border-slate-100" : "bg-white/[0.04] border-white/10",
-                                    )}
-                                >
-                                    <p className={cn("text-[10px] uppercase font-bold tracking-widest", isLight ? "text-slate-500" : "text-slate-400")}>
-                                        {m.label}
-                                    </p>
-                                    <p className={cn("text-2xl md:text-3xl font-black mt-1 tabular-nums", isLight ? "text-slate-900" : "text-white")}>
-                                        {m.value}
-                                        <span className={cn("text-lg align-top ml-0.5", m.accent)}>%</span>
-                                    </p>
+                    <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
+                        <div className={cn("xl:col-span-2 rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-5">
+                                <div>
+                                    <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Revenue Impact Timeline</h2>
+                                    <p className={cn("text-xs mt-1", isLight ? "text-slate-500" : "text-slate-400")}>{data.revenueImpact.methodology}</p>
                                 </div>
-                            ))}
-                        </div>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div className="min-h-[220px]">
-                                <h4 className={cn("text-sm font-bold mb-3", isLight ? "text-slate-800" : "text-slate-200")}>
-                                    F1 score trend
-                                </h4>
-                                <div className="h-[200px] w-full min-w-0">
+                                <span className={cn("text-[11px] font-black rounded-lg px-2 py-1", isLight ? "bg-slate-100 text-slate-600" : "bg-white/10 text-slate-300")}>
+                                    {data.grain} view
+                                </span>
+                            </div>
+                            {timeline.length === 0 ? (
+                                <EmptyState isLight={isLight}>Not enough data yet to draw a revenue timeline.</EmptyState>
+                            ) : (
+                                <div className="h-[300px] w-full min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={data.modelEvaluation.monthlyF1Pct} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                                        <AreaChart data={timeline} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                                            <XAxis
-                                                dataKey="month"
-                                                tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                                dy={8}
-                                            />
-                                            <YAxis
-                                                domain={[78, 99]}
-                                                tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }}
-                                                axisLine={false}
-                                                tickLine={false}
-                                                tickFormatter={(v) => `${v}%`}
-                                            />
-                                            <Tooltip {...tt} formatter={(v) => [`${Number(v ?? 0)}%`, "F1"]} />
-                                            <Line type="monotone" dataKey="f1" stroke="#6366f1" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                                        </LineChart>
+                                            <XAxis dataKey="label" tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} dy={8} />
+                                            <YAxis tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                            <Tooltip {...tt} formatter={(value, name) => [formatMoney(Number(value ?? 0), data.revenueImpact.currency), String(name)]} />
+                                            <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, color: chartMuted }} />
+                                            <Area type="monotone" dataKey="aiAssistedRevenue" name="AI-assisted" stackId="1" stroke="#6366f1" fill="#6366f1" fillOpacity={0.22} />
+                                            <Area type="monotone" dataKey="directUpsellRevenue" name="Direct upsell" stackId="1" stroke="#22c55e" fill="#22c55e" fillOpacity={0.35} />
+                                            <Area type="monotone" dataKey="directCrossSellRevenue" name="Direct cross-sell" stackId="1" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />
+                                        </AreaChart>
                                     </ResponsiveContainer>
                                 </div>
-                            </div>
+                            )}
+                        </div>
 
-                            <div>
-                                <h4 className={cn("text-sm font-bold mb-3", isLight ? "text-slate-800" : "text-slate-200")}>
-                                    Confusion matrix (held-out)
-                                </h4>
-                                <div className="flex justify-end gap-3 text-[10px] font-bold uppercase tracking-wide mb-2 pr-1">
-                                    <span className={cn("w-[calc(50%-6px)] text-center", isLight ? "text-slate-500" : "text-slate-400")}>
-                                        Predicted relevant
-                                    </span>
-                                    <span className={cn("w-[calc(50%-6px)] text-center", isLight ? "text-slate-500" : "text-slate-400")}>
-                                        Predicted not relevant
-                                    </span>
+                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Customer Sentiment</h2>
+                            <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
+                                Conservative sentiment from storefront customer messages. Unknown is kept out of the chart.
+                            </p>
+                            {sentimentBars.every((row) => row.count === 0) ? (
+                                <EmptyState isLight={isLight}>Not enough sentiment data yet.</EmptyState>
+                            ) : (
+                                <div className="h-[240px] w-full min-w-0">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={sentimentBars} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                                            <XAxis dataKey="name" tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} dy={8} />
+                                            <YAxis tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                            <Tooltip {...tt} />
+                                            <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                                                {sentimentBars.map((row) => (
+                                                    <Cell key={row.name} fill={row.fill} />
+                                                ))}
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 </div>
-                                <div className="flex gap-3">
-                                    <div
-                                        className={cn(
-                                            "flex flex-col justify-center gap-10 py-2 w-24 shrink-0 text-[10px] font-bold uppercase tracking-wide leading-tight",
-                                            isLight ? "text-slate-500" : "text-slate-400",
-                                        )}
-                                    >
-                                        <span>Actual relevant</span>
-                                        <span>Actual not relevant</span>
-                                    </div>
-                                    <div className="flex-1 grid grid-cols-2 gap-3">
-                                        <div
-                                            className={cn(
-                                                "rounded-xl border p-4 text-center",
-                                                isLight ? "bg-emerald-50 border-emerald-100 text-emerald-900" : "bg-emerald-500/10 border-emerald-500/25 text-emerald-100",
-                                            )}
-                                        >
-                                            <p className="text-[10px] uppercase opacity-80 mb-1">True positive</p>
-                                            <p className="text-2xl font-black tabular-nums">{data.modelEvaluation.confusionMatrix.truePositive}</p>
+                            )}
+                        </div>
+                    </section>
+
+                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Automation Outcomes</h2>
+                            <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
+                                Shows the operational outcomes owners care about: handled questions, AI resolution, tickets, and response speed.
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <MetricCard title="Questions handled" value={data.automationOutcomes.questionsAnswered.toLocaleString()} helper="Customer questions in the selected window." accent={isLight ? "text-slate-900" : "text-white"} isLight={isLight} />
+                                <MetricCard title="Resolved by AI" value={formatPercent(data.automationOutcomes.resolutionRate)} helper={`${data.automationOutcomes.resolvedByAi.toLocaleString()} resolved events.`} accent={isLight ? "text-emerald-700" : "text-emerald-400"} isLight={isLight} />
+                                <MetricCard title="Tickets created" value={data.automationOutcomes.ticketsCreated.toLocaleString()} helper="Escalations sent to human support." accent={isLight ? "text-rose-700" : "text-rose-300"} isLight={isLight} />
+                                <MetricCard title="AI response median" value={`${data.automationOutcomes.aiMedianSeconds}s`} helper={`Manual median: ${data.automationOutcomes.manualMedianMinutes.toFixed(1)} min.`} accent={isLight ? "text-sky-700" : "text-sky-300"} isLight={isLight} />
+                            </div>
+                        </div>
+
+                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Questions And Resolutions</h2>
+                            <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
+                                Timeline of demand, AI resolution, unresolved questions, and support tickets.
+                            </p>
+                            <div className="h-[260px] w-full min-w-0">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <LineChart data={timeline} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
+                                        <XAxis dataKey="label" tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }} axisLine={false} tickLine={false} dy={8} />
+                                        <YAxis tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                        <Tooltip {...tt} />
+                                        <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, color: chartMuted }} />
+                                        <Line type="monotone" dataKey="questions" name="Questions" stroke="#6366f1" strokeWidth={2} dot={false} />
+                                        <Line type="monotone" dataKey="resolvedByAi" name="Resolved" stroke="#22c55e" strokeWidth={2} dot={false} />
+                                        <Line type="monotone" dataKey="unresolvedQuestions" name="Unresolved" stroke="#f97316" strokeWidth={2} dot={false} />
+                                        <Line type="monotone" dataKey="ticketsCreated" name="Tickets" stroke="#ef4444" strokeWidth={2} dot={false} />
+                                    </LineChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Growth Signals</h2>
+                            <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
+                                Product curiosity and repeated requests that can guide buying, merchandising, and product-page content.
+                            </p>
+                            {data.demandSignals.topProductQuestions.length === 0 ? (
+                                <EmptyState isLight={isLight}>Not enough product-question data yet.</EmptyState>
+                            ) : (
+                                <div className="space-y-2">
+                                    {data.demandSignals.topProductQuestions.map((row) => (
+                                        <div key={row.name} className={cn("flex items-center justify-between gap-3 rounded-xl border px-3 py-2", isLight ? "bg-slate-50 border-slate-100" : "bg-white/[0.04] border-white/10")}>
+                                            <span className={cn("text-sm font-bold truncate", isLight ? "text-slate-800" : "text-slate-200")}>{row.name}</span>
+                                            <span className={cn("text-xs font-black rounded-lg px-2 py-1", isLight ? "bg-indigo-100 text-indigo-700" : "bg-indigo-500/20 text-indigo-200")}>{row.count}</span>
                                         </div>
-                                        <div
-                                            className={cn(
-                                                "rounded-xl border p-4 text-center",
-                                                isLight ? "bg-amber-50 border-amber-100 text-amber-950" : "bg-amber-500/10 border-amber-500/25 text-amber-100",
-                                            )}
-                                        >
-                                            <p className="text-[10px] uppercase opacity-80 mb-1">False negative</p>
-                                            <p className="text-2xl font-black tabular-nums">{data.modelEvaluation.confusionMatrix.falseNegative}</p>
-                                        </div>
-                                        <div
-                                            className={cn(
-                                                "rounded-xl border p-4 text-center",
-                                                isLight ? "bg-rose-50 border-rose-100 text-rose-950" : "bg-rose-500/10 border-rose-500/25 text-rose-100",
-                                            )}
-                                        >
-                                            <p className="text-[10px] uppercase opacity-80 mb-1">False positive</p>
-                                            <p className="text-2xl font-black tabular-nums">{data.modelEvaluation.confusionMatrix.falsePositive}</p>
-                                        </div>
-                                        <div
-                                            className={cn(
-                                                "rounded-xl border p-4 text-center",
-                                                isLight ? "bg-slate-50 border-slate-200 text-slate-800" : "bg-white/[0.06] border-white/10 text-slate-200",
-                                            )}
-                                        >
-                                            <p className="text-[10px] uppercase opacity-80 mb-1">True negative</p>
-                                            <p className="text-2xl font-black tabular-nums">{data.modelEvaluation.confusionMatrix.trueNegative}</p>
-                                        </div>
-                                    </div>
+                                    ))}
                                 </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                        <div
-                            className={cn(
-                                "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[320px]",
-                                isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
                             )}
-                        >
-                            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-                                AI share of storefront traffic
-                            </h3>
-                            <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
-                                AI messages ÷ (AI + customer messages) per month. Gmail auto-replies shown in tooltip.
-                            </p>
-                            <div className="h-[240px] w-full min-w-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={data.automationSeries} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                                        <defs>
-                                            <linearGradient id="aiShareFill" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#22c55e" stopOpacity={isLight ? 0.35 : 0.25} />
-                                                <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                                        <XAxis
-                                            dataKey="month"
-                                            tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            dy={8}
-                                        />
-                                        <YAxis
-                                            tickFormatter={(v) => `${v}%`}
-                                            domain={[0, 100]}
-                                            tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                        />
-                                        <Tooltip
-                                            {...tt}
-                                            formatter={(value, _name, item) => {
-                                                const g = (item as { payload?: { gmailAutoReplies?: number } })?.payload
-                                                    ?.gmailAutoReplies
-                                                return [`${Number(value ?? 0)}% (Gmail auto: ${g ?? 0})`, "AI share"]
-                                            }}
-                                            labelFormatter={(l) => String(l)}
-                                        />
-                                        <ReferenceLine
-                                            y={80}
-                                            stroke={isLight ? "#cbd5e1" : "rgba(148,163,184,0.5)"}
-                                            strokeDasharray="4 4"
-                                        />
-                                        <Area
-                                            type="monotone"
-                                            dataKey="storefrontAiSharePct"
-                                            stroke="#16a34a"
-                                            strokeWidth={2}
-                                            fillOpacity={1}
-                                            fill="url(#aiShareFill)"
-                                            name="storefrontAiSharePct"
-                                        />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
                         </div>
 
-                        <div
-                            className={cn(
-                                "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[320px]",
-                                isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
-                            )}
-                        >
-                            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-                                Customer topics (storefront)
-                            </h3>
+                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                            <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Attribution Health</h2>
                             <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
-                                Classified from customer messages via keyword rules (WISMO, returns, products, shipping).
+                                Conservative matching keeps revenue accurate. Pending attribution means cart interest exists but no matching order has been cached yet.
                             </p>
-                            <div className="h-[240px] w-full min-w-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart layout="vertical" data={barData} margin={{ left: 4, right: 16, top: 4, bottom: 4 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal stroke={gridStroke} />
-                                        <XAxis type="number" tick={{ fill: chartMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
-                                        <YAxis
-                                            type="category"
-                                            dataKey="name"
-                                            width={88}
-                                            tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                        />
-                                        <Tooltip
-                                            {...tt}
-                                            cursor={{ fill: isLight ? "rgba(99,102,241,0.06)" : "rgba(255,255,255,0.05)" }}
-                                        />
-                                        <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={18}>
-                                            {barData.map((entry, i) => (
-                                                <Cell key={i} fill={entry.fill} />
-                                            ))}
-                                        </Bar>
-                                    </BarChart>
-                                </ResponsiveContainer>
+                            <div className="grid grid-cols-2 gap-3">
+                                <MetricCard title="Cart conversion" value={formatPercent(data.revenueImpact.aiCartConversionRate)} helper="Orders matched to AI cart actions." accent={isLight ? "text-emerald-700" : "text-emerald-400"} isLight={isLight} />
+                                <MetricCard title="Pending attribution" value={data.revenueImpact.pendingAttributionCount.toLocaleString()} helper="Clicks awaiting a matching Shopify order." accent={isLight ? "text-amber-700" : "text-amber-300"} isLight={isLight} />
+                                <MetricCard title="Cross-sell revenue" value={formatMoney(data.revenueImpact.directCrossSellRevenue, data.revenueImpact.currency)} helper="Shown separately from upsell revenue." accent={isLight ? "text-cyan-700" : "text-cyan-300"} isLight={isLight} />
+                                <MetricCard title="Avg influenced order" value={formatMoney(data.revenueImpact.averageAiInfluencedOrderValue, data.revenueImpact.currency)} helper="Average value for AI-assisted orders." accent={isLight ? "text-indigo-700" : "text-indigo-300"} isLight={isLight} />
                             </div>
                         </div>
+                    </section>
 
-                        <div
-                            className={cn(
-                                "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[320px]",
-                                isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
-                            )}
-                        >
-                            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-                                Response time: AI vs manual
-                            </h3>
-                            <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
-                                AI = median seconds from customer message to AI reply (storefront). Manual = median
-                                minutes from inbound supplier message to your reply (JUNO Chat), when sample exists.
-                            </p>
-                            <div className="h-[240px] w-full min-w-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={responseBars} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
-                                        <XAxis
-                                            dataKey="month"
-                                            tick={{ fill: chartMuted, fontSize: 11, fontWeight: 600 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            dy={8}
-                                        />
-                                        <YAxis
-                                            tick={{ fill: chartMuted, fontSize: 10, fontWeight: 600 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            tickFormatter={(v) => `${v}m`}
-                                        />
-                                        <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600, color: chartMuted }} />
-                                        <Tooltip
-                                            {...tt}
-                                            formatter={(value, name) =>
-                                                name === "AI"
-                                                    ? [`${Number(value ?? 0)} min (median)`, "AI"]
-                                                    : [`${Number(value ?? 0)} min (median)`, "Manual"]
-                                            }
-                                        />
-                                        <Bar dataKey="AI" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="Manual" fill="#94a3b8" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-                            <p className={cn("text-[10px] mt-2 font-medium", isLight ? "text-slate-400" : "text-slate-500")}>
-                                Samples: AI pairs {data.responseTime.sampleAiPairs} · Manual pairs{" "}
-                                {data.responseTime.sampleManualPairs}. Overall medians: AI{" "}
-                                {(data.responseTime.aiMedianSeconds / 60).toFixed(1)} min · Manual{" "}
-                                {data.responseTime.manualMedianMinutes.toFixed(1)} min
-                            </p>
+                    <details className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                        <summary className={cn("cursor-pointer text-sm font-black", isLight ? "text-slate-800" : "text-slate-200")}>
+                            Technical Diagnostics
+                        </summary>
+                        <div className={cn("grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-sm", isLight ? "text-slate-600" : "text-slate-300")}>
+                            <p>AI messages: {data.technicalDiagnostics.storefrontAiMessages}</p>
+                            <p>Customer messages: {data.technicalDiagnostics.storefrontCustomerMessages}</p>
+                            <p>Analytics events: {data.technicalDiagnostics.analyticsEvents}</p>
+                            <p>Cached orders: {data.technicalDiagnostics.cachedOrders}</p>
                         </div>
-
-                        <div
-                            className={cn(
-                                "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[320px] flex flex-col",
-                                isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
-                            )}
-                        >
-                            <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>
-                                Revenue linked after AI storefront sessions
-                            </h3>
-                            <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
-                                Orders pinned during verified storefront chat (last ~30 days). Totals use cached Shopify
-                                orders for your active store.
-                            </p>
-                            <div className="flex-1 overflow-y-auto space-y-2 min-h-[180px] max-h-[260px] pr-1 custom-scrollbar">
-                                {data.attributedSupportSales.rows.length === 0 ? (
-                                    <p className={cn("text-sm italic py-8 text-center", isLight ? "text-slate-400" : "text-slate-500")}>
-                                        No bound orders yet — when customers verify and attach an order in chat,
-                                        conversions appear here.
-                                    </p>
-                                ) : (
-                                    data.attributedSupportSales.rows.map((row) => (
-                                        <div
-                                            key={row.id}
-                                            className={cn(
-                                                "flex items-center gap-3 p-3 rounded-xl border",
-                                                isLight ? "border-slate-100 bg-slate-50/80" : "border-white/10 bg-white/[0.04]",
-                                            )}
-                                        >
-                                            <div
-                                                className={cn(
-                                                    "w-10 h-10 rounded-full flex items-center justify-center text-xs font-black shrink-0",
-                                                    isLight ? "bg-indigo-100 text-indigo-700" : "bg-indigo-500/20 text-indigo-200",
-                                                )}
-                                            >
-                                                {row.initials}
-                                            </div>
-                                            <div className="min-w-0 flex-1">
-                                                <p className={cn("text-sm font-bold truncate", isLight ? "text-slate-900" : "text-white")}>
-                                                    {row.label}
-                                                </p>
-                                                <p className={cn("text-xs truncate", isLight ? "text-slate-500" : "text-slate-400")}>
-                                                    {row.summary}
-                                                </p>
-                                            </div>
-                                            <div className="text-right shrink-0">
-                                                <p className={cn("text-sm font-black", isLight ? "text-emerald-700" : "text-emerald-400")}>
-                                                    {row.amount != null
-                                                        ? formatMoney(row.amount, row.currency || data.attributedSupportSales.currency)
-                                                        : "—"}
-                                                </p>
-                                                <span
-                                                    className={cn(
-                                                        "text-[10px] font-bold uppercase px-2 py-0.5 rounded-md inline-block mt-1",
-                                                        "bg-emerald-500/15 text-emerald-500",
-                                                    )}
-                                                >
-                                                    AI session
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                            <div
-                                className={cn(
-                                    "mt-4 pt-4 border-t flex justify-between items-center",
-                                    isLight ? "border-slate-100" : "border-white/10",
-                                )}
-                            >
-                                <span className={cn("text-xs font-bold uppercase tracking-wide", isLight ? "text-slate-500" : "text-slate-400")}>
-                                    Total attributed (window)
-                                </span>
-                                <span className={cn("text-lg font-black", isLight ? "text-emerald-600" : "text-emerald-400")}>
-                                    {formatMoney(
-                                        data.attributedSupportSales.totalAmount,
-                                        data.attributedSupportSales.currency,
-                                    )}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
+                    </details>
                 </>
             )}
         </div>
