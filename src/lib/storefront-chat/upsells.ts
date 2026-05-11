@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma"
+import { logger } from "@/lib/logger"
+import { aiChatCompletion } from "@/lib/ai/chatCompletion"
 import type { StorefrontActionProduct } from "@/lib/storefront-chat/actions"
 import { extractCartableVariants, selectVariantForCart } from "@/lib/storefront-chat/cartLinks"
 
@@ -12,39 +14,11 @@ type CachedProductLike = {
     metafields?: unknown
 }
 
-const STOPWORDS = new Set([
-    "the",
-    "and",
-    "for",
-    "with",
-    "that",
-    "this",
-    "want",
-    "need",
-    "product",
-    "item",
-    "buy",
-    "cart",
-    "add",
-])
-
-const ACCESSORY_PAIRS: Array<{ base: RegExp; accessory: RegExp; score: number }> = [
-    { base: /\bshoe|shoes|sneaker|sneakers|boot|boots\b/i, accessory: /\bsock|socks|laces?|insole|insoles\b/i, score: 8 },
-    { base: /\bshirt|uniform|dress\b/i, accessory: /\btie|belt|cap|scarf\b/i, score: 5 },
-    { base: /\bbag|backpack\b/i, accessory: /\bbottle|lunch|pouch|case\b/i, score: 5 },
-    { base: /\bphone|mobile\b/i, accessory: /\bcase|cover|charger|cable\b/i, score: 6 },
-]
-
-function tokenize(text: string) {
-    return text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/g)
-        .map((token) => token.trim())
-        .filter((token) => token.length >= 2 && !STOPWORDS.has(token))
-}
-
-function uniqueTokens(...texts: Array<string | null | undefined>) {
-    return Array.from(new Set(texts.flatMap((text) => tokenize(text ?? ""))))
+type UpsellCatalogCandidate = {
+    product: StorefrontActionProduct
+    title: string
+    productType: string | null
+    details: string | null
 }
 
 function imageUrlFromImages(images: unknown): string | null {
@@ -67,24 +41,17 @@ function imageUrlFromImages(images: unknown): string | null {
     return null
 }
 
-function productText(product: CachedProductLike) {
-    return [
-        product.title,
-        product.productType,
-        JSON.stringify(product.metafields ?? ""),
-    ]
-        .filter(Boolean)
-        .join(" ")
-}
-
-function accessoryScore(baseText: string, candidateText: string) {
-    let score = 0
-    for (const pair of ACCESSORY_PAIRS) {
-        if (pair.base.test(baseText) && pair.accessory.test(candidateText)) {
-            score += pair.score
-        }
+function compactMetafields(metafields: unknown): string | null {
+    if (!Array.isArray(metafields)) return null
+    const parts: string[] = []
+    for (const row of metafields) {
+        if (!row || typeof row !== "object" || Array.isArray(row)) continue
+        const field = row as { key?: unknown; value?: unknown }
+        const key = typeof field.key === "string" ? field.key.trim() : ""
+        const value = typeof field.value === "string" ? field.value.trim() : ""
+        if (key && value) parts.push(`${key}: ${value.slice(0, 120)}`)
     }
-    return score
+    return parts.length ? parts.join(" | ").slice(0, 500) : null
 }
 
 function toUpsellActionProduct(product: CachedProductLike, query: string): StorefrontActionProduct | null {
@@ -111,30 +78,85 @@ export function rankAutomaticUpsellCandidates(params: {
     candidates: CachedProductLike[]
     limit?: number
 }): StorefrontActionProduct[] {
-    const { baseProduct, query, candidates, limit = 1 } = params
-    const baseText = [baseProduct.title, baseProduct.productType, query].filter(Boolean).join(" ")
-    const baseTokens = new Set(uniqueTokens(baseText))
-
-    const ranked = candidates
+    const { baseProduct, candidates, limit = 20 } = params
+    return candidates
         .filter((candidate) => candidate.shopifyProductId !== baseProduct.productId)
         .filter((candidate) => !candidate.status || candidate.status.toLowerCase() === "active")
-        .map((candidate) => {
-            const candidateText = productText(candidate)
-            const candidateTokens = uniqueTokens(candidateText)
-            let score = accessoryScore(baseText, candidateText)
-            for (const token of candidateTokens) {
-                if (baseTokens.has(token)) score += 2
-            }
-            if (candidate.productType && baseProduct.productType && candidate.productType !== baseProduct.productType) {
-                score += 1
-            }
-            const product = toUpsellActionProduct(candidate, query)
-            return { product, score }
-        })
-        .filter((row): row is { product: StorefrontActionProduct; score: number } => Boolean(row.product) && row.score > 0)
-        .sort((a, b) => b.score - a.score)
+        .map((candidate) => toUpsellActionProduct(candidate, params.query))
+        .filter((product): product is StorefrontActionProduct => Boolean(product))
+        .slice(0, limit)
+}
 
-    return ranked.slice(0, limit).map((row) => row.product)
+function buildCatalogCandidate(product: CachedProductLike, query: string): UpsellCatalogCandidate | null {
+    const actionProduct = toUpsellActionProduct(product, query)
+    if (!actionProduct) return null
+    return {
+        product: actionProduct,
+        title: product.title,
+        productType: product.productType ?? null,
+        details: compactMetafields(product.metafields),
+    }
+}
+
+export function parseAiUpsellChoice(
+    content: string | null,
+    candidates: UpsellCatalogCandidate[],
+): StorefrontActionProduct | null {
+    if (!content) return null
+    try {
+        const parsed = JSON.parse(content) as { productId?: unknown }
+        const productId = typeof parsed.productId === "string" ? parsed.productId.trim() : ""
+        if (!productId) return null
+        return candidates.find((candidate) => candidate.product.productId === productId)?.product ?? null
+    } catch {
+        return null
+    }
+}
+
+async function selectAiUpsellCandidate(params: {
+    baseProduct: StorefrontActionProduct
+    query: string
+    candidates: UpsellCatalogCandidate[]
+}): Promise<StorefrontActionProduct | null> {
+    if (params.candidates.length === 0) return null
+
+    const system = [
+        "You select one ecommerce upsell item, or no item.",
+        "Use only the provided catalog candidates. Return JSON only: {\"productId\":\"...\"|null,\"reason\":\"...\"}.",
+        "A valid upsell must be clearly complementary to the base product: accessory, care item, consumable, add-on, matching bundle item, or item normally used together.",
+        "Do not choose substitutes or alternatives to the same requested product type, even if they share words, audience, color, brand, season, or price.",
+        "If the relationship is weak, generic, or uncertain, return productId null.",
+    ].join(" ")
+
+    const user = JSON.stringify({
+        customerQuery: params.query,
+        baseProduct: {
+            title: params.baseProduct.title,
+            productType: params.baseProduct.productType,
+            sku: params.baseProduct.sku,
+        },
+        candidates: params.candidates.slice(0, 30).map((candidate) => ({
+            productId: candidate.product.productId,
+            title: candidate.title,
+            productType: candidate.productType,
+            details: candidate.details,
+        })),
+    })
+
+    const { content, error } = await aiChatCompletion(
+        [
+            { role: "system", content: system },
+            { role: "user", content: user },
+        ],
+        { jsonObject: true, temperature: 0.1, maxTokens: 220, timeoutMs: 10_000 },
+    )
+
+    if (!content) {
+        logger.warn("selectAiUpsellCandidate: model call failed", { error })
+        return null
+    }
+
+    return parseAiUpsellChoice(content, params.candidates)
 }
 
 export async function findAutomaticUpsellCandidates(params: {
@@ -158,10 +180,18 @@ export async function findAutomaticUpsellCandidates(params: {
         },
     })
 
-    return rankAutomaticUpsellCandidates({
+    const candidates = products
+        .filter((product) => product.shopifyProductId !== params.baseProduct.productId)
+        .filter((product) => !product.status || product.status.toLowerCase() === "active")
+        .map((product) => buildCatalogCandidate(product, params.query))
+        .filter((candidate): candidate is UpsellCatalogCandidate => Boolean(candidate))
+        .slice(0, 30)
+
+    const selected = await selectAiUpsellCandidate({
         baseProduct: params.baseProduct,
         query: params.query,
-        candidates: products,
-        limit: params.limit,
+        candidates,
     })
+
+    return selected ? [selected].slice(0, params.limit ?? 1) : []
 }

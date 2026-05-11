@@ -91,6 +91,14 @@ type CartResponse = {
     content: string
     actions: StorefrontChatAction[]
     pendingCartProduct: StorefrontActionProduct | null
+    cartLines: StorefrontCartLine[]
+}
+
+type StorefrontCartLine = {
+    variantId: string
+    quantity: number
+    productId?: string
+    title?: string
 }
 
 function describeStorefrontAction(action: StorefrontChatActionInput | undefined) {
@@ -115,11 +123,58 @@ function parsePendingCartProduct(raw: unknown): StorefrontActionProduct | null {
     return normalizeActionProduct(state.pendingCartProduct)
 }
 
-function nextL1State(raw: unknown, pendingCartProduct: StorefrontActionProduct | null) {
+function parseCartLines(raw: unknown): StorefrontCartLine[] {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return []
+    const state = raw as Record<string, unknown>
+    const lines = state.cartLines
+    if (!Array.isArray(lines)) return []
+    return lines
+        .map((line): StorefrontCartLine | null => {
+            if (!line || typeof line !== "object" || Array.isArray(line)) return null
+            const row = line as Record<string, unknown>
+            const variantId = typeof row.variantId === "string" ? row.variantId.trim() : ""
+            if (!variantId) return null
+            const quantity = Math.max(1, Math.min(10, Math.trunc(Number(row.quantity) || 1)))
+            const productId = typeof row.productId === "string" ? row.productId.trim() : ""
+            const title = typeof row.title === "string" ? row.title.trim() : ""
+            return {
+                variantId,
+                quantity,
+                ...(productId ? { productId } : {}),
+                ...(title ? { title } : {}),
+            }
+        })
+        .filter((line): line is StorefrontCartLine => Boolean(line))
+        .slice(0, 20)
+}
+
+function mergeCartLines(existing: StorefrontCartLine[], next: StorefrontCartLine): StorefrontCartLine[] {
+    const byVariant = new Map<string, StorefrontCartLine>()
+    for (const line of existing) {
+        byVariant.set(line.variantId, { ...line })
+    }
+    const previous = byVariant.get(next.variantId)
+    byVariant.set(next.variantId, {
+        ...previous,
+        ...next,
+        quantity: Math.max(1, Math.min(10, (previous?.quantity ?? 0) + next.quantity)),
+    })
+    return Array.from(byVariant.values()).slice(0, 20)
+}
+
+function nextL1State(
+    raw: unknown,
+    pendingCartProduct: StorefrontActionProduct | null,
+    cartLines?: StorefrontCartLine[],
+) {
     const current =
         raw && typeof raw === "object" && !Array.isArray(raw)
             ? { ...(raw as Record<string, unknown>) }
             : {}
+    if (cartLines) {
+        current.cartLines = cartLines
+        current.cartUpdatedAt = new Date().toISOString()
+    }
     if (pendingCartProduct) {
         current.pendingCartProduct = pendingCartProduct
         current.pendingCartUpdatedAt = new Date().toISOString()
@@ -165,6 +220,7 @@ async function buildCartResponse(params: {
     requestedVariantId?: string | null
     quantity?: number
     message: string
+    existingCartLines: StorefrontCartLine[]
 }): Promise<CartResponse> {
     const product = await prisma.cachedProduct.findFirst({
         where: { storeId: params.storeId, shopifyProductId: params.productId },
@@ -182,6 +238,7 @@ async function buildCartResponse(params: {
             content: "I could not find that product in this store right now.",
             actions: [],
             pendingCartProduct: null,
+            cartLines: params.existingCartLines,
         }
     }
 
@@ -197,6 +254,7 @@ async function buildCartResponse(params: {
             content: "I could not verify that product option for this store. Please choose the product again.",
             actions: [],
             pendingCartProduct: null,
+            cartLines: params.existingCartLines,
         }
     }
 
@@ -205,6 +263,7 @@ async function buildCartResponse(params: {
             content: `${product.title} is not available to add to cart right now.`,
             actions: [],
             pendingCartProduct: null,
+            cartLines: params.existingCartLines,
         }
     }
 
@@ -219,21 +278,11 @@ async function buildCartResponse(params: {
                 productType: product.productType,
                 quantity: params.quantity ?? 1,
             },
+            cartLines: params.existingCartLines,
         }
     }
 
     const quantity = Math.max(1, Math.min(10, Math.trunc(Number(params.quantity) || 1)))
-    const cartUrl = buildCartPermalink(params.shopifyDomain, [
-        { variantId: selected.variant.id, quantity },
-    ])
-    if (!cartUrl) {
-        return {
-            content: "I could not create a cart link for that product right now.",
-            actions: [],
-            pendingCartProduct: null,
-        }
-    }
-
     const actionProduct: StorefrontActionProduct = {
         productId: product.shopifyProductId,
         title: product.title,
@@ -245,15 +294,33 @@ async function buildCartResponse(params: {
         productType: product.productType,
         quantity,
     }
+    const nextCartLines = mergeCartLines(params.existingCartLines, {
+        variantId: selected.variant.id,
+        quantity,
+        productId: product.shopifyProductId,
+        title: product.title,
+    })
+    const cartUrl = buildCartPermalink(params.shopifyDomain, nextCartLines)
+    if (!cartUrl) {
+        return {
+            content: "I could not create a cart link for that product right now.",
+            actions: [],
+            pendingCartProduct: null,
+            cartLines: params.existingCartLines,
+        }
+    }
+
     const variantText =
         selected.variant.title && !/^default title$/i.test(selected.variant.title)
             ? ` (${selected.variant.title})`
             : ""
+    const cartCount = nextCartLines.reduce((sum, line) => sum + line.quantity, 0)
 
     return {
-        content: `Here is your cart link with ${product.title}${variantText} added: ${cartUrl}`,
+        content: `Added ${product.title}${variantText}. Your cart now has ${cartCount} item${cartCount === 1 ? "" : "s"}: ${cartUrl}`,
         actions: [buildOpenCartAction(cartUrl, actionProduct)],
         pendingCartProduct: null,
+        cartLines: nextCartLines,
     }
 }
 
@@ -261,6 +328,7 @@ async function resolveDirectAddToCart(params: {
     storeId: string
     shopifyDomain: string
     message: string
+    existingCartLines: StorefrontCartLine[]
 }): Promise<CartResponse | null> {
     if (!isDirectAddToCartRequest(params.message)) return null
     const hits = await searchProductsForStore(params.storeId, params.message, 1)
@@ -274,6 +342,7 @@ async function resolveDirectAddToCart(params: {
         requestedVariantId: product?.variantId,
         quantity: product?.quantity ?? 1,
         message: params.message,
+        existingCartLines: params.existingCartLines,
     })
 }
 
@@ -355,6 +424,7 @@ export async function POST(req: Request) {
         })
 
         const pendingCartProduct = parsePendingCartProduct(conversation.l1State)
+        const existingCartLines = parseCartLines(conversation.l1State)
         const cartResponse = action
             ? await buildCartResponse({
                   storeId: store.id,
@@ -363,6 +433,7 @@ export async function POST(req: Request) {
                   requestedVariantId: action.variantId,
                   quantity: action.quantity,
                   message: customerContent,
+                  existingCartLines,
               })
             : pendingCartProduct && isCartConfirmationMessage(customerContent)
               ? await buildCartResponse({
@@ -372,11 +443,13 @@ export async function POST(req: Request) {
                     requestedVariantId: pendingCartProduct.variantId,
                     quantity: pendingCartProduct.quantity,
                     message: customerContent,
+                    existingCartLines,
                 })
               : await resolveDirectAddToCart({
                     storeId: store.id,
                     shopifyDomain: store.shopifyDomain,
                     message: customerContent,
+                    existingCartLines,
                 })
 
         if (cartResponse) {
@@ -392,7 +465,15 @@ export async function POST(req: Request) {
 
             await prisma.storefrontChatConversation.update({
                 where: { id: conversation.id },
-                data: { l1State: toJsonInput(nextL1State(conversation.l1State, cartResponse.pendingCartProduct)) },
+                data: {
+                    l1State: toJsonInput(
+                        nextL1State(
+                            conversation.l1State,
+                            cartResponse.pendingCartProduct,
+                            cartResponse.cartLines,
+                        ),
+                    ),
+                },
             })
 
             return NextResponse.json({
