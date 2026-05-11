@@ -21,6 +21,14 @@ type UpsellCatalogCandidate = {
     details: string | null
 }
 
+const ACCEPTED_UPSELL_RELATIONSHIPS = new Set([
+    "complementary_accessory",
+    "care_item",
+    "consumable",
+    "bundle_addon",
+    "used_together",
+])
+
 function imageUrlFromImages(images: unknown): string | null {
     const rows = typeof images === "string"
         ? (() => {
@@ -104,9 +112,20 @@ export function parseAiUpsellChoice(
 ): StorefrontActionProduct | null {
     if (!content) return null
     try {
-        const parsed = JSON.parse(content) as { productId?: unknown }
+        const parsed = JSON.parse(content) as {
+            productId?: unknown
+            relationshipType?: unknown
+            confidence?: unknown
+        }
         const productId = typeof parsed.productId === "string" ? parsed.productId.trim() : ""
         if (!productId) return null
+        const relationshipType =
+            typeof parsed.relationshipType === "string"
+                ? parsed.relationshipType.trim().toLowerCase()
+                : ""
+        if (!ACCEPTED_UPSELL_RELATIONSHIPS.has(relationshipType)) return null
+        const confidence = Number(parsed.confidence)
+        if (!Number.isFinite(confidence) || confidence < 0.75) return null
         return candidates.find((candidate) => candidate.product.productId === productId)?.product ?? null
     } catch {
         return null
@@ -122,10 +141,14 @@ async function selectAiUpsellCandidate(params: {
 
     const system = [
         "You select one ecommerce upsell item, or no item.",
-        "Use only the provided catalog candidates. Return JSON only: {\"productId\":\"...\"|null,\"reason\":\"...\"}.",
-        "A valid upsell must be clearly complementary to the base product: accessory, care item, consumable, add-on, matching bundle item, or item normally used together.",
-        "Do not choose substitutes or alternatives to the same requested product type, even if they share words, audience, color, brand, season, or price.",
-        "If the relationship is weak, generic, or uncertain, return productId null.",
+        "Use only the provided catalog candidates.",
+        "Return JSON only: {\"productId\":\"...\"|null,\"relationshipType\":\"complementary_accessory|care_item|consumable|bundle_addon|used_together|substitute|alternative|same_category|unrelated|uncertain\",\"confidence\":0-1,\"reason\":\"...\"}.",
+        "A valid upsell must be something the customer would reasonably buy in addition to the base product and use together with it.",
+        "Choose only these valid relationship types: complementary_accessory, care_item, consumable, bundle_addon, used_together.",
+        "Do not choose substitutes, alternatives, or same-category replacements, even if they share words, audience, color, brand, season, style, or price.",
+        "Invalid examples: sandals -> flip flops, slippers -> shoes, rain boots -> formal shoes, one backpack -> another backpack.",
+        "Valid examples: shoes -> socks, shoes -> laces, leather shoes -> polish, phone -> case, backpack -> lunch box.",
+        "If there is no clear add-on with confidence at least 0.75, return productId null with relationshipType uncertain.",
     ].join(" ")
 
     const user = JSON.stringify({

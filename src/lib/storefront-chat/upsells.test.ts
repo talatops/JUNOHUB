@@ -43,7 +43,12 @@ describe("automatic storefront upsells", () => {
 
     it("returns no upsell when the AI chooses null", () => {
         const result = parseAiUpsellChoice(
-            JSON.stringify({ productId: null, reason: "No clearly complementary product." }),
+            JSON.stringify({
+                productId: null,
+                relationshipType: "uncertain",
+                confidence: 0,
+                reason: "No clearly complementary product.",
+            }),
             [
                 {
                     title: "Candidate Product",
@@ -61,9 +66,64 @@ describe("automatic storefront upsells", () => {
         expect(result).toBeNull()
     })
 
+    it("rejects AI choices marked as substitutes", () => {
+        const result = parseAiUpsellChoice(
+            JSON.stringify({
+                productId: "candidate-1",
+                relationshipType: "substitute",
+                confidence: 0.9,
+                reason: "This is an alternative, not an add-on.",
+            }),
+            [
+                {
+                    title: "Candidate Product",
+                    productType: "Same Category",
+                    details: null,
+                    product: {
+                        productId: "candidate-1",
+                        title: "Candidate Product",
+                        variantId: "v-candidate",
+                    },
+                },
+            ],
+        )
+
+        expect(result).toBeNull()
+    })
+
+    it("accepts high-confidence complementary AI choices", () => {
+        const result = parseAiUpsellChoice(
+            JSON.stringify({
+                productId: "candidate-1",
+                relationshipType: "complementary_accessory",
+                confidence: 0.88,
+                reason: "This is used together with the base product.",
+            }),
+            [
+                {
+                    title: "Candidate Product",
+                    productType: "Accessory",
+                    details: null,
+                    product: {
+                        productId: "candidate-1",
+                        title: "Candidate Product",
+                        variantId: "v-candidate",
+                    },
+                },
+            ],
+        )
+
+        expect(result?.productId).toBe("candidate-1")
+    })
+
     it("only accepts AI choices that exist in the candidate list", () => {
         const result = parseAiUpsellChoice(
-            JSON.stringify({ productId: "unknown-product", reason: "Not in the provided list." }),
+            JSON.stringify({
+                productId: "unknown-product",
+                relationshipType: "complementary_accessory",
+                confidence: 0.9,
+                reason: "Not in the provided list.",
+            }),
             [
                 {
                     title: "Candidate Product",
