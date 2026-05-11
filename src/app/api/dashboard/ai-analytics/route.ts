@@ -5,12 +5,16 @@ import { getVendorActiveStore } from "@/lib/dashboard/vendorActiveStore"
 import { classifyStorefrontCustomerQuery } from "@/lib/dashboard/storefrontQueryClassification"
 import { bucketKey, emptyTimeline, getAnalyticsWindow, type AnalyticsGrain } from "@/lib/dashboard/analyticsTimeline"
 import { computeAiRevenueAttribution } from "@/lib/analytics/revenueAttribution"
+import { classifyAiResolution, classifyCustomerSentiment } from "@/lib/analytics/aiEvents"
+import { parseStorefrontChatActions } from "@/lib/storefront-chat/actions"
 
 type StorefrontMessageRow = {
+    id: string
     senderType: "CUSTOMER" | "AI"
     createdAt: Date
     content: string
     conversationId: string
+    actions: unknown
 }
 
 type AnalyticsEventRow = {
@@ -58,6 +62,13 @@ type ChatMessageRow = {
     createdAt: Date
 }
 
+type TicketLogRow = {
+    id: string
+    subject: string
+    bodyPreview: string | null
+    sentAt: Date
+}
+
 type PrismaWithAnalytics = typeof prisma & {
     aiAnalyticsEvent: {
         findMany: (args: {
@@ -69,6 +80,184 @@ type PrismaWithAnalytics = typeof prisma & {
             orderBy: { createdAt: "asc" }
         }) => Promise<AnalyticsEventRow[]>
     }
+}
+
+function analyticsEventKey(event: Pick<AnalyticsEventRow, "eventType" | "messageId" | "productId" | "variantId">) {
+    return [event.eventType, event.messageId ?? "", event.productId ?? "", event.variantId ?? ""].join("|")
+}
+
+function syntheticEvent(params: {
+    id: string
+    conversationId?: string | null
+    messageId?: string | null
+    eventType: string
+    productId?: string | null
+    variantId?: string | null
+    quantity?: number | null
+    amount?: number | null
+    sentiment?: string | null
+    resolutionStatus?: string | null
+    metadata?: unknown
+    createdAt: Date
+}): AnalyticsEventRow {
+    return {
+        id: params.id,
+        conversationId: params.conversationId ?? null,
+        messageId: params.messageId ?? null,
+        eventType: params.eventType,
+        source: "derived_from_existing_data",
+        productId: params.productId ?? null,
+        variantId: params.variantId ?? null,
+        quantity: params.quantity ?? null,
+        amount: params.amount ?? null,
+        currency: null,
+        sentiment: params.sentiment ?? null,
+        resolutionStatus: params.resolutionStatus ?? null,
+        orderId: null,
+        attributionType: null,
+        metadata: params.metadata ?? null,
+        createdAt: params.createdAt,
+    }
+}
+
+function deriveAnalyticsEventsFromExistingData(params: {
+    persistedEvents: AnalyticsEventRow[]
+    messages: StorefrontMessageRow[]
+    ticketLogs: TicketLogRow[]
+}): AnalyticsEventRow[] {
+    const existingKeys = new Set(params.persistedEvents.map(analyticsEventKey))
+    const derived: AnalyticsEventRow[] = []
+
+    const pushIfMissing = (event: AnalyticsEventRow) => {
+        const key = analyticsEventKey(event)
+        if (existingKeys.has(key)) return
+        existingKeys.add(key)
+        derived.push(event)
+    }
+
+    for (const message of params.messages) {
+        if (message.senderType === "CUSTOMER") {
+            pushIfMissing(
+                syntheticEvent({
+                    id: `derived-question-${message.id}`,
+                    conversationId: message.conversationId,
+                    messageId: message.id,
+                    eventType: "customer_question",
+                    sentiment: classifyCustomerSentiment(message.content),
+                    metadata: { derivedFrom: "StorefrontChatMessage" },
+                    createdAt: message.createdAt,
+                }),
+            )
+            continue
+        }
+
+        const resolutionStatus = classifyAiResolution({ content: message.content })
+        pushIfMissing(
+            syntheticEvent({
+                id: `derived-ai-${message.id}`,
+                conversationId: message.conversationId,
+                messageId: message.id,
+                eventType: "ai_answered",
+                resolutionStatus,
+                metadata: { derivedFrom: "StorefrontChatMessage" },
+                createdAt: message.createdAt,
+            }),
+        )
+        if (resolutionStatus === "resolved_by_ai") {
+            pushIfMissing(
+                syntheticEvent({
+                    id: `derived-resolved-${message.id}`,
+                    conversationId: message.conversationId,
+                    messageId: message.id,
+                    eventType: "resolved_by_ai",
+                    resolutionStatus,
+                    metadata: { derivedFrom: "StorefrontChatMessage" },
+                    createdAt: message.createdAt,
+                }),
+            )
+        } else if (resolutionStatus === "needs_follow_up") {
+            pushIfMissing(
+                syntheticEvent({
+                    id: `derived-unresolved-${message.id}`,
+                    conversationId: message.conversationId,
+                    messageId: message.id,
+                    eventType: "unresolved_question",
+                    resolutionStatus,
+                    metadata: { derivedFrom: "StorefrontChatMessage" },
+                    createdAt: message.createdAt,
+                }),
+            )
+        }
+
+        for (const action of parseStorefrontChatActions(message.actions)) {
+            if (action.type === "upsell_suggestion") {
+                pushIfMissing(
+                    syntheticEvent({
+                        id: `derived-upsell-shown-${message.id}-${action.product.productId}`,
+                        conversationId: message.conversationId,
+                        messageId: message.id,
+                        eventType: "upsell_shown",
+                        productId: action.product.productId,
+                        variantId: action.product.variantId ?? null,
+                        quantity: action.product.quantity ?? 1,
+                        amount: action.product.price ? Number(action.product.price) || null : null,
+                        metadata: { derivedFrom: "StorefrontChatMessage.actions", title: action.product.title },
+                        createdAt: message.createdAt,
+                    }),
+                )
+            } else if (action.type === "add_to_cart") {
+                pushIfMissing(
+                    syntheticEvent({
+                        id: `derived-cart-action-shown-${message.id}-${action.product.productId}`,
+                        conversationId: message.conversationId,
+                        messageId: message.id,
+                        eventType: "cart_action_shown",
+                        productId: action.product.productId,
+                        variantId: action.product.variantId ?? null,
+                        quantity: action.product.quantity ?? 1,
+                        amount: action.product.price ? Number(action.product.price) || null : null,
+                        metadata: { derivedFrom: "StorefrontChatMessage.actions", title: action.product.title },
+                        createdAt: message.createdAt,
+                    }),
+                )
+            } else if (action.type === "open_cart") {
+                pushIfMissing(
+                    syntheticEvent({
+                        id: `derived-cart-link-${message.id}`,
+                        conversationId: message.conversationId,
+                        messageId: message.id,
+                        eventType: "cart_link_generated",
+                        productId: action.product?.productId ?? null,
+                        variantId: action.product?.variantId ?? null,
+                        quantity: action.product?.quantity ?? null,
+                        metadata: { derivedFrom: "StorefrontChatMessage.actions" },
+                        createdAt: message.createdAt,
+                    }),
+                )
+            }
+        }
+    }
+
+    const hasPersistedTicketEvents = params.persistedEvents.some((event) => event.eventType === "ticket_created")
+    if (!hasPersistedTicketEvents) {
+        for (const ticket of params.ticketLogs) {
+            pushIfMissing(
+                syntheticEvent({
+                    id: `derived-ticket-${ticket.id}`,
+                    eventType: "ticket_created",
+                    resolutionStatus: "escalated",
+                    metadata: {
+                        derivedFrom: "EmailLog",
+                        subject: ticket.subject,
+                        preview: ticket.bodyPreview,
+                    },
+                    createdAt: ticket.sentAt,
+                }),
+            )
+        }
+    }
+
+    return [...params.persistedEvents, ...derived].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 }
 
 function median(nums: number[]): number {
@@ -131,12 +320,13 @@ export async function GET(req: Request) {
         const vendorUserId = store.userId
         const prismaWithAnalytics = prisma as PrismaWithAnalytics
 
-        const [storefrontMessages, analyticsEvents, conversations, cachedOrders, chatMessages]: [
+        const [storefrontMessages, persistedAnalyticsEvents, conversations, cachedOrders, chatMessages, ticketLogs]: [
             StorefrontMessageRow[],
             AnalyticsEventRow[],
             ConversationRow[],
             CachedOrderRow[],
             ChatMessageRow[],
+            TicketLogRow[],
         ] =
             await Promise.all([
                 prisma.storefrontChatMessage.findMany({
@@ -145,10 +335,12 @@ export async function GET(req: Request) {
                         createdAt: { gte: window.since, lte: window.until },
                     },
                     select: {
+                        id: true,
                         senderType: true,
                         createdAt: true,
                         content: true,
                         conversationId: true,
+                        actions: true,
                     },
                     orderBy: [{ conversationId: "asc" }, { createdAt: "asc" }],
                 }),
@@ -211,7 +403,27 @@ export async function GET(req: Request) {
                     orderBy: { createdAt: "asc" },
                     take: 8000,
                 }),
+                prisma.emailLog.findMany({
+                    where: {
+                        storeId: store.id,
+                        trigger: "STOREFRONT_TICKET",
+                        sentAt: { gte: window.since, lte: window.until },
+                    },
+                    select: {
+                        id: true,
+                        subject: true,
+                        bodyPreview: true,
+                        sentAt: true,
+                    },
+                    orderBy: { sentAt: "asc" },
+                }),
             ])
+
+        const analyticsEvents = deriveAnalyticsEventsFromExistingData({
+            persistedEvents: persistedAnalyticsEvents,
+            messages: storefrontMessages,
+            ticketLogs,
+        })
 
         const revenueAttribution = computeAiRevenueAttribution({
             events: analyticsEvents,
@@ -418,7 +630,8 @@ export async function GET(req: Request) {
                 hiddenByDefault: true,
                 storefrontAiMessages: storefrontMessages.filter((m) => m.senderType === "AI").length,
                 storefrontCustomerMessages: storefrontMessages.filter((m) => m.senderType === "CUSTOMER").length,
-                analyticsEvents: analyticsEvents.length,
+                analyticsEvents: persistedAnalyticsEvents.length,
+                derivedAnalyticsEvents: analyticsEvents.length - persistedAnalyticsEvents.length,
                 cachedOrders: cachedOrders.length,
             },
             totals: {
