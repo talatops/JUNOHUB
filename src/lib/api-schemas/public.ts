@@ -39,17 +39,41 @@ const storefrontVisitorIdSchema = z
     .min(1, "Missing visitorId")
     .max(300, "visitorId too long")
 
-/** Anonymous storefront widget message */
-export const storefrontChatPostSchema = z.object({
-    shop: storefrontShopSchema,
-    visitorId: storefrontVisitorIdSchema,
-    content: z
+export const storefrontChatActionSchema = z.object({
+    type: z.enum(["add_to_cart", "upsell_suggestion"]),
+    productId: z.string().trim().min(1, "Missing productId").max(128),
+    variantId: z
         .string()
-        .max(2000, "Message too long")
-        .transform((s) => s.trim())
-        .refine((s) => s.length >= 1, "Empty message"),
-    customerEmail: optionalEmailField(),
+        .trim()
+        .min(1, "Missing variantId")
+        .max(128)
+        .optional(),
+    quantity: z.coerce.number().int().min(1).max(10).default(1),
+    sourceMessageId: z.string().trim().max(128).optional(),
 })
+
+/** Anonymous storefront widget message */
+export const storefrontChatPostSchema = z
+    .object({
+        shop: storefrontShopSchema,
+        visitorId: storefrontVisitorIdSchema,
+        content: z
+            .string()
+            .max(2000, "Message too long")
+            .optional()
+            .default("")
+            .transform((s) => s.trim()),
+        customerEmail: optionalEmailField(),
+        action: storefrontChatActionSchema.optional(),
+    })
+    .superRefine((data, ctx) => {
+        if (data.content || data.action) return
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["content"],
+            message: "Empty message",
+        })
+    })
 
 export const CHAT_MESSAGE_CONTENT_MAX = 16_000
 
@@ -124,6 +148,7 @@ export const storefrontOtpVerifySchema = z.object({
 
 export type NewsletterSubscribeInput = z.infer<typeof newsletterSubscribeSchema>
 export type StorefrontChatPostInput = z.infer<typeof storefrontChatPostSchema>
+export type StorefrontChatActionInput = z.infer<typeof storefrontChatActionSchema>
 export type ChatMessagePostInput = z.infer<typeof chatMessagePostSchema>
 export type StorefrontOtpRequestInput = z.infer<typeof storefrontOtpRequestSchema>
 export type StorefrontOtpVerifyInput = z.infer<typeof storefrontOtpVerifySchema>

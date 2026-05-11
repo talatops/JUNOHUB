@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
     storeSelectStorefrontChatApi,
@@ -7,9 +8,23 @@ import {
 import { generateStorefrontReply } from "@/lib/ai/storefrontGroq"
 import { applyRateLimit } from "@/lib/rate-limit"
 import { storefrontChatPostSchema } from "@/lib/api-schemas/public"
+import type { StorefrontChatActionInput } from "@/lib/api-schemas/public"
 import { validationErrorResponse } from "@/lib/api-schemas/validate"
 import { extractOrderNumberHints } from "@/lib/ai/gmailContext"
 import { getOrderDetailForVerifiedEmail } from "@/lib/ai/tools/orderTools"
+import {
+    buildOpenCartAction,
+    normalizeActionProduct,
+    type StorefrontActionProduct,
+    type StorefrontChatAction,
+} from "@/lib/storefront-chat/actions"
+import {
+    buildCartPermalink,
+    extractCartableVariants,
+    formatVariantChoices,
+    selectVariantForCart,
+} from "@/lib/storefront-chat/cartLinks"
+import { productSearchHitToActionProduct, searchProductsForStore } from "@/lib/ai/tools/productTools"
 
 function normalizeShopDomain(input: string) {
     return input
@@ -72,6 +87,196 @@ function shouldCreateEscalationTicket(ai: { content: string; meta?: { usedTools?
     )
 }
 
+type CartResponse = {
+    content: string
+    actions: StorefrontChatAction[]
+    pendingCartProduct: StorefrontActionProduct | null
+}
+
+function describeStorefrontAction(action: StorefrontChatActionInput | undefined) {
+    if (!action) return ""
+    return action.type === "upsell_suggestion" ? "Add suggested item to cart" : "Add to cart"
+}
+
+function isCartConfirmationMessage(content: string) {
+    const text = content.trim().toLowerCase()
+    if (!text) return false
+    return /^(yes|yeah|yep|sure|ok|okay|please|do it|go ahead|add it|add to cart|buy it|i want to buy|i want it|yes please)[.! ]*$/i.test(text)
+}
+
+function isDirectAddToCartRequest(content: string) {
+    const text = content.trim().toLowerCase()
+    return /\b(add|put)\b.+\b(cart|bag)\b/.test(text) || /\b(buy|purchase)\b.+\b(now|it|this|product)\b/.test(text)
+}
+
+function parsePendingCartProduct(raw: unknown): StorefrontActionProduct | null {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null
+    const state = raw as Record<string, unknown>
+    return normalizeActionProduct(state.pendingCartProduct)
+}
+
+function nextL1State(raw: unknown, pendingCartProduct: StorefrontActionProduct | null) {
+    const current =
+        raw && typeof raw === "object" && !Array.isArray(raw)
+            ? { ...(raw as Record<string, unknown>) }
+            : {}
+    if (pendingCartProduct) {
+        current.pendingCartProduct = pendingCartProduct
+        current.pendingCartUpdatedAt = new Date().toISOString()
+    } else {
+        delete current.pendingCartProduct
+        delete current.pendingCartUpdatedAt
+    }
+    return current
+}
+
+function toJsonCompatible<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T
+}
+
+function toJsonInput(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
+}
+
+function imageUrlFromImages(images: unknown): string | null {
+    const rows = typeof images === "string"
+        ? (() => {
+              try {
+                  return JSON.parse(images) as unknown
+              } catch {
+                  return []
+              }
+          })()
+        : images
+    if (!Array.isArray(rows)) return null
+    for (const row of rows) {
+        if (!row || typeof row !== "object") continue
+        const image = row as { src?: unknown; url?: unknown }
+        const src = typeof image.src === "string" ? image.src : typeof image.url === "string" ? image.url : ""
+        if (src.trim()) return src.trim()
+    }
+    return null
+}
+
+async function buildCartResponse(params: {
+    storeId: string
+    shopifyDomain: string
+    productId: string
+    requestedVariantId?: string | null
+    quantity?: number
+    message: string
+}): Promise<CartResponse> {
+    const product = await prisma.cachedProduct.findFirst({
+        where: { storeId: params.storeId, shopifyProductId: params.productId },
+        select: {
+            shopifyProductId: true,
+            title: true,
+            productType: true,
+            variants: true,
+            images: true,
+        },
+    })
+
+    if (!product) {
+        return {
+            content: "I could not find that product in this store right now.",
+            actions: [],
+            pendingCartProduct: null,
+        }
+    }
+
+    const variants = extractCartableVariants(product.variants)
+    const selected = selectVariantForCart({
+        variants,
+        requestedVariantId: params.requestedVariantId,
+        message: params.message,
+    })
+
+    if (selected.status === "invalid_variant") {
+        return {
+            content: "I could not verify that product option for this store. Please choose the product again.",
+            actions: [],
+            pendingCartProduct: null,
+        }
+    }
+
+    if (selected.status === "unavailable") {
+        return {
+            content: `${product.title} is not available to add to cart right now.`,
+            actions: [],
+            pendingCartProduct: null,
+        }
+    }
+
+    if (selected.status === "needs_selection") {
+        return {
+            content: `Which option would you like for ${product.title}? Available options include: ${formatVariantChoices(selected.variants)}.`,
+            actions: [],
+            pendingCartProduct: {
+                productId: product.shopifyProductId,
+                title: product.title,
+                imageUrl: imageUrlFromImages(product.images),
+                productType: product.productType,
+                quantity: params.quantity ?? 1,
+            },
+        }
+    }
+
+    const quantity = Math.max(1, Math.min(10, Math.trunc(Number(params.quantity) || 1)))
+    const cartUrl = buildCartPermalink(params.shopifyDomain, [
+        { variantId: selected.variant.id, quantity },
+    ])
+    if (!cartUrl) {
+        return {
+            content: "I could not create a cart link for that product right now.",
+            actions: [],
+            pendingCartProduct: null,
+        }
+    }
+
+    const actionProduct: StorefrontActionProduct = {
+        productId: product.shopifyProductId,
+        title: product.title,
+        variantId: selected.variant.id,
+        variantTitle: selected.variant.title,
+        sku: selected.variant.sku,
+        price: selected.variant.price,
+        imageUrl: imageUrlFromImages(product.images),
+        productType: product.productType,
+        quantity,
+    }
+    const variantText =
+        selected.variant.title && !/^default title$/i.test(selected.variant.title)
+            ? ` (${selected.variant.title})`
+            : ""
+
+    return {
+        content: `Here is your cart link with ${product.title}${variantText} added: ${cartUrl}`,
+        actions: [buildOpenCartAction(cartUrl, actionProduct)],
+        pendingCartProduct: null,
+    }
+}
+
+async function resolveDirectAddToCart(params: {
+    storeId: string
+    shopifyDomain: string
+    message: string
+}): Promise<CartResponse | null> {
+    if (!isDirectAddToCartRequest(params.message)) return null
+    const hits = await searchProductsForStore(params.storeId, params.message, 1)
+    const hit = hits[0]
+    if (!hit) return null
+    const product = productSearchHitToActionProduct(hit)
+    return buildCartResponse({
+        storeId: params.storeId,
+        shopifyDomain: params.shopifyDomain,
+        productId: hit.shopifyProductId,
+        requestedVariantId: product?.variantId,
+        quantity: product?.quantity ?? 1,
+        message: params.message,
+    })
+}
+
 export async function POST(req: Request) {
     try {
         const rate = await applyRateLimit(req, "public:storefront-chat", {
@@ -90,7 +295,8 @@ export async function POST(req: Request) {
         if (!parsed.success) {
             return validationErrorResponse(parsed.error)
         }
-        const { shop, visitorId, content: trimmedContent, customerEmail } = parsed.data
+        const { shop, visitorId, content: trimmedContent, customerEmail, action } = parsed.data
+        const customerContent = trimmedContent || describeStorefrontAction(action)
 
         const normalizedShop = normalizeShopDomain(shop)
 
@@ -143,10 +349,64 @@ export async function POST(req: Request) {
             data: {
                 conversationId: conversation.id,
                 senderType: "CUSTOMER",
-                content: trimmedContent
+                content: customerContent
             },
-            select: { id: true, createdAt: true, senderType: true, content: true }
+            select: { id: true, createdAt: true, senderType: true, content: true, actions: true }
         })
+
+        const pendingCartProduct = parsePendingCartProduct(conversation.l1State)
+        const cartResponse = action
+            ? await buildCartResponse({
+                  storeId: store.id,
+                  shopifyDomain: store.shopifyDomain,
+                  productId: action.productId,
+                  requestedVariantId: action.variantId,
+                  quantity: action.quantity,
+                  message: customerContent,
+              })
+            : pendingCartProduct && isCartConfirmationMessage(customerContent)
+              ? await buildCartResponse({
+                    storeId: store.id,
+                    shopifyDomain: store.shopifyDomain,
+                    productId: pendingCartProduct.productId,
+                    requestedVariantId: pendingCartProduct.variantId,
+                    quantity: pendingCartProduct.quantity,
+                    message: customerContent,
+                })
+              : await resolveDirectAddToCart({
+                    storeId: store.id,
+                    shopifyDomain: store.shopifyDomain,
+                    message: customerContent,
+                })
+
+        if (cartResponse) {
+            const aiMessage = await prisma.storefrontChatMessage.create({
+                data: {
+                    conversationId: conversation.id,
+                    senderType: "AI",
+                    content: cartResponse.content,
+                    actions: cartResponse.actions.length ? toJsonCompatible(cartResponse.actions) : undefined,
+                },
+                select: { id: true, createdAt: true, senderType: true, content: true, actions: true },
+            })
+
+            await prisma.storefrontChatConversation.update({
+                where: { id: conversation.id },
+                data: { l1State: toJsonInput(nextL1State(conversation.l1State, cartResponse.pendingCartProduct)) },
+            })
+
+            return NextResponse.json({
+                success: true,
+                messages: [customerMessage, aiMessage],
+                meta: {
+                    module: "PRODUCT_FIT",
+                    pillar: "K",
+                    usedTools: ["cart_permalink"],
+                    kbHits: 0,
+                    productHits: 1,
+                },
+            })
+        }
 
         const recentHistory = await prisma.storefrontChatMessage.findMany({
             where: { conversationId: conversation.id },
@@ -228,15 +488,24 @@ export async function POST(req: Request) {
               : alreadyEscalated
                 ? ESCALATION_ALREADY_DISPATCHED_REPLY
                 : ai.content
+        const aiActions = aiContent === ai.content ? ai.actions ?? [] : []
 
         const aiMessage = await prisma.storefrontChatMessage.create({
             data: {
                 conversationId: conversation.id,
                 senderType: "AI",
-                content: aiContent
+                content: aiContent,
+                actions: aiActions.length ? toJsonCompatible(aiActions) : undefined,
             },
-            select: { id: true, createdAt: true, senderType: true, content: true }
+            select: { id: true, createdAt: true, senderType: true, content: true, actions: true }
         })
+
+        if (aiContent === ai.content) {
+            await prisma.storefrontChatConversation.update({
+                where: { id: conversation.id },
+                data: { l1State: toJsonInput(nextL1State(conversation.l1State, ai.pendingCartProduct ?? null)) },
+            })
+        }
 
         if (
             isEscalation &&
@@ -256,7 +525,7 @@ export async function POST(req: Request) {
                             storeId: store.id,
                             to: ticketTo,
                             subject: ticketSubject,
-                            bodyPreview: trimmedContent.slice(0, 2000),
+                            bodyPreview: customerContent.slice(0, 2000),
                             isAutomated: true,
                             trigger: STOREFRONT_TICKET_TRIGGER,
                             status: "SENT",
@@ -322,7 +591,7 @@ export async function GET(req: Request) {
             where: { conversationId: conversation.id },
             orderBy: { createdAt: "asc" },
             take: 120,
-            select: { id: true, content: true, senderType: true, createdAt: true }
+            select: { id: true, content: true, senderType: true, createdAt: true, actions: true }
         })
 
         return NextResponse.json({ success: true, messages })

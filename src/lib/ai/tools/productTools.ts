@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import type { StorefrontActionProduct } from "@/lib/storefront-chat/actions"
+import { extractCartableVariants, selectVariantForCart } from "@/lib/storefront-chat/cartLinks"
 
 export type ProductSearchHit = {
     shopifyProductId: string
@@ -7,6 +9,15 @@ export type ProductSearchHit = {
     sku: string | null
     inventorySummary: string | null
     metafieldsSummary: string | null
+    productType: string | null
+    status: string | null
+    variantId: string | null
+    variantTitle: string | null
+    price: string | null
+    inventoryQuantity: number | null
+    imageUrl: string | null
+    tokens: string[]
+    requiresVariantSelection: boolean
 }
 
 function metafieldsToSummary(metafields: unknown): string | null {
@@ -41,6 +52,49 @@ function inventoryFromVariants(variants: unknown): string | null {
     }
 }
 
+function imageUrlFromImages(images: unknown): string | null {
+    const rows = typeof images === "string"
+        ? (() => {
+              try {
+                  return JSON.parse(images) as unknown
+              } catch {
+                  return []
+              }
+          })()
+        : images
+    if (!Array.isArray(rows)) return null
+    for (const row of rows) {
+        if (!row || typeof row !== "object") continue
+        const image = row as { src?: unknown; url?: unknown }
+        const src = typeof image.src === "string" ? image.src : typeof image.url === "string" ? image.url : ""
+        if (src.trim()) return src.trim()
+    }
+    return null
+}
+
+function termsFromText(text: string) {
+    return text
+        .toLowerCase()
+        .split(/[^a-z0-9]+/g)
+        .map((t) => t.trim())
+        .filter((t) => t.length >= 2)
+}
+
+export function productSearchHitToActionProduct(hit: ProductSearchHit): StorefrontActionProduct | null {
+    if (!hit.variantId) return null
+    return {
+        productId: hit.shopifyProductId,
+        title: hit.title,
+        variantId: hit.variantId,
+        variantTitle: hit.variantTitle,
+        sku: hit.sku,
+        price: hit.price,
+        imageUrl: hit.imageUrl,
+        productType: hit.productType,
+        quantity: 1,
+    }
+}
+
 /**
  * Keyword search by title / SKU across cached products (MVP; no full-text index).
  */
@@ -49,12 +103,7 @@ export async function searchProductsForStore(
     query: string,
     limit = 8,
 ): Promise<ProductSearchHit[]> {
-    const terms = query
-        .toLowerCase()
-        .split(/[^a-z0-9]+/g)
-        .map((t) => t.trim())
-        .filter((t) => t.length >= 2)
-        .slice(0, 6)
+    const terms = termsFromText(query).slice(0, 6)
 
     if (!terms.length) return []
 
@@ -66,14 +115,17 @@ export async function searchProductsForStore(
             select: {
                 shopifyProductId: true,
                 title: true,
+                productType: true,
+                status: true,
                 variants: true,
+                images: true,
                 metafields: true,
             },
         })
 
         const scored: { p: (typeof products)[0]; score: number }[] = []
         for (const p of products) {
-            const hay = `${p.title} ${JSON.stringify(p.variants)}`.toLowerCase()
+            const hay = `${p.title} ${p.productType ?? ""} ${JSON.stringify(p.variants)} ${metafieldsToSummary(p.metafields) ?? ""}`.toLowerCase()
             let score = 0
             for (const t of terms) {
                 if (hay.includes(t)) score += 1
@@ -83,21 +135,34 @@ export async function searchProductsForStore(
         scored.sort((a, b) => b.score - a.score)
 
         return scored.slice(0, limit).map(({ p }) => {
-            const variants = p.variants
+            const variants = extractCartableVariants(p.variants)
+            const selected = selectVariantForCart({ variants, message: query })
+            const selectedVariant = selected.status === "selected" ? selected.variant : null
+            const firstVariant = variants[0] ?? null
             let sku: string | null = null
-            try {
-                const arr =
-                    typeof variants === "string" ? JSON.parse(variants) : variants
-                if (Array.isArray(arr) && arr[0]?.sku) sku = String(arr[0].sku)
-            } catch {
-                /* ignore */
-            }
+            if (selectedVariant?.sku) sku = selectedVariant.sku
+            else if (firstVariant?.sku) sku = firstVariant.sku
+
+            const tokens = Array.from(new Set([
+                ...termsFromText(p.title),
+                ...termsFromText(p.productType ?? ""),
+            ])).slice(0, 16)
+
             return {
                 shopifyProductId: p.shopifyProductId,
                 title: p.title,
                 sku,
                 inventorySummary: inventoryFromVariants(p.variants),
                 metafieldsSummary: metafieldsToSummary(p.metafields),
+                productType: p.productType,
+                status: p.status,
+                variantId: selectedVariant?.id ?? null,
+                variantTitle: selectedVariant?.title ?? null,
+                price: selectedVariant?.price ?? firstVariant?.price ?? null,
+                inventoryQuantity: selectedVariant?.inventoryQuantity ?? firstVariant?.inventoryQuantity ?? null,
+                imageUrl: imageUrlFromImages(p.images),
+                tokens,
+                requiresVariantSelection: selected.status === "needs_selection",
             }
         })
     } catch (e) {

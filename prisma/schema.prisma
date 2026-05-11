@@ -744,6 +744,7 @@ model StorefrontChatMessage {
   conversation  StorefrontChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderType    StorefrontChatSenderType
   content       String   @db.Text
+  actions       Json?
 
   createdAt     DateTime @default(now())
 

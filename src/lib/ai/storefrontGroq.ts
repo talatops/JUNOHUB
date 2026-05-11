@@ -63,6 +63,8 @@ export async function generateStorefrontReply(params: {
 
     return {
         content: result.text,
+        actions: result.actions ?? [],
+        pendingCartProduct: result.pendingCartProduct ?? null,
         meta: {
             kbHits: result.meta.kbHits,
             productHits: result.meta.productHits,

@@ -9,7 +9,18 @@ import {
     orderNeedsDisambiguation,
 } from "@/lib/ai/tools/orderTools"
 import type { OrderListCandidate } from "@/lib/ai/tools/orderTools"
-import { searchProductsForStore } from "@/lib/ai/tools/productTools"
+import {
+    productSearchHitToActionProduct,
+    searchProductsForStore,
+    type ProductSearchHit,
+} from "@/lib/ai/tools/productTools"
+import {
+    buildAddToCartAction,
+    buildUpsellSuggestionAction,
+    type StorefrontActionProduct,
+    type StorefrontChatAction,
+} from "@/lib/storefront-chat/actions"
+import { findAutomaticUpsellCandidates } from "@/lib/storefront-chat/upsells"
 import {
     isAutomationEnabled,
     isModuleEnabled,
@@ -167,6 +178,8 @@ export type RunL1Input = {
 export type RunL1Result = {
     text: string
     meta: L1RunMeta
+    actions?: StorefrontChatAction[]
+    pendingCartProduct?: StorefrontActionProduct | null
 }
 
 function historyToGroq(
@@ -701,18 +714,23 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     }
 
     let productFacts = ""
+    let productHits: ProductSearchHit[] = []
     const runProductSearch =
         (activeModule === "PRODUCT_FIT" &&
             isAutomationEnabled(modules, activeModule, "knowledge")) ||
-        (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule))
+        (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule)) ||
+        (input.channel === "widget" &&
+            retrieval.productCount > 0 &&
+            !ORDER_DETAIL_MODULES.includes(activeModule))
     if (runProductSearch) {
         const hits = await searchProductsForStore(input.storeId, effectiveMessage, 5)
+        productHits = hits
         usedTools.push("search_products")
         if (hits.length) {
             productFacts = hits
                 .map(
                     (h) =>
-                        `- ${h.title} (SKU ${h.sku ?? "n/a"}) | ${h.inventorySummary ?? "inventory n/a"}${h.metafieldsSummary ? ` | ${h.metafieldsSummary}` : ""}`,
+                        `- ${h.title} (SKU ${h.sku ?? "n/a"}) | ${h.inventorySummary ?? "inventory n/a"}${h.price ? ` | Price ${h.price}` : ""}${h.requiresVariantSelection ? " | Cart: ask the customer which option/variant they want before adding to cart." : h.variantId ? " | Cart: this product can be added to cart if the customer wants it." : ""}${h.metafieldsSummary ? ` | ${h.metafieldsSummary}` : ""}`,
                 )
                 .join("\n")
         }
@@ -724,6 +742,27 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
             ]
                 .filter(Boolean)
                 .join("\n\n")
+        }
+    }
+
+    const actions: StorefrontChatAction[] = []
+    let pendingCartProduct: StorefrontActionProduct | null = null
+    if (input.channel === "widget" && productHits.length > 0) {
+        const primaryHit = productHits[0]
+        const primaryProduct = productSearchHitToActionProduct(primaryHit)
+        if (primaryProduct) {
+            pendingCartProduct = primaryProduct
+            actions.push(buildAddToCartAction(primaryProduct, "primary"))
+            const upsells = await findAutomaticUpsellCandidates({
+                storeId: input.storeId,
+                baseProduct: primaryProduct,
+                query: effectiveMessage,
+                limit: 1,
+            })
+            if (upsells[0]) {
+                usedTools.push("automatic_upsell")
+                actions.push(buildUpsellSuggestionAction(upsells[0], primaryProduct.title))
+            }
         }
     }
 
@@ -753,6 +792,8 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
 
     return {
         text,
+        actions,
+        pendingCartProduct,
         meta: {
             module: activeModule,
             pillar,

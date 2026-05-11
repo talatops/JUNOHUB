@@ -57,3 +57,4 @@ next-env.d.ts
 *.log
 docker-data/
 
+/Documents

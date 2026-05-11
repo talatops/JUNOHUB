@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest"
 import {
     newsletterSubscribeSchema,
     storefrontChatPostSchema,
+    storefrontChatActionSchema,
     chatMessagePostSchema,
     CHAT_MESSAGE_CONTENT_MAX,
     CHAT_ATTACHMENT_JSON_MAX,
@@ -42,6 +43,33 @@ describe("storefrontChatPostSchema", () => {
                 shop: "x.myshopify.com",
                 visitorId: "v1",
                 content: "   ",
+            }).success,
+        ).toBe(false)
+    })
+
+    it("accepts action-only add-to-cart payloads", () => {
+        const result = storefrontChatPostSchema.safeParse({
+            shop: "x.myshopify.com",
+            visitorId: "v1",
+            action: {
+                type: "add_to_cart",
+                productId: "123",
+                variantId: "456",
+                quantity: 1,
+            },
+        })
+        expect(result.success).toBe(true)
+        if (result.success) expect(result.data.content).toBe("")
+    })
+})
+
+describe("storefrontChatActionSchema", () => {
+    it("bounds action quantity", () => {
+        expect(
+            storefrontChatActionSchema.safeParse({
+                type: "add_to_cart",
+                productId: "123",
+                quantity: 11,
             }).success,
         ).toBe(false)
     })

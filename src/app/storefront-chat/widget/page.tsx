@@ -9,6 +9,47 @@ type WidgetMessage = {
     content: string
     createdAt: string
     senderType: "CUSTOMER" | "AI"
+    actions?: WidgetAction[]
+}
+
+type WidgetActionProduct = {
+    productId: string
+    title: string
+    variantId?: string
+    variantTitle?: string | null
+    sku?: string | null
+    price?: string | null
+    imageUrl?: string | null
+    productType?: string | null
+    quantity?: number
+}
+
+type WidgetAction =
+    | {
+          type: "add_to_cart"
+          label: string
+          source?: "primary" | "upsell"
+          product: WidgetActionProduct
+      }
+    | {
+          type: "upsell_suggestion"
+          label: string
+          message: string
+          product: WidgetActionProduct
+      }
+    | {
+          type: "open_cart"
+          label: string
+          cartUrl: string
+          product?: WidgetActionProduct
+      }
+
+type WidgetPostAction = {
+    type: "add_to_cart" | "upsell_suggestion"
+    productId: string
+    variantId?: string
+    quantity?: number
+    sourceMessageId?: string
 }
 
 function isLikelyHttpUrl(value: string) {
@@ -61,6 +102,48 @@ function renderMessageContent(content: string) {
     }
 
     return nodes
+}
+
+function normalizeWidgetActions(raw: unknown): WidgetAction[] {
+    if (!Array.isArray(raw)) return []
+    return raw.filter((action): action is WidgetAction => {
+        if (!action || typeof action !== "object" || Array.isArray(action)) return false
+        const item = action as { type?: unknown; product?: unknown; cartUrl?: unknown }
+        if (item.type === "open_cart") return typeof item.cartUrl === "string"
+        if (item.type === "add_to_cart" || item.type === "upsell_suggestion") {
+            return Boolean(item.product && typeof item.product === "object")
+        }
+        return false
+    })
+}
+
+function apiErrorMessage(raw: unknown, fallback: string) {
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const message = (raw as { message?: unknown }).message
+        if (typeof message === "string" && message.trim()) return message
+    }
+    return fallback
+}
+
+function apiMessages(raw: unknown): unknown[] {
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+        const messages = (raw as { messages?: unknown }).messages
+        return Array.isArray(messages) ? messages : []
+    }
+    return []
+}
+
+function toWidgetMessage(raw: unknown, fallbackId?: string): WidgetMessage {
+    const message = raw && typeof raw === "object" && !Array.isArray(raw)
+        ? raw as Record<string, unknown>
+        : {}
+    return {
+        id: String(message.id || fallbackId || `local_${Date.now()}`),
+        content: String(message.content || ""),
+        senderType: (message.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
+        createdAt: String(message.createdAt || new Date().toISOString()),
+        actions: normalizeWidgetActions(message.actions),
+    }
 }
 
 function getOrCreateVisitorId(shop: string) {
@@ -167,22 +250,15 @@ export default function StorefrontChatWidgetPage() {
                 )
                 const data = await res.json().catch(() => ({}))
                 if (!res.ok) {
-                    throw new Error(data?.message || "Failed to load history")
+                    throw new Error(apiErrorMessage(data, "Failed to load history"))
                 }
-                const nextMessages = Array.isArray(data?.messages) ? data.messages : []
+                const nextMessages = apiMessages(data)
                 if (!cancelled) {
-                    setMessages(
-                        nextMessages.map((m: any) => ({
-                            id: String(m.id),
-                            content: String(m.content || ""),
-                            senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
-                            createdAt: String(m.createdAt || new Date().toISOString())
-                        }))
-                    )
+                    setMessages(nextMessages.map((m) => toWidgetMessage(m)))
                 }
-            } catch (e: any) {
+            } catch (e: unknown) {
                 if (!cancelled) {
-                    setSendError(e?.message || "Failed to load chat history")
+                    setSendError(e instanceof Error ? e.message : "Failed to load chat history")
                 }
             } finally {
                 if (!cancelled) {
@@ -299,10 +375,10 @@ export default function StorefrontChatWidgetPage() {
         }
     }
 
-    const send = async () => {
+    const send = async (postAction?: WidgetPostAction, actionLabel?: string) => {
         if (!shop || !visitorId) return
-        const text = composer.trim()
-        if (!text) return
+        const text = postAction ? actionLabel || "Add to cart" : composer.trim()
+        if (!text && !postAction) return
         const typingStartedAt = Date.now()
 
         const optimisticCustomerMessage: WidgetMessage = {
@@ -313,7 +389,9 @@ export default function StorefrontChatWidgetPage() {
         }
 
         setMessages((prev) => [...prev, optimisticCustomerMessage])
-        setComposer("")
+        if (!postAction) {
+            setComposer("")
+        }
         setAiTyping(true)
         setTimeout(() => composerRef.current?.focus(), 0)
 
@@ -323,22 +401,17 @@ export default function StorefrontChatWidgetPage() {
             const res = await fetch("/api/storefront-chat/messages", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ shop, visitorId, content: text })
+                body: JSON.stringify({ shop, visitorId, content: text, action: postAction })
             })
 
             const data = await res.json().catch(() => ({}))
             if (!res.ok) {
-                throw new Error(data?.message || "Failed to send message")
+                throw new Error(apiErrorMessage(data, "Failed to send message"))
             }
 
-            const returned = Array.isArray(data?.messages) ? data.messages : []
+            const returned = apiMessages(data)
             if (returned.length) {
-                const returnedTyped = returned.map((m: any) => ({
-                    id: String(m.id || `local_${Date.now()}`),
-                    content: String(m.content || ""),
-                    senderType: (m.senderType === "AI" ? "AI" : "CUSTOMER") as "AI" | "CUSTOMER",
-                    createdAt: String(m.createdAt || new Date().toISOString())
-                }))
+                const returnedTyped = returned.map((m) => toWidgetMessage(m))
                 const aiReplies = returnedTyped.filter((m: WidgetMessage) => m.senderType === "AI")
                 const elapsed = Date.now() - typingStartedAt
                 const minTypingMs = 1000
@@ -347,13 +420,101 @@ export default function StorefrontChatWidgetPage() {
                 }
                 setMessages(prev => [...prev, ...aiReplies])
             }
-        } catch (e: any) {
-            setSendError(e?.message || "Failed to send message")
+        } catch (e: unknown) {
+            setSendError(e instanceof Error ? e.message : "Failed to send message")
             setMessages((prev) => prev.filter((m) => m.id !== optimisticCustomerMessage.id))
         } finally {
             setAiTyping(false)
             setSending(false)
         }
+    }
+
+    const submitCartAction = (message: WidgetMessage, action: Extract<WidgetAction, { type: "add_to_cart" | "upsell_suggestion" }>) => {
+        void send(
+            {
+                type: action.type,
+                productId: action.product.productId,
+                variantId: action.product.variantId,
+                quantity: action.product.quantity ?? 1,
+                sourceMessageId: message.id,
+            },
+            action.label,
+        )
+    }
+
+    const renderMessageActions = (message: WidgetMessage) => {
+        if (message.senderType !== "AI" || !message.actions?.length) return null
+
+        return (
+            <div className="mt-2 space-y-2">
+                {message.actions.map((action, index) => {
+                    if (action.type === "open_cart") {
+                        return (
+                            <button
+                                key={`${message.id}-${action.type}-${index}`}
+                                type="button"
+                                onClick={() => window.open(action.cartUrl, "_blank", "noopener,noreferrer")}
+                                className="w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+                            >
+                                {action.label}
+                            </button>
+                        )
+                    }
+
+                    if (action.type === "upsell_suggestion") {
+                        return (
+                            <div
+                                key={`${message.id}-${action.type}-${index}`}
+                                className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-2"
+                            >
+                                <div className="flex gap-2">
+                                    {action.product.imageUrl ? (
+                                        <img
+                                            src={action.product.imageUrl}
+                                            alt=""
+                                            className="h-12 w-12 flex-shrink-0 rounded-lg object-cover"
+                                        />
+                                    ) : null}
+                                    <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-semibold text-slate-800">
+                                            {action.message}
+                                        </p>
+                                        {action.product.price ? (
+                                            <p className="mt-0.5 text-[11px] text-slate-500">
+                                                {action.product.price}
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => submitCartAction(message, action)}
+                                    disabled={sending}
+                                    className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                                >
+                                    {action.label}
+                                </button>
+                            </div>
+                        )
+                    }
+
+                    return (
+                        <button
+                            key={`${message.id}-${action.type}-${index}`}
+                            type="button"
+                            onClick={() => submitCartAction(message, action)}
+                            disabled={sending}
+                            className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                        >
+                            {action.label}
+                            <span className="block truncate text-[11px] font-medium text-slate-500">
+                                {action.product.title}
+                            </span>
+                        </button>
+                    )
+                })}
+            </div>
+        )
     }
 
     // Require shop context; otherwise render nothing.
@@ -395,14 +556,17 @@ export default function StorefrontChatWidgetPage() {
                                 key={m.id}
                                 className={`flex ${m.senderType === "AI" ? "justify-start" : "justify-end"}`}
                             >
-                                <div
-                                    className={`max-w-[88%] px-3 py-2 rounded-2xl text-sm font-medium whitespace-pre-wrap ${
-                                        m.senderType === "AI"
-                                            ? "bg-white border border-slate-200 text-slate-800"
-                                            : "bg-indigo-600 text-white"
-                                    }`}
-                                >
-                                    {renderMessageContent(m.content)}
+                                <div className="max-w-[88%]">
+                                    <div
+                                        className={`px-3 py-2 rounded-2xl text-sm font-medium whitespace-pre-wrap ${
+                                            m.senderType === "AI"
+                                                ? "bg-white border border-slate-200 text-slate-800"
+                                                : "bg-indigo-600 text-white"
+                                        }`}
+                                    >
+                                        {renderMessageContent(m.content)}
+                                    </div>
+                                    {renderMessageActions(m)}
                                 </div>
                             </div>
                         ))}

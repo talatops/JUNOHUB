@@ -11,6 +11,7 @@ export const storeSelectStorefrontChatApi = {
     id: true,
     storefrontChatEnabled: true,
     businessName: true,
+    shopifyDomain: true,
     aiModules: true,
     categoryMetadetailsEnabled: true,
     sharedFieldAnswers: true,
@@ -83,4 +84,5 @@ export const storeSelectStorefrontConversationSession = {
     emailVerifiedAt: true,
     sessionExpiresAt: true,
     boundShopifyOrderId: true,
+    l1State: true,
 } as const
