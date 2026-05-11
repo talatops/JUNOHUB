@@ -47,6 +47,7 @@ describe("automatic storefront upsells", () => {
                 productId: null,
                 relationshipType: "uncertain",
                 confidence: 0,
+                catalogEvidence: "",
                 reason: "No clearly complementary product.",
             }),
             [
@@ -72,6 +73,7 @@ describe("automatic storefront upsells", () => {
                 productId: "candidate-1",
                 relationshipType: "substitute",
                 confidence: 0.9,
+                catalogEvidence: "Candidate Product",
                 reason: "This is an alternative, not an add-on.",
             }),
             [
@@ -96,7 +98,8 @@ describe("automatic storefront upsells", () => {
             JSON.stringify({
                 productId: "candidate-1",
                 relationshipType: "complementary_accessory",
-                confidence: 0.88,
+                confidence: 0.95,
+                catalogEvidence: "Accessory",
                 reason: "This is used together with the base product.",
             }),
             [
@@ -122,6 +125,7 @@ describe("automatic storefront upsells", () => {
                 productId: "unknown-product",
                 relationshipType: "complementary_accessory",
                 confidence: 0.9,
+                catalogEvidence: "Accessory",
                 reason: "Not in the provided list.",
             }),
             [
@@ -132,6 +136,32 @@ describe("automatic storefront upsells", () => {
                     product: {
                         productId: "candidate-1",
                         title: "Candidate Product",
+                        variantId: "v-candidate",
+                    },
+                },
+            ],
+        )
+
+        expect(result).toBeNull()
+    })
+
+    it("rejects complementary choices without exact catalog evidence", () => {
+        const result = parseAiUpsellChoice(
+            JSON.stringify({
+                productId: "candidate-1",
+                relationshipType: "complementary_accessory",
+                confidence: 0.95,
+                catalogEvidence: "commonly worn together",
+                reason: "This uses generic knowledge instead of catalog text.",
+            }),
+            [
+                {
+                    title: "Plain Socks",
+                    productType: "Accessory",
+                    details: null,
+                    product: {
+                        productId: "candidate-1",
+                        title: "Plain Socks",
                         variantId: "v-candidate",
                     },
                 },

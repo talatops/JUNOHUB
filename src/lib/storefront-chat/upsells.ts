@@ -116,17 +116,30 @@ export function parseAiUpsellChoice(
             productId?: unknown
             relationshipType?: unknown
             confidence?: unknown
+            catalogEvidence?: unknown
         }
         const productId = typeof parsed.productId === "string" ? parsed.productId.trim() : ""
         if (!productId) return null
+        const candidate = candidates.find((row) => row.product.productId === productId)
+        if (!candidate) return null
         const relationshipType =
             typeof parsed.relationshipType === "string"
                 ? parsed.relationshipType.trim().toLowerCase()
                 : ""
         if (!ACCEPTED_UPSELL_RELATIONSHIPS.has(relationshipType)) return null
         const confidence = Number(parsed.confidence)
-        if (!Number.isFinite(confidence) || confidence < 0.75) return null
-        return candidates.find((candidate) => candidate.product.productId === productId)?.product ?? null
+        if (!Number.isFinite(confidence) || confidence < 0.9) return null
+        const catalogEvidence =
+            typeof parsed.catalogEvidence === "string"
+                ? parsed.catalogEvidence.trim().toLowerCase()
+                : ""
+        if (catalogEvidence.length < 8) return null
+        const candidateCatalogText = [candidate.title, candidate.productType, candidate.details]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+        if (!candidateCatalogText.includes(catalogEvidence)) return null
+        return candidate.product
     } catch {
         return null
     }
@@ -142,13 +155,14 @@ async function selectAiUpsellCandidate(params: {
     const system = [
         "You select one ecommerce upsell item, or no item.",
         "Use only the provided catalog candidates.",
-        "Return JSON only: {\"productId\":\"...\"|null,\"relationshipType\":\"complementary_accessory|care_item|consumable|bundle_addon|used_together|substitute|alternative|same_category|unrelated|uncertain\",\"confidence\":0-1,\"reason\":\"...\"}.",
+        "Return JSON only: {\"productId\":\"...\"|null,\"relationshipType\":\"complementary_accessory|care_item|consumable|bundle_addon|used_together|substitute|alternative|same_category|unrelated|uncertain\",\"confidence\":0-1,\"catalogEvidence\":\"exact text copied from the chosen candidate title/type/details, or empty string\",\"reason\":\"...\"}.",
         "A valid upsell must be something the customer would reasonably buy in addition to the base product and use together with it.",
         "Choose only these valid relationship types: complementary_accessory, care_item, consumable, bundle_addon, used_together.",
+        "The chosen candidate's own title/type/details must explicitly support the add-on relationship. Do not use general shopping knowledge or assumptions.",
         "Do not choose substitutes, alternatives, or same-category replacements, even if they share words, audience, color, brand, season, style, or price.",
-        "Invalid examples: sandals -> flip flops, slippers -> shoes, rain boots -> formal shoes, one backpack -> another backpack.",
-        "Valid examples: shoes -> socks, shoes -> laces, leather shoes -> polish, phone -> case, backpack -> lunch box.",
-        "If there is no clear add-on with confidence at least 0.75, return productId null with relationshipType uncertain.",
+        "Invalid examples: sandals -> flip flops, slippers -> shoes, rain boots -> formal shoes, one backpack -> another backpack, ballet flat shoes -> socks when the candidate only says socks.",
+        "Only choose socks/laces/care products when the candidate catalog text explicitly says they match, fit, complement, are for, or are bundled with the base product or its exact use case.",
+        "If there is no explicit catalog-backed add-on with confidence at least 0.90, return productId null with relationshipType uncertain and empty catalogEvidence.",
     ].join(" ")
 
     const user = JSON.stringify({

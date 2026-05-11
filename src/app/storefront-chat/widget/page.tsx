@@ -504,11 +504,29 @@ export default function StorefrontChatWidgetPage() {
                             type="button"
                             onClick={() => submitCartAction(message, action)}
                             disabled={sending}
-                            className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-left text-xs font-bold text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                            className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2 text-left hover:bg-indigo-50 disabled:opacity-50"
                         >
-                            {action.label}
-                            <span className="block truncate text-[11px] font-medium text-slate-500">
-                                {action.product.title}
+                            <span className="flex items-center gap-2">
+                                {action.product.imageUrl ? (
+                                    <span
+                                        aria-hidden="true"
+                                        className="h-10 w-10 flex-shrink-0 rounded-lg bg-slate-100 bg-cover bg-center"
+                                        style={{ backgroundImage: `url(${action.product.imageUrl})` }}
+                                    />
+                                ) : null}
+                                <span className="min-w-0">
+                                    <span className="block text-xs font-bold text-indigo-700">
+                                        {action.label}
+                                    </span>
+                                    <span className="block truncate text-[11px] font-medium text-slate-500">
+                                        {action.product.title}
+                                    </span>
+                                    {action.product.price ? (
+                                        <span className="block text-[11px] font-medium text-slate-400">
+                                            {action.product.price}
+                                        </span>
+                                    ) : null}
+                                </span>
                             </span>
                         </button>
                     )
