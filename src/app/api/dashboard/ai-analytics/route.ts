@@ -598,7 +598,7 @@ export async function GET(req: Request) {
         const hoursSavedEstimate = Math.round((minutesSavedPerAnswer * aiAnswers / 60) * 10) / 10
         const topProductQuestions = Array.from(productQuestionCounts.values())
             .sort((a, b) => b.count - a.count)
-            .slice(0, 8)
+            .slice(0, 25)
         const convertedProductIds = new Set(revenueAttribution.directRows.map((row) => row.productId).filter(Boolean))
         const highInterestProducts = topProductQuestions
             .filter((row) => !convertedProductIds.has(row.name))

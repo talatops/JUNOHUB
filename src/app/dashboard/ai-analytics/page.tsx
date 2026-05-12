@@ -388,7 +388,7 @@ export default function AiAnalyticsPage() {
                             {data.demandSignals.topProductQuestions.length === 0 ? (
                                 <EmptyState isLight={isLight}>Not enough product-question data yet.</EmptyState>
                             ) : (
-                                <div className="space-y-2">
+                                <div className="max-h-[294px] space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                                     {data.demandSignals.topProductQuestions.map((row) => (
                                         <div key={row.name} className={cn("flex items-center justify-between gap-3 rounded-xl border px-3 py-2", isLight ? "bg-slate-50 border-slate-100" : "bg-white/[0.04] border-white/10")}>
                                             <span className={cn("text-sm font-bold truncate", isLight ? "text-slate-800" : "text-slate-200")}>{row.name}</span>
