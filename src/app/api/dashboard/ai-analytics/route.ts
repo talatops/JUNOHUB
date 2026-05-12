@@ -297,6 +297,29 @@ function productQuestionLabel(content: string): string {
     )
 }
 
+function incrementProductQuestion(
+    rows: Map<string, { name: string; count: number }>,
+    name: string,
+) {
+    const clean = name.trim()
+    if (!clean) return
+    rows.set(clean, {
+        name: clean,
+        count: (rows.get(clean)?.count ?? 0) + 1,
+    })
+}
+
+function cartEventTypes() {
+    return new Set([
+        "add_to_cart_clicked",
+        "upsell_clicked",
+        "cross_sell_clicked",
+        "cart_link_opened",
+        "cart_link_generated",
+        "cart_action_shown",
+    ])
+}
+
 export async function GET(req: Request) {
     try {
         const session = await auth()
@@ -456,7 +479,7 @@ export async function GET(req: Request) {
                 if (event.eventType === "ticket_created") row.ticketsCreated += 1
                 if (event.eventType === "upsell_shown") row.upsellShown += 1
                 if (event.eventType === "upsell_clicked") row.upsellClicked += 1
-                if (event.eventType === "add_to_cart_clicked" || event.eventType === "cart_link_opened") row.cartActions += 1
+                if (cartEventTypes().has(event.eventType)) row.cartActions += 1
                 if (event.sentiment === "positive") row.positiveSentiment += 1
                 if (event.sentiment === "neutral") row.neutralSentiment += 1
                 if (event.sentiment === "negative") row.negativeSentiment += 1
@@ -496,14 +519,18 @@ export async function GET(req: Request) {
                 const bucket = classifyStorefrontCustomerQuery(message.content)
                 intentCounts[bucket] += 1
                 if (bucket === "Product Qs") {
-                    const name = productQuestionLabel(message.content)
-                    productQuestionCounts.set(name, {
-                        name,
-                        count: (productQuestionCounts.get(name)?.count ?? 0) + 1,
-                    })
+                    incrementProductQuestion(productQuestionCounts, productQuestionLabel(message.content))
                 }
                 pendingByConversation.set(message.conversationId, message.createdAt)
             } else if (message.senderType === "AI") {
+                for (const action of parseStorefrontChatActions(message.actions)) {
+                    if (action.type === "add_to_cart" || action.type === "upsell_suggestion") {
+                        incrementProductQuestion(productQuestionCounts, action.product.title)
+                    }
+                    if (action.type === "open_cart" && action.product?.title) {
+                        incrementProductQuestion(productQuestionCounts, action.product.title)
+                    }
+                }
                 const pendingAt = pendingByConversation.get(message.conversationId)
                 if (!pendingAt) continue
                 const sec = (message.createdAt.getTime() - pendingAt.getTime()) / 1000
@@ -513,12 +540,18 @@ export async function GET(req: Request) {
         }
 
         const manualLatencyMinutes: number[] = []
-        for (let i = 0; i < chatMessages.length - 1; i++) {
-            const a = chatMessages[i]!
-            const b = chatMessages[i + 1]!
-            if (a.receiverId === vendorUserId && a.senderId !== vendorUserId && b.senderId === vendorUserId) {
-                const min = (b.createdAt.getTime() - a.createdAt.getTime()) / 60_000
-                if (min >= 0 && min <= 24 * 60) manualLatencyMinutes.push(min)
+        const pendingManualByCounterparty = new Map<string, Date>()
+        for (const message of chatMessages) {
+            if (message.receiverId === vendorUserId && message.senderId !== vendorUserId) {
+                pendingManualByCounterparty.set(message.senderId, message.createdAt)
+                continue
+            }
+            if (message.senderId === vendorUserId) {
+                const pendingAt = pendingManualByCounterparty.get(message.receiverId)
+                if (!pendingAt) continue
+                const min = (message.createdAt.getTime() - pendingAt.getTime()) / 60_000
+                if (min >= 0 && min <= 8 * 60) manualLatencyMinutes.push(min)
+                pendingManualByCounterparty.delete(message.receiverId)
             }
         }
 
@@ -531,12 +564,20 @@ export async function GET(req: Request) {
         const resolvedByAi = analyticsEvents.filter((event) => event.eventType === "resolved_by_ai").length
         const unresolvedQuestions = analyticsEvents.filter((event) => event.eventType === "unresolved_question").length
         const ticketsCreated = analyticsEvents.filter((event) => event.eventType === "ticket_created").length
-        const cartClicks = analyticsEvents.filter((event) =>
-            ["add_to_cart_clicked", "upsell_clicked", "cross_sell_clicked"].includes(event.eventType),
-        ).length
+        const cartTypes = cartEventTypes()
+        const cartEvents = analyticsEvents.filter((event) => cartTypes.has(event.eventType))
+        const cartClicks = cartEvents.length
         const cartOpenCount = analyticsEvents.filter((event) => event.eventType === "cart_link_opened").length
-        const conversionBase = cartClicks || cartOpenCount
         const directOrderCount = new Set(revenueAttribution.directRows.map((row) => row.orderId)).size
+        const cartConversationIds = new Set(
+            cartEvents.map((event) => event.conversationId).filter((id): id is string => Boolean(id)),
+        )
+        const cartAttributedOrderCount = new Set(
+            revenueAttribution.assistedRows
+                .filter((row) => cartConversationIds.has(row.conversationId))
+                .map((row) => row.orderId),
+        ).size
+        const conversionBase = cartConversationIds.size || cartClicks
         const currency = cachedOrders[0]?.currency ?? revenueAttribution.directRows[0]?.currency ?? "GBP"
 
         const sentimentTotals = {
@@ -549,7 +590,11 @@ export async function GET(req: Request) {
         const sentimentTotal = Object.values(sentimentTotals).reduce((sum, count) => sum + count, 0)
         const aiMedianSeconds = median(aiLatencySeconds)
         const manualMedianMinutes = median(manualLatencyMinutes)
-        const minutesSavedPerAnswer = Math.max(0, manualMedianMinutes - aiMedianSeconds / 60)
+        const manualBenchmarkMinutes = manualLatencyMinutes.length > 0 ? manualMedianMinutes : 3
+        const minutesSavedPerAnswer = Math.min(
+            10,
+            Math.max(0, manualBenchmarkMinutes - aiMedianSeconds / 60),
+        )
         const hoursSavedEstimate = Math.round((minutesSavedPerAnswer * aiAnswers / 60) * 10) / 10
         const topProductQuestions = Array.from(productQuestionCounts.values())
             .sort((a, b) => b.count - a.count)
@@ -573,12 +618,12 @@ export async function GET(req: Request) {
                 directUpsellRevenue: money(revenueAttribution.directUpsellRevenue),
                 directCrossSellRevenue: money(revenueAttribution.directCrossSellRevenue),
                 aiAssistedRevenue: money(revenueAttribution.aiAssistedRevenue),
-                aiCartConversionRate: pct(directOrderCount, conversionBase),
+                aiCartConversionRate: pct(cartAttributedOrderCount || directOrderCount, conversionBase),
                 averageAiInfluencedOrderValue:
                     revenueAttribution.assistedRows.length > 0
                         ? money(revenueAttribution.aiAssistedRevenue / revenueAttribution.assistedRows.length)
                         : 0,
-                pendingAttributionCount: Math.max(0, cartClicks - directOrderCount),
+                pendingAttributionCount: Math.max(0, conversionBase - (cartAttributedOrderCount || directOrderCount)),
                 directRows: revenueAttribution.directRows.slice(0, 12).map((row) => ({
                     ...row,
                     createdAt: row.createdAt.toISOString(),
@@ -588,7 +633,7 @@ export async function GET(req: Request) {
                     createdAt: row.createdAt.toISOString(),
                 })),
                 methodology:
-                    "Direct revenue only counts AI-clicked products later found in a matching order. Assisted revenue counts full matching orders after AI engagement.",
+                    "Direct upsell/cross-sell revenue only counts clicked AI-suggested products later found in matching orders. Cart conversion counts cart-engaged conversations that later match a cached Shopify order.",
             },
             customerExperience: {
                 sentimentMix: {
@@ -613,7 +658,7 @@ export async function GET(req: Request) {
                 resolvedByAi,
                 ticketsCreated,
                 aiMedianSeconds: Math.round(aiMedianSeconds),
-                manualMedianMinutes: Math.round(manualMedianMinutes * 10) / 10,
+                manualMedianMinutes: Math.round(manualBenchmarkMinutes * 10) / 10,
                 sampleAiPairs: aiLatencySeconds.length,
                 sampleManualPairs: manualLatencyMinutes.length,
                 hoursSavedEstimate,

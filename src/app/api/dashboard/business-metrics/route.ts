@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { format, startOfMonth, subMonths } from "date-fns"
+import { format, startOfDay, startOfMonth, subDays, subMonths } from "date-fns"
 import { auth } from "@/auth"
 import { prisma } from "@/lib/prisma"
 import { getVendorActiveStore } from "@/lib/dashboard/vendorActiveStore"
@@ -8,17 +8,51 @@ const ASSUMED_NET_MARGIN = 0.34
 const PAYMENT_RATE = 0.019
 const PLATFORM_RATE = 0.024
 
-function monthKeys(monthCount: number): string[] {
-    const keys: string[] = []
-    for (let i = monthCount - 1; i >= 0; i--) {
-        keys.push(format(startOfMonth(subMonths(new Date(), i)), "yyyy-MM"))
-    }
-    return keys
+type DashboardRange = "7days" | "30days" | "1year"
+
+function parseRange(input: string | null): DashboardRange {
+    if (input === "30days" || input === "1year" || input === "7days") return input
+    return "7days"
 }
 
-function monthLabel(isoMonth: string): string {
-    const [y, m] = isoMonth.split("-").map(Number)
-    return format(new Date(y!, (m ?? 1) - 1, 1), "MMM")
+function rangeWindow(range: DashboardRange, now = new Date()) {
+    if (range === "1year") {
+        const since = startOfMonth(subMonths(now, 11))
+        return {
+            since,
+            previousSince: startOfMonth(subMonths(now, 23)),
+            bucketCount: 12,
+            bucketKey: (date: Date) => format(startOfMonth(date), "yyyy-MM"),
+            bucketLabel: (key: string) => {
+                const [y, m] = key.split("-").map(Number)
+                return format(new Date(y!, (m ?? 1) - 1, 1), "MMM")
+            },
+            previousLabel: "prior year",
+        }
+    }
+
+    const days = range === "30days" ? 30 : 7
+    const since = subDays(startOfDay(now), days - 1)
+    return {
+        since,
+        previousSince: subDays(since, days),
+        bucketCount: days,
+        bucketKey: (date: Date) => format(startOfDay(date), "yyyy-MM-dd"),
+        bucketLabel: (key: string) => format(new Date(`${key}T00:00:00`), "MMM d"),
+        previousLabel: range === "30days" ? "prior 30 days" : "prior 7 days",
+    }
+}
+
+function rangeKeys(config: ReturnType<typeof rangeWindow>): string[] {
+    const keys: string[] = []
+    for (let i = config.bucketCount - 1; i >= 0; i--) {
+        const d =
+            config.bucketCount === 12
+                ? startOfMonth(subMonths(new Date(), i))
+                : subDays(startOfDay(new Date()), i)
+        keys.push(config.bucketKey(d))
+    }
+    return keys
 }
 
 type LineItemLike = {
@@ -33,7 +67,7 @@ function parseLineItems(raw: unknown): LineItemLike[] {
     return raw as LineItemLike[]
 }
 
-export async function GET() {
+export async function GET(req: Request) {
     try {
         const session = await auth()
         if (!session?.user?.id) {
@@ -48,12 +82,17 @@ export async function GET() {
             return NextResponse.json({ message: "No active store" }, { status: 400 })
         }
 
-        const since = startOfMonth(subMonths(new Date(), 5))
+        const { searchParams } = new URL(req.url)
+        const range = parseRange(searchParams.get("range"))
+        const config = rangeWindow(range)
 
         const orders = await prisma.cachedOrder.findMany({
             where: {
                 storeId: store.id,
-                OR: [{ shopifyCreatedAt: { gte: since } }, { shopifyCreatedAt: null, createdAt: { gte: since } }],
+                OR: [
+                    { shopifyCreatedAt: { gte: config.previousSince } },
+                    { shopifyCreatedAt: null, createdAt: { gte: config.previousSince } },
+                ],
             },
             select: {
                 totalPrice: true,
@@ -65,12 +104,14 @@ export async function GET() {
             },
         })
 
-        const keys = monthKeys(6)
+        const keys = rangeKeys(config)
         const grossByMonth: Record<string, number> = Object.fromEntries(keys.map((k) => [k, 0]))
         const refundByMonth: Record<string, number> = Object.fromEntries(keys.map((k) => [k, 0]))
 
         let gross = 0
         let refunds = 0
+        let previousGross = 0
+        let previousRefunds = 0
 
         type ProductAgg = {
             title: string
@@ -89,17 +130,25 @@ export async function GET() {
             const fs = (o.financialStatus || "").toLowerCase()
             const isRefundLike = fs.includes("refund") || fs.includes("voided")
             const d = o.shopifyCreatedAt ?? o.createdAt
-            const mk = format(startOfMonth(d), "yyyy-MM")
+            const isCurrentPeriod = d >= config.since
+            const isPreviousPeriod = d >= config.previousSince && d < config.since
+            const mk = config.bucketKey(d)
 
-            if (isRefundLike) {
-                refunds += Math.abs(amt)
-                if (mk in refundByMonth) refundByMonth[mk] += Math.abs(amt)
-            } else {
-                gross += amt
-                if (mk in grossByMonth) grossByMonth[mk] += amt
+            if (isCurrentPeriod) {
+                if (isRefundLike) {
+                    refunds += Math.abs(amt)
+                    if (mk in refundByMonth) refundByMonth[mk] += Math.abs(amt)
+                } else {
+                    gross += amt
+                    if (mk in grossByMonth) grossByMonth[mk] += amt
+                }
+            } else if (isPreviousPeriod) {
+                if (isRefundLike) previousRefunds += Math.abs(amt)
+                else previousGross += amt
             }
 
             const firstHalf = d < midpoint
+            if (!isCurrentPeriod) continue
             for (const li of parseLineItems(o.lineItems)) {
                 const title = (li.title || li.name || "Product").trim() || "Product"
                 const qty = typeof li.quantity === "number" ? li.quantity : parseInt(String(li.quantity ?? 1), 10) || 1
@@ -122,10 +171,19 @@ export async function GET() {
         }
 
         const netProfitEstimate = Math.max(0, gross * ASSUMED_NET_MARGIN - refunds * 0.5)
-        const orderCount = orders.filter((o) => !(o.financialStatus || "").toLowerCase().includes("refund")).length
+        const orderCount = orders.filter((o) => {
+            const d = o.shopifyCreatedAt ?? o.createdAt
+            return d >= config.since && !(o.financialStatus || "").toLowerCase().includes("refund")
+        }).length
         const estimatedFees = gross * (PAYMENT_RATE + PLATFORM_RATE) + refunds * 0.02 + orderCount * 0.25
         const avgMarginPct =
             gross > 0 ? Math.round(((netProfitEstimate + refunds * 0.5) / gross) * 1000) / 10 : 0
+        const previousNetProfitEstimate = Math.max(0, previousGross * ASSUMED_NET_MARGIN - previousRefunds * 0.5)
+        const previousFees = previousGross * (PAYMENT_RATE + PLATFORM_RATE) + previousRefunds * 0.02
+        const previousAvgMarginPct =
+            previousGross > 0
+                ? Math.round(((previousNetProfitEstimate + previousRefunds * 0.5) / previousGross) * 1000) / 10
+                : 0
 
         const sparkFromRecord = (rec: Record<string, number>) =>
             keys.map((k) => Math.round((rec[k] ?? 0) * 100) / 100)
@@ -144,9 +202,9 @@ export async function GET() {
                 ) / 100,
         )
 
-        function pctChange(series: number[]): number {
-            const a = series[series.length - 2] ?? 0
-            const b = series[series.length - 1] ?? 0
+        function pctChangeValue(current: number, previous: number): number {
+            const a = previous
+            const b = current
             if (a === 0) return b > 0 ? 100 : 0
             return Math.round(((b - a) / a) * 1000) / 10
         }
@@ -156,21 +214,21 @@ export async function GET() {
                 key: "netProfit",
                 label: "Est. net profit",
                 value: netProfitEstimate,
-                changePct: pctChange(profitSpark),
+                changePct: pctChangeValue(netProfitEstimate, previousNetProfitEstimate),
                 sparkline: profitSpark,
             },
             {
                 key: "grossRevenue",
                 label: "Gross revenue",
                 value: gross,
-                changePct: pctChange(grossSpark),
+                changePct: pctChangeValue(gross, previousGross),
                 sparkline: grossSpark,
             },
             {
                 key: "fees",
                 label: "Est. fees",
                 value: estimatedFees,
-                changePct: pctChange(feeSpark),
+                changePct: pctChangeValue(estimatedFees, previousFees),
                 sparkline: feeSpark,
             },
             {
@@ -178,13 +236,13 @@ export async function GET() {
                 label: "Avg. margin (est.)",
                 value: avgMarginPct,
                 suffix: "%",
-                changePct: avgMarginPct > 30 ? 1.2 : -0.8,
+                changePct: pctChangeValue(avgMarginPct, previousAvgMarginPct),
                 sparkline: keys.map((_, i) => avgMarginPct + (i % 3) - 1),
             },
         ]
 
         const monthlyProfitBars = keys.map((k) => ({
-            month: monthLabel(k),
+            month: config.bucketLabel(k),
             profit: Math.round((grossByMonth[k] ?? 0) * ASSUMED_NET_MARGIN * 100) / 100,
         }))
 
@@ -240,6 +298,8 @@ export async function GET() {
 
         return NextResponse.json({
             currency,
+            range,
+            comparisonLabel: config.previousLabel,
             disclaimer:
                 "Financial figures include estimates (payment + platform fees, assumed ~34% net margin). Connect fuller accounting data for audited numbers.",
             kpis,
@@ -248,7 +308,11 @@ export async function GET() {
             feeTotal: Math.round(feeDonut.reduce((s, x) => s + x.value, 0) * 100) / 100,
             productMargins: productRows,
             aiInsight,
-            totals: { gross, refunds, orders: orderCount },
+            totals: {
+                gross,
+                refunds,
+                orders: orderCount,
+            },
         })
     } catch (e) {
         console.error("[business-metrics]", e)

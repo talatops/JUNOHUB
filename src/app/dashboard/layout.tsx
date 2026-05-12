@@ -74,7 +74,7 @@ export default async function DashboardLayout({
                 </header>
 
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                    <PageTransition className="p-4 md:p-8 overflow-y-auto custom-scrollbar" data-lenis-prevent>
+                    <PageTransition className="p-3 sm:p-4 lg:p-6 2xl:p-7 overflow-y-auto custom-scrollbar" data-lenis-prevent>
                         <div className="flex-1 flex flex-col min-h-0">
                             {children}
                         </div>

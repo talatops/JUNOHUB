@@ -41,6 +41,8 @@ type TimeRange = "7days" | "30days" | "1year"
 
 type BusinessMetricsPayload = {
     currency: string
+    range?: TimeRange
+    comparisonLabel?: string
     disclaimer: string
     kpis: {
         key: string
@@ -72,6 +74,21 @@ function formatMoney(amount: number, currency: string) {
     } catch {
         return `${currency} ${amount.toFixed(0)}`
     }
+}
+
+function sinceForRange(range: TimeRange) {
+    const now = new Date()
+    if (range === "1year") {
+        return new Date(now.getFullYear(), now.getMonth() - 11, 1)
+    }
+    const days = range === "30days" ? 30 : 7
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1))
+}
+
+function orderDate(order: { created_at?: string; shopifyCreatedAt?: string; createdAt?: string }) {
+    const raw = order.created_at ?? order.shopifyCreatedAt ?? order.createdAt ?? ""
+    const date = new Date(raw)
+    return Number.isNaN(date.getTime()) ? null : date
 }
 
 function MiniSpark({
@@ -133,7 +150,7 @@ export default function DashboardPage() {
             ])
 
             try {
-                const bizRes = await fetch("/api/dashboard/business-metrics")
+                const bizRes = await fetch(`/api/dashboard/business-metrics?range=${encodeURIComponent(timeRange)}`)
                 const j = await bizRes.json().catch(() => null)
                 if (bizRes.ok && j && typeof j === "object" && !("message" in j && typeof j.message === "string")) {
                     setBusiness(j as BusinessMetricsPayload)
@@ -148,8 +165,13 @@ export default function DashboardPage() {
             }
 
             const orders = ordersData.orders || []
+            const since = sinceForRange(timeRange)
+            const filteredOrders = orders.filter((order: { created_at?: string; shopifyCreatedAt?: string; createdAt?: string }) => {
+                const d = orderDate(order)
+                return d ? d >= since : false
+            })
             const totalSales =
-                orders.reduce((sum: number, order: { total_price?: string }) => sum + parseFloat(order.total_price ?? "0"), 0) || 0
+                filteredOrders.reduce((sum: number, order: { total_price?: string }) => sum + parseFloat(order.total_price ?? "0"), 0) || 0
 
             const generateDateRange = (range: TimeRange) => {
                 const dates = []
@@ -173,13 +195,14 @@ export default function DashboardPage() {
             const rangeLabels = generateDateRange(timeRange)
             const salesByDate: Record<string, number> = {}
 
-            orders.forEach((order: { created_at?: string; total_price?: string }) => {
-                const orderDate = new Date(order.created_at ?? "")
+            filteredOrders.forEach((order: { created_at?: string; shopifyCreatedAt?: string; createdAt?: string; total_price?: string }) => {
+                const createdAt = orderDate(order)
+                if (!createdAt) return
                 let label = ""
                 if (timeRange === "1year") {
-                    label = orderDate.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
+                    label = createdAt.toLocaleDateString("en-US", { month: "short", year: "2-digit" })
                 } else {
-                    label = orderDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    label = createdAt.toLocaleDateString("en-US", { month: "short", day: "numeric" })
                 }
 
                 if (rangeLabels.includes(label)) {
@@ -196,7 +219,7 @@ export default function DashboardPage() {
             setSnapshot({
                 totalSales,
                 products: productsData.products?.length ?? 0,
-                orders: orders.length,
+                orders: filteredOrders.length,
                 customers: customersData.customers?.length ?? 0,
             })
         } catch (error) {
@@ -224,8 +247,8 @@ export default function DashboardPage() {
     }
 
     return (
-        <div className="space-y-6 md:space-y-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div className="w-full max-w-none space-y-5 md:space-y-7">
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
                 <div>
                     <h1 className={cn("text-2xl md:text-3xl font-extrabold tracking-tight", isLight ? "text-slate-900" : "text-white")}>
                         Overview
@@ -272,13 +295,13 @@ export default function DashboardPage() {
                         </Link>
                     </div>
                 </div>
-                <div className="flex items-center gap-3">
-                    <div className="relative group">
+                <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+                    <div className="relative group w-full sm:w-auto">
                         <select
                             value={timeRange}
                             onChange={(e) => setTimeRange(e.target.value as TimeRange)}
                             className={cn(
-                                "appearance-none h-11 pl-10 pr-10 rounded-xl font-bold border transition-all text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
+                                "w-full appearance-none h-11 pl-10 pr-10 rounded-xl font-bold border transition-all text-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20 sm:w-auto",
                                 isLight
                                     ? "bg-white border-slate-200 text-slate-700 hover:border-slate-300 shadow-sm"
                                     : "bg-white/10 border-white/10 text-white hover:bg-white/15 backdrop-blur-sm",
@@ -301,7 +324,7 @@ export default function DashboardPage() {
                     <button
                         type="button"
                         className={cn(
-                            "h-11 px-4 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all text-sm md:text-base shrink-0",
+                            "h-11 w-full px-4 md:px-6 rounded-xl font-bold flex items-center justify-center gap-2 border transition-all text-sm md:text-base shrink-0 sm:w-auto",
                             isLight
                                 ? "bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-700 shadow-sm"
                                 : "bg-white/10 text-white border-white/10 hover:bg-white/15 backdrop-blur-sm",
@@ -313,7 +336,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Financial KPI row — Image 2 style */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3 md:gap-4">
                 {(business?.kpis ?? []).map((kpi) => (
                     <div
                         key={kpi.key}
@@ -343,7 +366,7 @@ export default function DashboardPage() {
                         >
                             <TrendingUp className={cn("w-3.5 h-3.5", kpi.changePct < 0 && "rotate-180")} />
                             {kpi.changePct >= 0 ? "+" : ""}
-                            {kpi.changePct}% vs prior month
+                            {kpi.changePct}% vs {business?.comparisonLabel ?? "prior period"}
                         </p>
                     </div>
                 ))}
@@ -363,10 +386,10 @@ export default function DashboardPage() {
 
             {/* Profit bars + fee donut */}
             {business && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
                     <div
                         className={cn(
-                            "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[300px]",
+                            "p-4 md:p-5 rounded-xl md:rounded-2xl border min-h-[300px]",
                             isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
                         )}
                     >
@@ -374,7 +397,8 @@ export default function DashboardPage() {
                         <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
                             Based on gross revenue × assumed net margin ({business.disclaimer.slice(0, 80)}…)
                         </p>
-                        <div className="h-[220px] w-full min-w-0">
+                        <div className="w-full overflow-x-auto">
+                            <div className="h-[220px] min-w-[560px] md:min-w-0">
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={business.monthlyProfitBars} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
@@ -392,12 +416,13 @@ export default function DashboardPage() {
                                     <Bar dataKey="profit" fill="#22c55e" radius={[6, 6, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
+                            </div>
                         </div>
                     </div>
 
                     <div
                         className={cn(
-                            "p-4 md:p-6 rounded-xl md:rounded-2xl border min-h-[300px]",
+                            "p-4 md:p-5 rounded-xl md:rounded-2xl border min-h-[300px]",
                             isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
                         )}
                     >
@@ -437,7 +462,7 @@ export default function DashboardPage() {
             )}
 
             {/* Snapshot icons row — compact */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
                 {[
                     { label: "Live revenue (period)", value: formatMoney(snapshot.totalSales, currency), icon: TrendingUp },
                     { label: "Catalog size", value: String(snapshot.products), icon: Package },
@@ -473,7 +498,7 @@ export default function DashboardPage() {
                     <div className={cn("px-4 md:px-6 py-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2", isLight ? "border-slate-100" : "border-white/10")}>
                         <h3 className={cn("text-lg font-bold", isLight ? "text-slate-900" : "text-white")}>Product-level margins (est.)</h3>
                     </div>
-                    <div className="table-horizontal-scroll">
+                    <div className="table-horizontal-scroll overflow-x-auto">
                         <table className="w-full text-sm min-w-[520px]">
                             <thead>
                                 <tr className={cn("text-left text-[10px] uppercase font-bold tracking-wider", isLight ? "bg-slate-50 text-slate-500" : "bg-white/[0.06] text-slate-400")}>
@@ -523,25 +548,25 @@ export default function DashboardPage() {
 
             <div
                 className={cn(
-                    "p-4 md:p-8 rounded-xl md:rounded-2xl border transition-all",
+                    "p-4 md:p-5 rounded-xl md:rounded-2xl border transition-all",
                     isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10 backdrop-blur-xl",
                 )}
             >
-                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6 md:mb-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5 md:mb-6">
                     <div>
                         <h3 className={cn("text-lg md:text-xl font-bold font-display", isLight ? "text-slate-900" : "text-white")}>
                             Recent Sales Trend
                         </h3>
                         <p className={cn("text-xs mt-1", isLight ? "text-slate-500" : "text-slate-400")}>Revenue analysis over time</p>
                     </div>
-                    <div className="flex items-center gap-2 bg-slate-100 dark:bg-white/5 p-1 rounded-lg w-fit">
+                    <div className="flex w-full items-center gap-2 overflow-x-auto rounded-lg bg-slate-100 p-1 dark:bg-white/5 md:w-fit md:overflow-visible">
                         {(["7days", "30days", "1year"] as const).map((r) => (
                             <button
                                 key={r}
                                 type="button"
                                 onClick={() => setTimeRange(r)}
                                 className={cn(
-                                    "px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
+                                    "shrink-0 px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider transition-all",
                                     timeRange === r
                                         ? "bg-white dark:bg-indigo-600 text-indigo-600 dark:text-white shadow-sm"
                                         : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-white",
@@ -553,7 +578,8 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="h-[250px] md:h-[350px] w-full min-w-0">
+                <div className="w-full overflow-x-auto">
+                <div className="h-[250px] min-w-[620px] md:h-[350px] md:min-w-0">
                     {loading ? (
                         <div className="w-full h-full flex items-center justify-center rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5">
                             <Loader2 className="w-8 h-8 animate-spin text-indigo-400" />
@@ -613,6 +639,7 @@ export default function DashboardPage() {
                             No sales data found for this period.
                         </div>
                     )}
+                </div>
                 </div>
             </div>
         </div>

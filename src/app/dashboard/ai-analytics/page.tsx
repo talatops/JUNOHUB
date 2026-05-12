@@ -199,7 +199,7 @@ export default function AiAnalyticsPage() {
     }, [data?.customerExperience.sentimentMix.totals])
 
     return (
-        <div className="space-y-6 md:space-y-8 max-w-[1400px] mx-auto">
+        <div className="w-full max-w-none space-y-5 md:space-y-7">
             <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -212,14 +212,14 @@ export default function AiAnalyticsPage() {
                         Outcome metrics for revenue, customer experience, automation, and demand signals from AI-assisted storefront journeys.
                     </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0">
                     {RANGE_OPTIONS.map((option) => (
                         <button
                             key={option.value}
                             type="button"
                             onClick={() => setRange(option.value)}
                             className={cn(
-                                "rounded-xl border px-3 py-2 text-xs font-black transition",
+                                "shrink-0 rounded-xl border px-3 py-2 text-xs font-black transition",
                                 range === option.value
                                     ? isLight
                                         ? "bg-indigo-600 border-indigo-600 text-white"
@@ -249,7 +249,7 @@ export default function AiAnalyticsPage() {
 
             {!loading && data && (
                 <>
-                    <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <section className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-3 md:gap-4">
                         <MetricCard
                             title="Direct AI upsell revenue"
                             value={formatMoney(data.revenueImpact.directUpsellRevenue, data.revenueImpact.currency)}
@@ -280,8 +280,8 @@ export default function AiAnalyticsPage() {
                         />
                     </section>
 
-                    <section className="grid grid-cols-1 xl:grid-cols-3 gap-4 md:gap-6">
-                        <div className={cn("xl:col-span-2 rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                    <section className="grid grid-cols-1 2xl:grid-cols-3 gap-4 md:gap-5">
+                        <div className={cn("2xl:col-span-2 rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-2 mb-5">
                                 <div>
                                     <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Revenue Impact Timeline</h2>
@@ -294,7 +294,8 @@ export default function AiAnalyticsPage() {
                             {timeline.length === 0 ? (
                                 <EmptyState isLight={isLight}>Not enough data yet to draw a revenue timeline.</EmptyState>
                             ) : (
-                                <div className="h-[300px] w-full min-w-0">
+                                <div className="w-full overflow-x-auto">
+                                    <div className="h-[260px] min-w-[620px] md:h-[300px] md:min-w-0">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <AreaChart data={timeline} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
@@ -307,11 +308,12 @@ export default function AiAnalyticsPage() {
                                             <Area type="monotone" dataKey="directCrossSellRevenue" name="Direct cross-sell" stackId="1" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />
                                         </AreaChart>
                                     </ResponsiveContainer>
+                                    </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Customer Sentiment</h2>
                             <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
                                 Conservative sentiment from storefront customer messages. Unknown is kept out of the chart.
@@ -319,7 +321,7 @@ export default function AiAnalyticsPage() {
                             {sentimentBars.every((row) => row.count === 0) ? (
                                 <EmptyState isLight={isLight}>Not enough sentiment data yet.</EmptyState>
                             ) : (
-                                <div className="h-[240px] w-full min-w-0">
+                                <div className="h-[220px] w-full min-w-0 sm:h-[240px]">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <BarChart data={sentimentBars} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
@@ -338,13 +340,13 @@ export default function AiAnalyticsPage() {
                         </div>
                     </section>
 
-                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                    <section className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
+                        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Automation Outcomes</h2>
                             <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
                                 Shows the operational outcomes owners care about: handled questions, AI resolution, tickets, and response speed.
                             </p>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <MetricCard title="Questions handled" value={data.automationOutcomes.questionsAnswered.toLocaleString()} helper="Customer questions in the selected window." accent={isLight ? "text-slate-900" : "text-white"} isLight={isLight} />
                                 <MetricCard title="Resolved by AI" value={formatPercent(data.automationOutcomes.resolutionRate)} helper={`${data.automationOutcomes.resolvedByAi.toLocaleString()} resolved events.`} accent={isLight ? "text-emerald-700" : "text-emerald-400"} isLight={isLight} />
                                 <MetricCard title="Tickets created" value={data.automationOutcomes.ticketsCreated.toLocaleString()} helper="Escalations sent to human support." accent={isLight ? "text-rose-700" : "text-rose-300"} isLight={isLight} />
@@ -352,12 +354,13 @@ export default function AiAnalyticsPage() {
                             </div>
                         </div>
 
-                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Questions And Resolutions</h2>
                             <p className={cn("text-xs mt-1 mb-5", isLight ? "text-slate-500" : "text-slate-400")}>
                                 Timeline of demand, AI resolution, unresolved questions, and support tickets.
                             </p>
-                            <div className="h-[260px] w-full min-w-0">
+                            <div className="w-full overflow-x-auto">
+                                <div className="h-[240px] min-w-[620px] md:h-[260px] md:min-w-0">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <LineChart data={timeline} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridStroke} />
@@ -371,12 +374,13 @@ export default function AiAnalyticsPage() {
                                         <Line type="monotone" dataKey="ticketsCreated" name="Tickets" stroke="#ef4444" strokeWidth={2} dot={false} />
                                     </LineChart>
                                 </ResponsiveContainer>
+                                </div>
                             </div>
                         </div>
                     </section>
 
-                    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                    <section className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-5">
+                        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Growth Signals</h2>
                             <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
                                 Product curiosity and repeated requests that can guide buying, merchandising, and product-page content.
@@ -395,12 +399,12 @@ export default function AiAnalyticsPage() {
                             )}
                         </div>
 
-                        <div className={cn("rounded-2xl border p-4 md:p-6", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
+                        <div className={cn("rounded-2xl border p-4 md:p-5", isLight ? "bg-white border-slate-100 shadow-sm" : "bg-white/5 border-white/10")}>
                             <h2 className={cn("text-lg font-black", isLight ? "text-slate-900" : "text-white")}>Attribution Health</h2>
                             <p className={cn("text-xs mt-1 mb-4", isLight ? "text-slate-500" : "text-slate-400")}>
                                 Conservative matching keeps revenue accurate. Pending attribution means cart interest exists but no matching order has been cached yet.
                             </p>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <MetricCard title="Cart conversion" value={formatPercent(data.revenueImpact.aiCartConversionRate)} helper="Orders matched to AI cart actions." accent={isLight ? "text-emerald-700" : "text-emerald-400"} isLight={isLight} />
                                 <MetricCard title="Pending attribution" value={data.revenueImpact.pendingAttributionCount.toLocaleString()} helper="Clicks awaiting a matching Shopify order." accent={isLight ? "text-amber-700" : "text-amber-300"} isLight={isLight} />
                                 <MetricCard title="Cross-sell revenue" value={formatMoney(data.revenueImpact.directCrossSellRevenue, data.revenueImpact.currency)} helper="Shown separately from upsell revenue." accent={isLight ? "text-cyan-700" : "text-cyan-300"} isLight={isLight} />

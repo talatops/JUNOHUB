@@ -15,7 +15,14 @@ export function classifyStorefrontCustomerQuery(content: string): StorefrontInte
     if (/\b(return|refund|exchange|wrong item|damaged|faulty)\b/.test(t)) {
         return "Returns"
     }
-    if (/\b(product|sku|size|colour|color|material|fit|in stock|availability|price)\b/.test(t)) {
+    if (
+        /\b(product|products|sku|size|sizes|colour|color|material|fit|fits|in stock|stock|available|availability|price|cost|buy|purchase|cart|variant|variants)\b/.test(
+            t,
+        ) ||
+        /\b(shoe|shoes|sandal|sandals|boot|boots|sneaker|sneakers|slipper|slippers|sock|socks|shirt|shirts|dress|dresses|earbud|earbuds|case|cases)\b/.test(
+            t,
+        )
+    ) {
         return "Product Qs"
     }
     if (/\b(shipping|delivery|courier|dispatch|address change|postcode|zip)\b/.test(t)) {
