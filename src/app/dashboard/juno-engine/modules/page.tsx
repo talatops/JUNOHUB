@@ -713,46 +713,6 @@ export default function JunoEngineModulesPage() {
         )
     }
 
-    function renderAddModuleCard() {
-        return (
-            <button
-                type="button"
-                className={cn(
-                    cardShell,
-                    isLight
-                        ? "border-dashed border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50"
-                        : "border-dashed border-indigo-400/30 bg-indigo-500/10 hover:bg-indigo-500/15",
-                )}
-                onClick={() => setModalId(ADD_CUSTOM_MODULE_ID)}
-            >
-                <span className="p-5 flex items-start gap-4 w-full">
-                    <span className={iconWrap}>
-                        <Plus className="w-5 h-5" />
-                    </span>
-                    <span className="flex-1 min-w-0 text-left">
-                        <span
-                            className={cn(
-                                "font-black text-base leading-tight block",
-                                isLight ? "text-slate-900" : "text-white",
-                            )}
-                        >
-                            Add Module
-                        </span>
-                        <span
-                            className={cn(
-                                "text-xs mt-1 line-clamp-2 block",
-                                isLight ? "text-slate-500" : "text-slate-400",
-                            )}
-                        >
-                            Create custom knowledge with title, subtitle, and answer.
-                        </span>
-                    </span>
-                    <ChevronRight className="w-5 h-5 shrink-0 text-slate-400 self-center" />
-                </span>
-            </button>
-        )
-    }
-
     function renderCustomModuleEditor() {
         const subtle = isLight ? "text-slate-600" : "text-slate-400"
         const rowBorder = isLight ? "border-slate-200 bg-slate-50/50" : "border-white/10 bg-white/[0.03]"
@@ -1249,19 +1209,35 @@ export default function JunoEngineModulesPage() {
                                 {toast}
                             </p>
                         ) : null}
-                        <button
-                            type="button"
-                            disabled={saving}
-                            onClick={() => void saveChanges()}
-                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50 sm:min-w-[10rem]"
-                        >
-                            {saving ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                                <Save className="h-4 w-4" />
-                            )}
-                            Save changes
-                        </button>
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                            <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void saveChanges()}
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-indigo-900/20 hover:bg-indigo-700 disabled:opacity-50 sm:min-w-[10rem]"
+                            >
+                                {saving ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                    <Save className="h-4 w-4" />
+                                )}
+                                Save changes
+                            </button>
+                            <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => setModalId(ADD_CUSTOM_MODULE_ID)}
+                                className={cn(
+                                    "inline-flex items-center justify-center gap-2 rounded-xl border px-5 py-2.5 text-sm font-bold transition-colors disabled:opacity-50 sm:min-w-[10rem]",
+                                    isLight
+                                        ? "border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+                                        : "border-indigo-400/30 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/20",
+                                )}
+                            >
+                                <Plus className="h-4 w-4" />
+                                Add Module
+                            </button>
+                        </div>
                     </div>
                 ) : null}
             </div>
@@ -1364,7 +1340,6 @@ export default function JunoEngineModulesPage() {
                                 {renderCustomModuleCard(module)}
                             </div>
                         ))}
-                        <div className="contents">{renderAddModuleCard()}</div>
                     </div>
 
                     {modal}

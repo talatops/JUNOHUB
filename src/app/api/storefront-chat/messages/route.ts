@@ -330,7 +330,7 @@ async function buildCartResponse(params: {
     const cartCount = nextCartLines.reduce((sum, line) => sum + line.quantity, 0)
 
     return {
-        content: `Added ${product.title}${variantText}. Your cart now has ${cartCount} item${cartCount === 1 ? "" : "s"}: ${cartUrl}`,
+        content: `Added ${product.title}${variantText}. Your cart now has ${cartCount} item${cartCount === 1 ? "" : "s"}.`,
         actions: [buildOpenCartAction(cartUrl, actionProduct)],
         pendingCartProduct: null,
         cartLines: nextCartLines,
