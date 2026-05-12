@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
+import { Prisma } from "@prisma/client"
 import { embedBatch } from "@/lib/kb/openaiEmbeddings"
 import { kbEmbeddingMetadata } from "@/lib/kb/embeddingMeta"
 import {
@@ -9,9 +10,18 @@ import {
 } from "@/lib/kb/knowledgeTemplate"
 import { parseModulePoliciesJson } from "@/lib/kb/modulePolicies"
 import { parseSharedFieldAnswersJson } from "@/lib/kb/sharedFieldAnswers"
+import { parseCustomAiModulesJson } from "@/lib/kb/customAiModules"
 import { L1_MODULE_CUSTOMER_LABEL } from "@/lib/ai/orchestrator/vendorModuleGroups"
 import { SHARED_FIELD_SHORT_LABEL } from "@/lib/ai/orchestrator/moduleThreeTypes"
 import type { L1Module } from "@/lib/ai/orchestrator/types"
+
+type StoreStructuredKnowledgeRow = {
+    knowledgeBaseMode: "UNSET" | "STRUCTURED" | "DOCUMENTS"
+    knowledgeTemplate: unknown
+    modulePolicies: unknown
+    sharedFieldAnswers: unknown
+    customAiModules?: unknown
+}
 
 /**
  * Rebuild STRUCTURED knowledge chunks from the store's v3 template + modulePolicies + sharedFieldAnswers.
@@ -23,73 +33,106 @@ export async function replaceStructuredKnowledgeChunksForStore(storeId: string) 
         storeId,
     )
 
-    const store = await prisma.store.findFirst({
+    const store = (await prisma.store.findFirst({
         where: { id: storeId },
         select: {
             knowledgeBaseMode: true,
             knowledgeTemplate: true,
             modulePolicies: true,
             sharedFieldAnswers: true,
-        },
-    })
+            customAiModules: true,
+        } as unknown as Prisma.StoreSelect,
+    })) as StoreStructuredKnowledgeRow | null
 
-    if (!store || store.knowledgeBaseMode !== "STRUCTURED") {
+    if (!store) {
         return
     }
 
-    const stored: KnowledgeTemplateStored =
-        parseKnowledgeTemplateJson(store.knowledgeTemplate) ?? {
-            version: 3,
-            genericAnswers: {},
-            updatedAt: new Date().toISOString(),
-        }
+    const customModules = parseCustomAiModulesJson(store.customAiModules)
+    const hasEnabledCustomKnowledge = customModules.some(
+        (module) => module.enabled && module.answers.length > 0,
+    )
 
-    const modulePolicies = parseModulePoliciesJson(store.modulePolicies)
-    const sharedFieldAnswers = parseSharedFieldAnswersJson(store.sharedFieldAnswers)
+    if (store.knowledgeBaseMode !== "STRUCTURED" && !hasEnabledCustomKnowledge) {
+        return
+    }
 
     const rows: {
         content: string
         metadata: ReturnType<typeof kbEmbeddingMetadata>
     }[] = []
 
-    for (const field of STORE_VOICE_FIELDS) {
-        const text = stored.genericAnswers[field.key]
-        if (text?.trim()) {
+    if (store.knowledgeBaseMode === "STRUCTURED") {
+        const stored: KnowledgeTemplateStored =
+            parseKnowledgeTemplateJson(store.knowledgeTemplate) ?? {
+                version: 3,
+                genericAnswers: {},
+                updatedAt: new Date().toISOString(),
+            }
+
+        const modulePolicies = parseModulePoliciesJson(store.modulePolicies)
+        const sharedFieldAnswers = parseSharedFieldAnswersJson(store.sharedFieldAnswers)
+
+        for (const field of STORE_VOICE_FIELDS) {
+            const text = stored.genericAnswers[field.key]
+            if (text?.trim()) {
+                rows.push({
+                    content: `Q: ${field.label}\nA: ${text.trim()}`,
+                    metadata: kbEmbeddingMetadata({
+                        sourceKey: field.key,
+                        moduleCode: "ALL",
+                        fieldId: field.key,
+                    }),
+                })
+            }
+        }
+
+        for (const [mod, text] of Object.entries(modulePolicies) as [L1Module, string][]) {
+            if (!text?.trim()) continue
+            const title = L1_MODULE_CUSTOMER_LABEL[mod] ?? mod
             rows.push({
-                content: `Q: ${field.label}\nA: ${text.trim()}`,
+                content: `Q: ${title} (store policy)\nA: ${text.trim()}`,
                 metadata: kbEmbeddingMetadata({
-                    sourceKey: field.key,
+                    sourceKey: `policy_${mod}`,
+                    moduleCode: mod,
+                    fieldId: `policy_${mod}`,
+                }),
+            })
+        }
+
+        for (const [fieldId, text] of Object.entries(sharedFieldAnswers)) {
+            if (!text?.trim()) continue
+            const lab = SHARED_FIELD_SHORT_LABEL[fieldId] || fieldId
+            rows.push({
+                content: `Q: ${lab} (${fieldId})\nA: ${text.trim()}`,
+                metadata: kbEmbeddingMetadata({
+                    sourceKey: fieldId,
                     moduleCode: "ALL",
-                    fieldId: field.key,
+                    fieldId,
                 }),
             })
         }
     }
 
-    for (const [mod, text] of Object.entries(modulePolicies) as [L1Module, string][]) {
-        if (!text?.trim()) continue
-        const title = L1_MODULE_CUSTOMER_LABEL[mod] ?? mod
-        rows.push({
-            content: `Q: ${title} (store policy)\nA: ${text.trim()}`,
-            metadata: kbEmbeddingMetadata({
-                sourceKey: `policy_${mod}`,
-                moduleCode: mod,
-                fieldId: `policy_${mod}`,
-            }),
-        })
-    }
-
-    for (const [fieldId, text] of Object.entries(sharedFieldAnswers)) {
-        if (!text?.trim()) continue
-        const lab = SHARED_FIELD_SHORT_LABEL[fieldId] || fieldId
-        rows.push({
-            content: `Q: ${lab} (${fieldId})\nA: ${text.trim()}`,
-            metadata: kbEmbeddingMetadata({
-                sourceKey: fieldId,
-                moduleCode: "ALL",
-                fieldId,
-            }),
-        })
+    for (const customModule of customModules) {
+        if (!customModule.enabled) continue
+        for (const answer of customModule.answers) {
+            rows.push({
+                content: [
+                    `Custom module: ${customModule.title}`,
+                    customModule.subtitle ? `Module subtitle: ${customModule.subtitle}` : "",
+                    `Q: ${answer.subtitle}`,
+                    `A: ${answer.answer}`,
+                ]
+                    .filter(Boolean)
+                    .join("\n"),
+                metadata: kbEmbeddingMetadata({
+                    sourceKey: `custom_module_${customModule.id}_${answer.id}`,
+                    moduleCode: "CUSTOM",
+                    fieldId: answer.id,
+                }),
+            })
+        }
     }
 
     if (!rows.length) {

@@ -27,23 +27,34 @@ import {
 import { parseSharedFieldAnswersJson, sharedFieldAnswersPayload } from "@/lib/kb/sharedFieldAnswers"
 import { KNOWLEDGE_TEMPLATE_ANSWER_MAX } from "@/lib/kb/knowledgeTemplate"
 import {
+    customAiModulesPayload,
+    parseCustomAiModulesJson,
+    type CustomAiModule,
+} from "@/lib/kb/customAiModules"
+import {
     ChevronRight,
+    Eye,
     HelpCircle,
     Info,
     Layers,
     Loader2,
     MapPin,
     Package,
+    Pencil,
+    Plus,
     Ruler,
     Save,
     ShieldAlert,
     ThumbsUp,
+    Trash2,
     UserCircle,
     X,
 } from "lucide-react"
 
 const FAQ_CARD_ID = "faq"
 const CATEGORY_CARD_ID = "category_metadetails"
+const ADD_CUSTOM_MODULE_ID = "custom_module_new"
+const CUSTOM_MODULE_PREFIX = "custom_module:"
 
 /** Single grid order — no section groupings on the dashboard. */
 const DASHBOARD_CARD_ORDER: Array<
@@ -79,7 +90,13 @@ function categoryAutomation(on: boolean): AutomationFlags {
     return { knowledge: false, verifiedLookup: on, ticket: false }
 }
 
-type ModalId = typeof FAQ_CARD_ID | typeof CATEGORY_CARD_ID | Exclude<L1Module, "UNKNOWN"> | null
+type CustomModuleModalId = typeof ADD_CUSTOM_MODULE_ID | `${typeof CUSTOM_MODULE_PREFIX}${string}`
+type ModalId =
+    | typeof FAQ_CARD_ID
+    | typeof CATEGORY_CARD_ID
+    | Exclude<L1Module, "UNKNOWN">
+    | CustomModuleModalId
+    | null
 
 const ALL_MODAL_MODULES = new Set<L1Module>(L1_MODULE_IDS)
 
@@ -107,6 +124,23 @@ function moduleIcon(m: Exclude<L1Module, "UNKNOWN">) {
     }
 }
 
+function makeId(prefix: "custom" | "answer") {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function emptyCustomModule(): CustomAiModule {
+    const now = new Date().toISOString()
+    return {
+        id: makeId("custom"),
+        title: "",
+        subtitle: "",
+        enabled: true,
+        answers: [{ id: makeId("answer"), subtitle: "", answer: "" }],
+        createdAt: now,
+        updatedAt: now,
+    }
+}
+
 export default function JunoEngineModulesPage() {
     const { theme } = useTheme()
     const isLight = theme === "light"
@@ -120,6 +154,11 @@ export default function JunoEngineModulesPage() {
         parseAiModulesJson(null),
     )
     const [sharedFields, setSharedFields] = useState<Record<string, string>>({})
+    const [customModules, setCustomModules] = useState<CustomAiModule[]>([])
+    const [draftCustomModule, setDraftCustomModule] = useState<CustomAiModule>(() =>
+        emptyCustomModule(),
+    )
+    const [customModuleViewMode, setCustomModuleViewMode] = useState<"view" | "edit">("view")
     const [categoryMetaEnabled, setCategoryMetaEnabled] = useState(false)
     const [modalId, setModalId] = useState<ModalId>(null)
     const [modalSaveError, setModalSaveError] = useState<string | null>(null)
@@ -142,6 +181,7 @@ export default function JunoEngineModulesPage() {
         const data = raw as {
             aiModules?: unknown
             sharedFieldAnswers?: unknown
+            customAiModules?: unknown
             categoryMetadetailsEnabled?: boolean
         }
         const parsedMods = parseAiModulesJson(data.aiModules)
@@ -150,6 +190,7 @@ export default function JunoEngineModulesPage() {
         setMods(parsedMods)
         setCategoryMetaEnabled(catOn)
         setSharedFields(parseSharedFieldAnswersJson(data.sharedFieldAnswers))
+        setCustomModules(parseCustomAiModulesJson(data.customAiModules))
     }, [])
 
     useEffect(() => {
@@ -202,12 +243,29 @@ export default function JunoEngineModulesPage() {
         if (!modalId) return
         setModalSaveError(null)
         setModuleInfoOpen(false)
+        if (modalId === ADD_CUSTOM_MODULE_ID) {
+            setDraftCustomModule(emptyCustomModule())
+            setCustomModuleViewMode("edit")
+        } else if (typeof modalId === "string" && modalId.startsWith(CUSTOM_MODULE_PREFIX)) {
+            const id = modalId.slice(CUSTOM_MODULE_PREFIX.length)
+            const existing = customModules.find((module) => module.id === id)
+            if (existing) {
+                setDraftCustomModule({
+                    ...existing,
+                    answers:
+                        existing.answers.length > 0
+                            ? existing.answers.map((answer) => ({ ...answer }))
+                            : [{ id: makeId("answer"), subtitle: "", answer: "" }],
+                })
+                setCustomModuleViewMode("view")
+            }
+        }
         const onKey = (e: KeyboardEvent) => {
             if (e.key === "Escape") setModalId(null)
         }
         window.addEventListener("keydown", onKey)
         return () => window.removeEventListener("keydown", onKey)
-    }, [modalId])
+    }, [customModules, modalId])
 
     useEffect(() => {
         if (modalId) {
@@ -220,7 +278,9 @@ export default function JunoEngineModulesPage() {
         }
     }, [modalId])
 
-    async function saveChanges(): Promise<{ ok: boolean; error?: string }> {
+    async function saveChanges(
+        customModuleOverride?: CustomAiModule[],
+    ): Promise<{ ok: boolean; error?: string }> {
         if (!activeStoreId) return { ok: false, error: "No store selected" }
         setSaving(true)
         setToast(null)
@@ -236,12 +296,14 @@ export default function JunoEngineModulesPage() {
                     aiModules: serializeAiModules(mergedMods),
                     categoryMetadetailsEnabled: categoryMetaEnabled,
                     sharedFieldAnswers: sharedFieldAnswersPayload(sharedFields),
+                    customAiModules: customAiModulesPayload(customModuleOverride ?? customModules),
                 }),
             })
             const j = (await res.json().catch(() => ({}))) as {
                 message?: string
                 aiModules?: unknown
                 sharedFieldAnswers?: unknown
+                customAiModules?: unknown
                 categoryMetadetailsEnabled?: boolean
             }
             if (!res.ok) throw new Error(j.message || "Save failed")
@@ -251,6 +313,7 @@ export default function JunoEngineModulesPage() {
             setMods(nextMods)
             setCategoryMetaEnabled(catOn)
             setSharedFields(parseSharedFieldAnswersJson(j.sharedFieldAnswers))
+            setCustomModules(parseCustomAiModulesJson(j.customAiModules))
             setToast("Saved.")
             return { ok: true }
         } catch (e) {
@@ -270,6 +333,80 @@ export default function JunoEngineModulesPage() {
             ...prev,
             [mod]: { ...prev[mod], [key]: value },
         }))
+    }
+
+    const customModalModuleId =
+        typeof modalId === "string" && modalId.startsWith(CUSTOM_MODULE_PREFIX)
+            ? modalId.slice(CUSTOM_MODULE_PREFIX.length)
+            : null
+    const isCustomModuleModal = modalId === ADD_CUSTOM_MODULE_ID || Boolean(customModalModuleId)
+    const customModalExisting = customModalModuleId
+        ? customModules.find((module) => module.id === customModalModuleId) ?? null
+        : null
+
+    function setDraftAnswer(
+        answerId: string,
+        key: "subtitle" | "answer",
+        value: string,
+    ) {
+        setDraftCustomModule((prev) => ({
+            ...prev,
+            answers: prev.answers.map((answer) =>
+                answer.id === answerId ? { ...answer, [key]: value } : answer,
+            ),
+        }))
+    }
+
+    function addDraftAnswer() {
+        setDraftCustomModule((prev) => ({
+            ...prev,
+            answers: [...prev.answers, { id: makeId("answer"), subtitle: "", answer: "" }],
+        }))
+    }
+
+    function removeDraftAnswer(answerId: string) {
+        setDraftCustomModule((prev) => ({
+            ...prev,
+            answers:
+                prev.answers.length > 1
+                    ? prev.answers.filter((answer) => answer.id !== answerId)
+                    : prev.answers,
+        }))
+    }
+
+    function nextCustomModulesFromDraft(): { ok: true; modules: CustomAiModule[] } | { ok: false; error: string } {
+        const normalized = customAiModulesPayload([draftCustomModule])[0]
+        if (!normalized?.title) {
+            return { ok: false, error: "Add a module title." }
+        }
+        if (normalized.answers.length === 0) {
+            return { ok: false, error: "Add at least one subtitle and answer." }
+        }
+        const exists = customModules.some((module) => module.id === normalized.id)
+        const modules = exists
+            ? customModules.map((module) => (module.id === normalized.id ? normalized : module))
+            : [...customModules, normalized]
+        return { ok: true, modules }
+    }
+
+    async function saveDraftCustomModule() {
+        const next = nextCustomModulesFromDraft()
+        if (!next.ok) {
+            setModalSaveError(next.error)
+            return
+        }
+        setCustomModules(next.modules)
+        const result = await saveChanges(next.modules)
+        if (result.ok) setModalId(null)
+        else if (result.error) setModalSaveError(result.error)
+    }
+
+    async function deleteCustomModule(moduleId: string) {
+        const nextModules = customModules.filter((module) => module.id !== moduleId)
+        setCustomModules(nextModules)
+        const result = await saveChanges(nextModules)
+        if (result.ok) setModalId(null)
+        else if (result.error) setModalSaveError(result.error)
     }
 
     const modalModule: Exclude<L1Module, "UNKNOWN"> | null =
@@ -536,6 +673,268 @@ export default function JunoEngineModulesPage() {
         )
     }
 
+    function renderCustomModuleCard(module: CustomAiModule) {
+        const subtitle =
+            module.subtitle ||
+            module.answers[0]?.subtitle ||
+            "Vendor-created knowledge module"
+        return (
+            <button
+                type="button"
+                className={cardShell}
+                onClick={() => setModalId(`${CUSTOM_MODULE_PREFIX}${module.id}`)}
+            >
+                <span className="p-5 flex items-start gap-4 w-full">
+                    <span className={iconWrap}>
+                        <Plus className="w-5 h-5" />
+                    </span>
+                    <span className="flex-1 min-w-0 text-left">
+                        <span
+                            className={cn(
+                                "font-black text-base leading-tight block",
+                                isLight ? "text-slate-900" : "text-white",
+                            )}
+                        >
+                            {module.title}
+                        </span>
+                        <span
+                            className={cn(
+                                "text-xs mt-1 line-clamp-2 block",
+                                isLight ? "text-slate-500" : "text-slate-400",
+                            )}
+                        >
+                            {subtitle}
+                        </span>
+                    </span>
+                    <span className={badgeCls(module.enabled)}>{module.enabled ? "On" : "Off"}</span>
+                    <ChevronRight className="w-5 h-5 shrink-0 text-slate-400 self-center" />
+                </span>
+            </button>
+        )
+    }
+
+    function renderAddModuleCard() {
+        return (
+            <button
+                type="button"
+                className={cn(
+                    cardShell,
+                    isLight
+                        ? "border-dashed border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50"
+                        : "border-dashed border-indigo-400/30 bg-indigo-500/10 hover:bg-indigo-500/15",
+                )}
+                onClick={() => setModalId(ADD_CUSTOM_MODULE_ID)}
+            >
+                <span className="p-5 flex items-start gap-4 w-full">
+                    <span className={iconWrap}>
+                        <Plus className="w-5 h-5" />
+                    </span>
+                    <span className="flex-1 min-w-0 text-left">
+                        <span
+                            className={cn(
+                                "font-black text-base leading-tight block",
+                                isLight ? "text-slate-900" : "text-white",
+                            )}
+                        >
+                            Add Module
+                        </span>
+                        <span
+                            className={cn(
+                                "text-xs mt-1 line-clamp-2 block",
+                                isLight ? "text-slate-500" : "text-slate-400",
+                            )}
+                        >
+                            Create custom knowledge with title, subtitle, and answer.
+                        </span>
+                    </span>
+                    <ChevronRight className="w-5 h-5 shrink-0 text-slate-400 self-center" />
+                </span>
+            </button>
+        )
+    }
+
+    function renderCustomModuleEditor() {
+        const subtle = isLight ? "text-slate-600" : "text-slate-400"
+        const rowBorder = isLight ? "border-slate-200 bg-slate-50/50" : "border-white/10 bg-white/[0.03]"
+        const canView = modalId !== ADD_CUSTOM_MODULE_ID && customModuleViewMode === "view"
+
+        if (canView) {
+            return (
+                <div className="space-y-4">
+                    <div className={cn("rounded-xl border p-4", rowBorder)}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                                    {draftCustomModule.title || "Untitled module"}
+                                </p>
+                                <p className={cn("text-xs mt-1", subtle)}>
+                                    {draftCustomModule.subtitle || "No module subtitle added."}
+                                </p>
+                            </div>
+                            <span className={badgeCls(draftCustomModule.enabled)}>
+                                {draftCustomModule.enabled ? "On" : "Off"}
+                            </span>
+                        </div>
+                    </div>
+                    {draftCustomModule.answers.map((answer) => (
+                        <div key={answer.id} className={cn("rounded-xl border p-4", rowBorder)}>
+                            <p className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                                {answer.subtitle}
+                            </p>
+                            <p className={cn("text-sm mt-2 whitespace-pre-wrap leading-relaxed", subtle)}>
+                                {answer.answer}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            )
+        }
+
+        return (
+            <div className="space-y-5">
+                <div className={cn("rounded-xl border p-4 space-y-4", rowBorder)}>
+                    <label className="flex items-start justify-between gap-4">
+                        <span>
+                            <span className={cn("text-sm font-bold block", isLight ? "text-slate-900" : "text-white")}>
+                                Module enabled
+                            </span>
+                            <span className={cn("text-xs mt-1 block", subtle)}>
+                                When enabled, its answers are embedded and can be used by storefront AI.
+                            </span>
+                        </span>
+                        <input
+                            type="checkbox"
+                            className="rounded border-slate-500 w-4 h-4 accent-indigo-600 mt-1"
+                            checked={draftCustomModule.enabled}
+                            disabled={saving}
+                            onChange={(e) =>
+                                setDraftCustomModule((prev) => ({ ...prev, enabled: e.target.checked }))
+                            }
+                        />
+                    </label>
+                    <div className="space-y-1.5">
+                        <label className={cn("text-[11px] font-semibold uppercase tracking-wide", subtle)}>
+                            Module title
+                        </label>
+                        <input
+                            value={draftCustomModule.title}
+                            onChange={(e) =>
+                                setDraftCustomModule((prev) => ({
+                                    ...prev,
+                                    title: e.target.value.slice(0, 80),
+                                }))
+                            }
+                            maxLength={80}
+                            disabled={saving}
+                            placeholder="Example: VIP delivery rules"
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
+                                inputSurface,
+                            )}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className={cn("text-[11px] font-semibold uppercase tracking-wide", subtle)}>
+                            Module subtitle
+                        </label>
+                        <input
+                            value={draftCustomModule.subtitle}
+                            onChange={(e) =>
+                                setDraftCustomModule((prev) => ({
+                                    ...prev,
+                                    subtitle: e.target.value.slice(0, 160),
+                                }))
+                            }
+                            maxLength={160}
+                            disabled={saving}
+                            placeholder="Short description shown on the module card"
+                            className={cn(
+                                "w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
+                                inputSurface,
+                            )}
+                        />
+                    </div>
+                </div>
+
+                {draftCustomModule.answers.map((answer, index) => (
+                    <div key={answer.id} className={cn("rounded-xl border p-4 space-y-3", rowBorder)}>
+                        <div className="flex items-center justify-between gap-3">
+                            <p className={cn("text-sm font-bold", isLight ? "text-slate-900" : "text-white")}>
+                                Subtitle answer {index + 1}
+                            </p>
+                            {draftCustomModule.answers.length > 1 ? (
+                                <button
+                                    type="button"
+                                    disabled={saving}
+                                    onClick={() => removeDraftAnswer(answer.id)}
+                                    className={cn(
+                                        "inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold",
+                                        isLight
+                                            ? "text-rose-700 hover:bg-rose-50"
+                                            : "text-rose-300 hover:bg-rose-500/10",
+                                    )}
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    Remove
+                                </button>
+                            ) : null}
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className={cn("text-[11px] font-semibold uppercase tracking-wide", subtle)}>
+                                Subtitle / customer question
+                            </label>
+                            <input
+                                value={answer.subtitle}
+                                onChange={(e) => setDraftAnswer(answer.id, "subtitle", e.target.value.slice(0, 160))}
+                                maxLength={160}
+                                disabled={saving}
+                                placeholder="Example: Do you offer same-day delivery?"
+                                className={cn(
+                                    "w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
+                                    inputSurface,
+                                )}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className={cn("text-[11px] font-semibold uppercase tracking-wide", subtle)}>
+                                Answer
+                            </label>
+                            <textarea
+                                value={answer.answer}
+                                onChange={(e) =>
+                                    setDraftAnswer(answer.id, "answer", e.target.value.slice(0, KNOWLEDGE_TEMPLATE_ANSWER_MAX))
+                                }
+                                rows={5}
+                                maxLength={KNOWLEDGE_TEMPLATE_ANSWER_MAX}
+                                disabled={saving}
+                                placeholder="Write the exact business answer JUNO can use."
+                                className={cn(
+                                    "w-full px-3 py-2 rounded-lg border text-sm resize-y min-h-[120px] focus:outline-none focus:ring-2 focus:ring-indigo-500/30",
+                                    inputSurface,
+                                )}
+                            />
+                        </div>
+                    </div>
+                ))}
+
+                <button
+                    type="button"
+                    disabled={saving || draftCustomModule.answers.length >= 12}
+                    onClick={addDraftAnswer}
+                    className={cn(
+                        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-bold border",
+                        isLight
+                            ? "border-slate-200 text-indigo-700 hover:bg-indigo-50"
+                            : "border-white/10 text-indigo-300 hover:bg-indigo-500/10",
+                    )}
+                >
+                    <Plus className="w-4 h-4" />
+                    Add another subtitle
+                </button>
+            </div>
+        )
+    }
+
     const infoSpecMod: Exclude<L1Module, "UNKNOWN"> | null =
         modalId === FAQ_CARD_ID
             ? "FAQ"
@@ -589,6 +988,10 @@ export default function JunoEngineModulesPage() {
                                     ? L1_MODULE_CARD_TITLE.FAQ
                                     : modalId === CATEGORY_CARD_ID
                                       ? L1_MODULE_CARD_TITLE.CATEGORY_METADETAILS
+                                      : isCustomModuleModal
+                                        ? modalId === ADD_CUSTOM_MODULE_ID
+                                            ? "Add Module"
+                                            : draftCustomModule.title || "Custom module"
                                       : modalModule
                                         ? L1_MODULE_CARD_TITLE[modalModule]
                                         : "Module"}
@@ -603,12 +1006,53 @@ export default function JunoEngineModulesPage() {
                                     ? L1_MODULE_CUSTOMER_LABEL.FAQ
                                     : modalId === CATEGORY_CARD_ID
                                       ? L1_MODULE_CUSTOMER_LABEL.CATEGORY_METADETAILS
+                                      : isCustomModuleModal
+                                        ? "Custom knowledge module embedded into storefront AI answers."
                                       : modalModule
                                         ? L1_MODULE_CUSTOMER_LABEL[modalModule]
                                         : ""}
                             </p>
                         </div>
                         <div className="flex items-start gap-1 shrink-0 relative">
+                            {isCustomModuleModal && modalId !== ADD_CUSTOM_MODULE_ID ? (
+                                <div
+                                    className={cn(
+                                        "mr-1 flex rounded-lg border p-1",
+                                        isLight ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.04]",
+                                    )}
+                                >
+                                    <button
+                                        type="button"
+                                        onClick={() => setCustomModuleViewMode("view")}
+                                        className={cn(
+                                            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold",
+                                            customModuleViewMode === "view"
+                                                ? "bg-indigo-600 text-white"
+                                                : isLight
+                                                  ? "text-slate-600 hover:bg-white"
+                                                  : "text-slate-300 hover:bg-white/10",
+                                        )}
+                                    >
+                                        <Eye className="w-3.5 h-3.5" />
+                                        View
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCustomModuleViewMode("edit")}
+                                        className={cn(
+                                            "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold",
+                                            customModuleViewMode === "edit"
+                                                ? "bg-indigo-600 text-white"
+                                                : isLight
+                                                  ? "text-slate-600 hover:bg-white"
+                                                  : "text-slate-300 hover:bg-white/10",
+                                        )}
+                                    >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                        Edit
+                                    </button>
+                                </div>
+                            ) : null}
                             {hasModuleInfoPanel && infoSpecMod ? (
                                 <>
                                     <button
@@ -668,6 +1112,8 @@ export default function JunoEngineModulesPage() {
                                 {renderAutomationRows(modalModule)}
                                 {renderPolicyFields(modalModule)}
                             </>
+                        ) : isCustomModuleModal ? (
+                            renderCustomModuleEditor()
                         ) : null}
                     </div>
 
@@ -689,6 +1135,22 @@ export default function JunoEngineModulesPage() {
                             isLight ? "border-slate-100 bg-slate-50/80" : "border-white/10 bg-slate-950/50",
                         )}
                     >
+                        {customModalExisting ? (
+                            <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() => void deleteCustomModule(customModalExisting.id)}
+                                className={cn(
+                                    "mr-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50",
+                                    isLight
+                                        ? "text-rose-700 hover:bg-rose-50"
+                                        : "text-rose-300 hover:bg-rose-500/10",
+                                )}
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Delete
+                            </button>
+                        ) : null}
                         <button
                             type="button"
                             onClick={() => setModalId(null)}
@@ -707,6 +1169,10 @@ export default function JunoEngineModulesPage() {
                             onClick={() =>
                                 void (async () => {
                                     setModalSaveError(null)
+                                    if (isCustomModuleModal) {
+                                        await saveDraftCustomModule()
+                                        return
+                                    }
                                     const r = await saveChanges()
                                     if (r.ok) setModalId(null)
                                     else if (r.error) setModalSaveError(r.error)
@@ -719,7 +1185,7 @@ export default function JunoEngineModulesPage() {
                             ) : (
                                 <Save className="w-4 h-4" />
                             )}
-                            Save changes
+                            {isCustomModuleModal ? "Save module" : "Save changes"}
                         </button>
                     </div>
                 </div>
@@ -893,6 +1359,12 @@ export default function JunoEngineModulesPage() {
                                 </div>
                             )
                         })}
+                        {customModules.map((module) => (
+                            <div key={module.id} className="contents">
+                                {renderCustomModuleCard(module)}
+                            </div>
+                        ))}
+                        <div className="contents">{renderAddModuleCard()}</div>
                     </div>
 
                     {modal}

@@ -52,6 +52,7 @@ type CachedOrderRow = {
     totalPrice: string
     currency: string | null
     lineItems: unknown
+    noteAttributes?: unknown
     shopifyCreatedAt: Date | null
     createdAt: Date
 }
@@ -416,6 +417,7 @@ export async function GET(req: Request) {
                         totalPrice: true,
                         currency: true,
                         lineItems: true,
+                        noteAttributes: true,
                         shopifyCreatedAt: true,
                         createdAt: true,
                     },

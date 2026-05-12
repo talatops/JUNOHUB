@@ -146,6 +146,7 @@ export function selectVariantForCart(params: {
 export function buildCartPermalink(
     shopifyDomain: string,
     lines: Array<{ variantId: string; quantity?: number }>,
+    attributes?: Record<string, string | number | boolean | null | undefined>,
 ) {
     const cleanDomain = normalizeShopDomain(shopifyDomain)
     const encodedLines = lines
@@ -158,7 +159,13 @@ export function buildCartPermalink(
         .filter((line): line is string => Boolean(line))
 
     if (!cleanDomain || encodedLines.length === 0) return null
-    return `https://${cleanDomain}/cart/${encodedLines.join(",")}`
+    const params = new URLSearchParams()
+    for (const [key, value] of Object.entries(attributes ?? {})) {
+        if (value === null || value === undefined || value === "") continue
+        params.set(`attributes[${key}]`, String(value).slice(0, 255))
+    }
+    const query = params.toString()
+    return `https://${cleanDomain}/cart/${encodedLines.join(",")}${query ? `?${query}` : ""}`
 }
 
 export function formatVariantChoices(variants: CartableVariant[]) {

@@ -23,6 +23,7 @@ interface ShopifyOrderRecord {
     fulfillment_status?: string
     customer?: unknown
     line_items?: unknown[]
+    note_attributes?: unknown[]
     created_at?: string
 }
 
@@ -136,7 +137,7 @@ export async function updateProductCache(storeId: string, products: ShopifyProdu
             select: { shopifyDomain: true, shopifyAccessToken: true },
         })
 
-        let metafieldsByProductId = new Map<string, Prisma.InputJsonValue>()
+        const metafieldsByProductId = new Map<string, Prisma.InputJsonValue>()
         if (store?.shopifyDomain && store?.shopifyAccessToken && products.length > 0) {
             try {
                 const ids = products.map((p) => p.id)
@@ -279,9 +280,10 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
                     financialStatus: order.financial_status || null,
                     fulfillmentStatus: order.fulfillment_status || null,
                     lineItems: (order.line_items || []) as Prisma.InputJsonValue,
+                    noteAttributes: (order.note_attributes || []) as Prisma.InputJsonValue,
                     customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
                     shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null
-                },
+                } as Prisma.CachedOrderUncheckedCreateInput,
                 update: {
                     orderNumber: order.order_number?.toString() || order.name || "",
                     email: extractOrderEmail(order),
@@ -295,10 +297,11 @@ export async function updateOrderCache(storeId: string, orders: ShopifyOrderReco
                             ? existingById.get(order.id.toString())?.fulfillmentStatus || null
                             : order.fulfillment_status || null,
                     lineItems: (order.line_items || []) as Prisma.InputJsonValue,
+                    noteAttributes: (order.note_attributes || []) as Prisma.InputJsonValue,
                     customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
                     shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,
                     lastSyncedAt: new Date()
-                }
+                } as Prisma.CachedOrderUncheckedUpdateInput
             })
         )
 
@@ -531,10 +534,11 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             fulfillmentStatus:
                 shouldPreserve || hasSupplierHold ? preservedStatus : order.fulfillment_status || null,
             lineItems: (order.line_items || []) as Prisma.InputJsonValue,
+            noteAttributes: (order.note_attributes || []) as Prisma.InputJsonValue,
             customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
             shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,
             lastSyncedAt: new Date()
-        },
+        } as Prisma.CachedOrderUncheckedCreateInput,
         update: {
             orderNumber: order.order_number?.toString() || order.name || "",
             email: extractOrderEmail(order),
@@ -544,9 +548,10 @@ export async function updateSingleOrder(storeId: string, order: ShopifyOrderReco
             fulfillmentStatus:
                 shouldPreserve || hasSupplierHold ? preservedStatus : order.fulfillment_status || null,
             lineItems: (order.line_items || []) as Prisma.InputJsonValue,
+            noteAttributes: (order.note_attributes || []) as Prisma.InputJsonValue,
             customer: (order.customer ?? undefined) as Prisma.InputJsonValue | undefined,
             shopifyCreatedAt: order.created_at ? new Date(order.created_at) : null,
             lastSyncedAt: new Date()
-        }
+        } as Prisma.CachedOrderUncheckedUpdateInput
     })
 }

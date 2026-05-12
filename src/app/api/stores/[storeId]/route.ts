@@ -13,6 +13,11 @@ import {
     sharedFieldAnswersBodySchema,
     sharedFieldAnswersPayload,
 } from "@/lib/kb/sharedFieldAnswers"
+import {
+    customAiModulesBodySchema,
+    customAiModulesPayload,
+    parseCustomAiModulesJson,
+} from "@/lib/kb/customAiModules"
 import { replaceStructuredKnowledgeChunksForStore } from "@/lib/kb/structuredTemplateChunks"
 import {
     getPublishedThemeId,
@@ -571,8 +576,8 @@ async function syncStorefrontTheme(params: {
     const updated = params.enabled
         ? upsertThemeLiquidInjection(themeLiquid.data.value, assetFilename)
         : removeThemeLiquidInjection(themeLiquid.data.value)
-    if (!updated.updated && (updated as any).error) {
-        throw new Error((updated as any).error)
+    if (!updated.updated && "error" in updated) {
+        throw new Error(String(updated.error))
     }
     if (updated.updated) {
         const putThemeLiquid = await putThemeAsset(cleanDomain, accessToken, apiVersion, themeId, themeLiquidKey, updated.next)
@@ -610,6 +615,7 @@ export async function GET(
             aiModules: unknown
             modulePolicies?: unknown
             sharedFieldAnswers?: unknown
+            customAiModules?: unknown
             gmailReplyTheme?: unknown
             lowStockThreshold?: number | null
             lowStockShopifyThreshold?: number | null
@@ -644,6 +650,7 @@ export async function GET(
             aiModules: store.aiModules,
             modulePolicies: parseModulePoliciesJson(store.modulePolicies ?? null),
             sharedFieldAnswers: parseSharedFieldAnswersJson(store.sharedFieldAnswers ?? null),
+            customAiModules: parseCustomAiModulesJson(store.customAiModules ?? null),
             gmailReplyTheme:
                 store.gmailReplyTheme === undefined
                     ? undefined
@@ -704,6 +711,7 @@ export async function PATCH(
             lowStockThreshold?: number | null
             lowStockShopifyThreshold?: number | null
             storefrontOtpSessionMinutes?: number
+            customAiModules?: Prisma.InputJsonValue | typeof Prisma.JsonNull
         }
 
         const updatePayload: StorePatchPayload = {
@@ -757,6 +765,20 @@ export async function PATCH(
                 Object.keys(normalized).length === 0
                     ? Prisma.JsonNull
                     : (normalized as Prisma.InputJsonValue)
+            reembedStructured = true
+        }
+
+        if (data.customAiModules !== undefined) {
+            const parsed = customAiModulesBodySchema.safeParse(data.customAiModules)
+            if (!parsed.success) {
+                return NextResponse.json(
+                    { message: "Invalid customAiModules", issues: parsed.error.flatten() },
+                    { status: 400 },
+                )
+            }
+            const normalized = customAiModulesPayload(parsed.data)
+            updatePayload.customAiModules =
+                normalized.length === 0 ? Prisma.JsonNull : (normalized as Prisma.InputJsonValue)
             reembedStructured = true
         }
 
@@ -880,6 +902,9 @@ export async function PATCH(
             aiModules: updatedStore.aiModules,
             modulePolicies: parseModulePoliciesJson(updatedStore.modulePolicies),
             sharedFieldAnswers: parseSharedFieldAnswersJson(updatedStore.sharedFieldAnswers),
+            customAiModules: parseCustomAiModulesJson(
+                (updatedStore as { customAiModules?: unknown }).customAiModules,
+            ),
             gmailReplyTheme:
                 updatedStore.gmailReplyTheme == null
                     ? null

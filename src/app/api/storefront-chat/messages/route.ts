@@ -221,12 +221,14 @@ function imageUrlFromImages(images: unknown): string | null {
 
 async function buildCartResponse(params: {
     storeId: string
+    conversationId: string
     shopifyDomain: string
     productId: string
     requestedVariantId?: string | null
     quantity?: number
     message: string
     existingCartLines: StorefrontCartLine[]
+    attributionSource: "primary" | "upsell" | "direct"
 }): Promise<CartResponse> {
     const product = await prisma.cachedProduct.findFirst({
         where: { storeId: params.storeId, shopifyProductId: params.productId },
@@ -306,7 +308,12 @@ async function buildCartResponse(params: {
         productId: product.shopifyProductId,
         title: product.title,
     })
-    const cartUrl = buildCartPermalink(params.shopifyDomain, nextCartLines)
+    const cartUrl = buildCartPermalink(params.shopifyDomain, nextCartLines, {
+        juno_ai_conversation_id: params.conversationId,
+        juno_ai_product_id: product.shopifyProductId,
+        juno_ai_variant_id: selected.variant.id,
+        juno_ai_source: params.attributionSource,
+    })
     if (!cartUrl) {
         return {
             content: "I could not create a cart link for that product right now.",
@@ -332,6 +339,7 @@ async function buildCartResponse(params: {
 
 async function resolveDirectAddToCart(params: {
     storeId: string
+    conversationId: string
     shopifyDomain: string
     message: string
     existingCartLines: StorefrontCartLine[]
@@ -343,12 +351,14 @@ async function resolveDirectAddToCart(params: {
     const product = productSearchHitToActionProduct(hit)
     return buildCartResponse({
         storeId: params.storeId,
+        conversationId: params.conversationId,
         shopifyDomain: params.shopifyDomain,
         productId: hit.shopifyProductId,
         requestedVariantId: product?.variantId,
         quantity: product?.quantity ?? 1,
         message: params.message,
         existingCartLines: params.existingCartLines,
+        attributionSource: "direct",
     })
 }
 
@@ -467,25 +477,30 @@ export async function POST(req: Request) {
         const cartResponse = action
             ? await buildCartResponse({
                   storeId: store.id,
+                  conversationId: conversation.id,
                   shopifyDomain: store.shopifyDomain,
                   productId: action.productId,
                   requestedVariantId: action.variantId,
                   quantity: action.quantity,
                   message: customerContent,
                   existingCartLines,
+                  attributionSource: action.type === "upsell_suggestion" ? "upsell" : "primary",
               })
             : pendingCartProduct && isCartConfirmationMessage(customerContent)
               ? await buildCartResponse({
                     storeId: store.id,
+                    conversationId: conversation.id,
                     shopifyDomain: store.shopifyDomain,
                     productId: pendingCartProduct.productId,
                     requestedVariantId: pendingCartProduct.variantId,
                     quantity: pendingCartProduct.quantity,
                     message: customerContent,
                     existingCartLines,
+                    attributionSource: "primary",
                 })
               : await resolveDirectAddToCart({
                     storeId: store.id,
+                    conversationId: conversation.id,
                     shopifyDomain: store.shopifyDomain,
                     message: customerContent,
                     existingCartLines,

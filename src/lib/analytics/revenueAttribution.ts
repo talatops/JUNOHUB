@@ -23,6 +23,7 @@ type OrderLike = {
     totalPrice: string
     currency: string | null
     lineItems: unknown
+    noteAttributes?: unknown
     shopifyCreatedAt: Date | null
     createdAt: Date
 }
@@ -93,7 +94,24 @@ function orderDate(order: OrderLike): Date {
     return order.shopifyCreatedAt ?? order.createdAt
 }
 
+function noteAttributeValue(raw: unknown, key: string): string | null {
+    if (!Array.isArray(raw)) return null
+    const expected = key.trim().toLowerCase()
+    for (const row of raw) {
+        if (!row || typeof row !== "object") continue
+        const item = row as { name?: unknown; key?: unknown; value?: unknown }
+        const name = asString(item.name ?? item.key)?.toLowerCase()
+        if (name !== expected) continue
+        return asString(item.value)
+    }
+    return null
+}
+
 function orderMatchesConversation(order: OrderLike, conversation: ConversationLike) {
+    const attributedConversationId = noteAttributeValue(order.noteAttributes, "juno_ai_conversation_id")
+    if (attributedConversationId && attributedConversationId === conversation.id) {
+        return true
+    }
     if (conversation.boundShopifyOrderId && conversation.boundShopifyOrderId === order.shopifyOrderId) {
         return true
     }
