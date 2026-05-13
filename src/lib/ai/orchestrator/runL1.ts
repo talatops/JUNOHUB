@@ -21,6 +21,7 @@ import {
     type StorefrontChatAction,
 } from "@/lib/storefront-chat/actions"
 import { findAutomaticUpsellCandidates } from "@/lib/storefront-chat/upsells"
+import { getLinkedUpsellProducts } from "@/lib/ai/tools/upsellLinks"
 import {
     isAutomationEnabled,
     isModuleEnabled,
@@ -56,6 +57,14 @@ const L1_MAX_HISTORY_MESSAGE_CHARS = 2000
 
 const EMPTY_STORE_REFERENCE =
     "(No matching store, order, or product details were retrieved. If the customer asks for specifics you cannot infer, say briefly that you do not have that information and offer to connect them with the team if appropriate.)"
+const STRICT_UPSELL_LINKS =
+    process.env.STRICT_UPSELL_LINKS === undefined
+        ? true
+        : process.env.STRICT_UPSELL_LINKS !== "false"
+const INCLUDE_PRODUCT_RETRIEVAL_DEFAULT =
+    process.env.L1_INCLUDE_PRODUCT_RETRIEVAL === undefined
+        ? true
+        : process.env.L1_INCLUDE_PRODUCT_RETRIEVAL !== "false"
 
 /** Strip NULs and cap length before placing user text inside a delimited prompt block. */
 function packCustomerMessageForPrompt(message: string): string {
@@ -330,6 +339,7 @@ async function composeReply(params: {
     const system = [
         `You are the customer support assistant for ${params.storeName}.`,
         "Ground answers only in the material between STORE_DATA_START and STORE_DATA_END in the user message. Do not invent order numbers, tracking URLs, prices, or inventory counts.",
+        "Only recommend or mention specific products if they are explicitly listed in store data as allowed recommendation candidates. If no allowed recommendation candidates are present, do not suggest additional products.",
         "If you cannot answer because that material does not include what they asked for (counts, totals, tracking, stock, etc.), reply in one or two short, friendly sentences: you do not have that information or cannot look it up right now. Offer human support if it fits the tone.",
         "For general policy questions (shipping time, return window, delivery coverage, refund policy), answer directly from available policy/knowledge text in 2-4 short sentences. Do not ask for order verification unless the user is asking about a specific order.",
         "If both general policy and order-specific interpretations are possible, prefer the general policy interpretation unless the customer explicitly references their own order (for example: 'my order', order number, tracking number).",
@@ -367,6 +377,45 @@ async function composeReply(params: {
         return "Thanks for your message. Our team will get back to you shortly."
     }
     return text
+}
+
+function extractShopifyProductIdsFromLineItems(lineItems: unknown): string[] {
+    const out: string[] = []
+    if (!Array.isArray(lineItems)) return out
+    for (const item of lineItems) {
+        if (!item || typeof item !== "object") continue
+        const row = item as { product_id?: unknown; productId?: unknown; id?: unknown }
+        const candidate = row.product_id ?? row.productId ?? row.id
+        if (candidate === null || candidate === undefined) continue
+        const normalized = String(candidate).trim()
+        if (normalized) out.push(normalized)
+    }
+    return out
+}
+
+function dedupe(values: string[]): string[] {
+    return Array.from(new Set(values.filter(Boolean)))
+}
+
+function sanitizeUpsellText(text: string, allowedTitles: string[]): string {
+    if (!STRICT_UPSELL_LINKS) return text
+    const hasUpsellCue =
+        /\b(also buy|also like|also want|recommend|pair it with|consider adding|goes well with|complement)\b/i.test(
+            text,
+        )
+    if (allowedTitles.length === 0) {
+        return hasUpsellCue
+            ? "I can help with this product question, and if you want add-on recommendations a human specialist can provide tailored options."
+            : text
+    }
+    const lowered = text.toLowerCase()
+    const mentionsAllowed = allowedTitles.some((title) =>
+        lowered.includes(title.toLowerCase()),
+    )
+    if (mentionsAllowed) return text
+    return hasUpsellCue
+        ? "I can help with details for this item. For add-on recommendations, I can connect you with a specialist."
+        : text
 }
 
 function ticketHandoffText(module: L1Module, storeName: string): string {
@@ -422,11 +471,12 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
 
     const modules = parseAiModulesJson(input.aiModulesJson)
     const sharedAnswers = parseSharedFieldAnswersJson(input.sharedFieldAnswersJson)
-    const retrieval = await getBlendedStorefrontContext({
+    let retrieval = await getBlendedStorefrontContext({
         storeId: input.storeId,
         query: effectiveMessage,
+        includeProducts: false,
     })
-    const kbContext =
+    let kbContext =
         retrieval.items.length > 0
             ? retrieval.items
                   .map((i, idx) => `[${idx + 1}] (${i.source}) ${i.title}: ${i.content}`)
@@ -471,6 +521,15 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         input.categoryMetadetailsEnabled !== null
             ? Boolean(input.categoryMetadetailsEnabled)
             : isModuleEnabled(modules, "CATEGORY_METADETAILS")
+    const runProductSearchBase =
+        (activeModule === "PRODUCT_FIT" &&
+            isAutomationEnabled(modules, activeModule, "knowledge")) ||
+        (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule))
+    const allowUpsell =
+        activeModule === "PRODUCT_FIT" &&
+        isAutomationEnabled(modules, activeModule, "knowledge")
+    let allowedUpsellProducts: Awaited<ReturnType<typeof getLinkedUpsellProducts>> = []
+    let allowedUpsellIds: string[] = []
 
     let customerEmail: string | null = null
     if (input.channel === "email") {
@@ -713,6 +772,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
     }
 
     let orderFacts = ""
+    const orderProductIdsFromDetail: string[] = []
     if (
         customerEmail &&
         ORDER_DETAIL_MODULES.includes(activeModule) &&
@@ -746,6 +806,9 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
                     : "Tracking: not available in our cache yet.",
                 `Line items (JSON): ${JSON.stringify(detail.lineItems).slice(0, 4000)}`,
             ]
+            orderProductIdsFromDetail.push(
+                ...extractShopifyProductIdsFromLineItems(detail.lineItems),
+            )
             if (activeModule === "ORDER_CANCEL") {
                 lines.push(
                     "Context: cancellation question — use only the statuses above; do not claim the order was cancelled unless those statuses support it.",
@@ -765,17 +828,12 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
 
     let productFacts = ""
     let productHits: ProductSearchHit[] = []
-    const runProductSearch =
-        (activeModule === "PRODUCT_FIT" &&
-            isAutomationEnabled(modules, activeModule, "knowledge")) ||
-        (activeModule === "INVENTORY_STOCK" && isModuleEnabled(modules, activeModule)) ||
-        (input.channel === "widget" &&
-            retrieval.productCount > 0 &&
-            !ORDER_DETAIL_MODULES.includes(activeModule))
-    if (runProductSearch) {
+    const productCandidateIds: string[] = []
+    if (runProductSearchBase) {
         const hits = await searchProductsForStore(input.storeId, effectiveMessage, 5)
         productHits = hits
         usedTools.push("search_products")
+        productCandidateIds.push(...hits.map((h) => h.shopifyProductId))
         if (hits.length) {
             productFacts = hits
                 .map(
@@ -795,6 +853,45 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         }
     }
 
+    const upsellSeedIds = dedupe([...orderProductIdsFromDetail, ...productCandidateIds])
+    if (allowUpsell && upsellSeedIds.length > 0) {
+        allowedUpsellProducts = await getLinkedUpsellProducts({
+            storeId: input.storeId,
+            sourceProductIds: upsellSeedIds,
+            query: input.message,
+            limit: 6,
+        })
+        allowedUpsellIds = allowedUpsellProducts.map((p) => p.shopifyProductId)
+        if (STRICT_UPSELL_LINKS && allowedUpsellProducts.length > 0) {
+            usedTools.push("upsell_links")
+            productFacts = [
+                productFacts,
+                [
+                    "Allowed recommendation candidates (linked products only):",
+                    ...allowedUpsellProducts.map(
+                        (p) => `- ${p.title} (SKU ${p.sku ?? "n/a"}, ID ${p.shopifyProductId})`,
+                    ),
+                ].join("\n"),
+            ]
+                .filter(Boolean)
+                .join("\n\n")
+        }
+    }
+
+    retrieval = await getBlendedStorefrontContext({
+        storeId: input.storeId,
+        query: input.message,
+        includeProducts: INCLUDE_PRODUCT_RETRIEVAL_DEFAULT && allowUpsell,
+        allowedProductIds:
+            STRICT_UPSELL_LINKS && allowUpsell ? allowedUpsellIds : undefined,
+    })
+    kbContext =
+        retrieval.items.length > 0
+            ? retrieval.items
+                  .map((i, idx) => `[${idx + 1}] (${i.source}) ${i.title}: ${i.content}`)
+                  .join("\n")
+            : ""
+
     const facts = [
         type1Facts,
         kbContext ? `Knowledge:\n${kbContext}` : "",
@@ -810,6 +907,10 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         message: effectiveMessage,
         history: historyToGroq(input.history),
     })
+    const safeText = sanitizeUpsellText(
+        text,
+        allowedUpsellProducts.map((p) => p.title),
+    )
 
     const actions: StorefrontChatAction[] = []
     let pendingCartProduct: StorefrontActionProduct | null = null
@@ -838,10 +939,12 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
         module: activeModule,
         pillar,
         usedTools,
+        allowedUpsellCount: allowedUpsellProducts.length,
+        allowedUpsellProductIds: allowedUpsellProducts.map((p) => p.shopifyProductId),
     })
 
     return {
-        text,
+        text: safeText,
         actions,
         pendingCartProduct,
         meta: {
@@ -850,6 +953,7 @@ export async function runL1Orchestrator(input: RunL1Input): Promise<RunL1Result>
             usedTools,
             kbHits: retrieval.kbCount,
             productHits: retrieval.productCount,
+            allowedUpsellCount: allowedUpsellProducts.length,
         },
     }
 }

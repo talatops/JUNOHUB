@@ -36,6 +36,8 @@ interface TicketData {
 export default function TicketsPage() {
     const router = useRouter()
     const [searchTerm, setSearchTerm] = useState("")
+    const [showFilters, setShowFilters] = useState(false)
+    const [statusFilter, setStatusFilter] = useState<"all" | "open" | "pending" | "resolved" | "closed">("all")
     const [tickets, setTickets] = useState<TicketData[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
@@ -45,7 +47,11 @@ export default function TicketsPage() {
             try {
                 setLoading(true)
                 setError(null)
-                const res = await fetch("/api/juno-engine/tickets", {
+                const query = searchTerm.trim()
+                const url = query
+                    ? `/api/juno-engine/tickets?q=${encodeURIComponent(query)}`
+                    : "/api/juno-engine/tickets"
+                const res = await fetch(url, {
                     cache: "no-store",
                 })
                 if (!res.ok) {
@@ -62,7 +68,7 @@ export default function TicketsPage() {
         }
 
         void loadTickets()
-    }, [])
+    }, [searchTerm])
 
     const getStatusStyles = (status: TicketStatus | string) => {
         switch (status) {
@@ -75,13 +81,8 @@ export default function TicketsPage() {
     }
 
     const filteredTickets = tickets.filter((ticket) => {
-        if (!searchTerm.trim()) return true
-        const q = searchTerm.toLowerCase()
-        return (
-            ticket.subject.toLowerCase().includes(q) ||
-            ticket.customerEmail.toLowerCase().includes(q) ||
-            ticket.id.toLowerCase().includes(q)
-        )
+        if (statusFilter === "all") return true
+        return (ticket.status || "").toLowerCase() === statusFilter
     })
 
     return (
@@ -95,7 +96,10 @@ export default function TicketsPage() {
                     </p>
                 </div>
                 <div className="flex gap-2">
-                    <button className="h-10 md:h-11 px-4 bg-white/10 border border-white/10 rounded-xl font-bold text-slate-300 hover:bg-white/15 transition-all flex items-center justify-center gap-2 text-sm shrink-0">
+                    <button
+                        onClick={() => setShowFilters((prev) => !prev)}
+                        className="h-10 md:h-11 px-4 bg-white/10 border border-white/10 rounded-xl font-bold text-slate-300 hover:bg-white/15 transition-all flex items-center justify-center gap-2 text-sm shrink-0"
+                    >
                         <Filter className="w-4 h-4" /> Filters
                     </button>
                 </div>
@@ -114,6 +118,24 @@ export default function TicketsPage() {
                     />
                 </div>
             </div>
+            {showFilters && (
+                <div className="flex flex-wrap items-center gap-2">
+                    {(["all", "open", "pending", "resolved", "closed"] as const).map((status) => (
+                        <button
+                            key={status}
+                            type="button"
+                            onClick={() => setStatusFilter(status)}
+                            className={`h-8 px-3 rounded-lg text-xs font-bold uppercase tracking-wider ${
+                                statusFilter === status
+                                    ? "bg-indigo-600 text-white"
+                                    : "bg-white/10 text-slate-300 border border-white/10"
+                            }`}
+                        >
+                            {status}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* Tickets Grid */}
             <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0">
@@ -153,7 +175,10 @@ export default function TicketsPage() {
                                             </p>
                                         </div>
                                     </div>
-                                    <button className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all shrink-0">
+                                    <button
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-indigo-400 transition-all shrink-0"
+                                    >
                                         <MoreHorizontal className="w-4 h-4" />
                                     </button>
                                 </div>

@@ -1,0 +1,183 @@
+\chapter{Introduction}
+\label{sec:introduction}
+
+JUNO is a role-based commerce operations platform developed for Shopify-centered dropshipping businesses. The implemented system combines three operational surfaces: a vendor portal, a supplier portal, and an admin observability area, with AI-assisted communication and ticketing workflows connected to store data.
+
+In many small and mid-size dropshipping operations, communication is scattered across inboxes, chat threads, and spreadsheets. This creates delays in supplier coordination, missing context in customer responses, stale product/price information, and poor traceability of decisions. JUNO addresses this by enforcing structured relationships between vendors and suppliers, maintaining synchronized commerce data, and adding AI features where repetitive communication causes the highest operational load.
+
+Unlike a standalone chatbot or a basic ticket dashboard, JUNO is implemented as a workflow system: users, stores, supplier profiles, connections, products, sync requests, offers, notifications, and AI-assisted replies are all linked through a single data model. This allows the platform to support both business operations (inventory/offers/sync status) and support operations (storefront chat, Gmail handling, ticket escalation) in one environment.
+
+\section{Project Context and Actors}
+
+The system defines and enforces three core roles.
+
+\begin{table}[H]
+\centering
+\caption{Core Roles in JUNO}
+\begin{tabular}{|c|p{5cm}|p{5cm}|}
+\hline
+\textbf{Actor} & \textbf{Description} & \textbf{Main Responsibilities in JUNO} \\ \hline
+Vendor & Shopify merchant/store owner using JUNO as the operational center. & Onboard store credentials, monitor products and orders, connect with suppliers, request product sync, use AI support tools, and handle customer-side workflows. \\ \hline
+Supplier & Product provider connected to one or more vendors. & Manage supplier catalog, accept/reject product sync requests, create/update vendor-specific offers, and respond to vendor coordination needs. \\ \hline
+Admin & Platform operations and governance role. & Observe system health, events, connections, product sync trends, order-level signals, and email activity (observability-focused behavior). \\ \hline
+\end{tabular}
+\label{tab:core_roles}
+\end{table}
+
+\section{Existing Solutions}
+
+A review of currently used approaches shows that existing tools usually solve one part of the workflow but not the complete vendor-supplier-support loop.
+
+\begin{table}[H]
+\centering
+\caption{Comparison of Existing Solutions}
+\begin{tabular}{|c|p{5cm}|p{5cm}|}
+\hline
+\textbf{System Name} & \textbf{System Overview} & \textbf{System Limitations Compared to JUNO} \\ \hline
+Generic Helpdesk Platforms & Centralize incoming support conversations and ticket assignments. & Limited direct linkage to vendor-supplier product workflows, weak per-store commerce context, and no native supplier collaboration model. \\ \hline
+Spreadsheet + Messaging Operations & Teams coordinate pricing, stock, and issue resolution in sheets plus chat apps. & No reliable source of truth, high risk of outdated values, poor auditability, and heavy manual follow-up. \\ \hline
+Single-Function Shopify Apps & Apps offer one feature such as product sync, notifications, or chatbot widgets. & Fragmented architecture; weak cross-feature continuity between product offers, ticket escalation, and AI-driven communication. \\ \hline
+\end{tabular}
+\label{tab:system_comparison}
+\end{table}
+
+\section{Problem Statement}
+
+Shopify-based dropshipping operations depend on fast and accurate communication between customers, vendors, and suppliers, but these interactions are often spread across disconnected tools. Customer conversations may happen in email or storefront chat, vendor actions in internal dashboards, and supplier coordination in informal message threads. This separation causes context loss, delayed updates, and inconsistent decision-making.
+
+The project identifies five core problems. First, \textbf{communication fragmentation} increases response time and handoff errors. Second, \textbf{repetitive support workload} (order status, shipping, returns, cancellations) consumes team capacity and reduces consistency under high volume. Third, \textbf{weak vendor-supplier alignment} in product synchronization and offer updates leads to outdated price/quantity data and margin risk. Fourth, \textbf{limited prioritization and risk handling} causes critical conversations to be treated like routine ones. Fifth, \textbf{insufficient role-aware visibility} makes it harder to monitor operational health and improve processes proactively.
+
+Together, these issues reduce operational efficiency and customer satisfaction. JUNO addresses them through a unified, role-based platform that combines structured collaboration, commerce data workflows, AI-assisted communication, and monitoring, while keeping human oversight for sensitive cases.
+
+\section{Scope}
+
+The scope of this project defines what will be included and excluded, helping to set clear expectations for the reader. This section outlines the boundaries and limitations of the development project.
+
+\subsection{In-Scope Features (Implemented)}
+
+\begin{itemize}
+    \item Multi-role authentication and role-gated workspaces for vendor, supplier, and admin usage.
+    \item Vendor store onboarding with Shopify credentials and webhook registration.
+    \item Supplier connection lifecycle and invitation/approval style relationship management.
+    \item Product collaboration workflows:
+    \begin{itemize}
+        \item vendor product sync requests,
+        \item supplier-side sync decisions,
+        \item supplier product offers with vendor-specific values.
+    \end{itemize}
+    \item Commerce cache handling for products, orders, and customers from Shopify webhooks.
+    \item Notification system for operational events (including sync and offer changes).
+    \item AI-powered support layer including:
+    \begin{itemize}
+        \item storefront chat message handling,
+        \item knowledge base retrieval with vector search,
+        \item Gmail webhook-based auto-reply pipeline,
+        \item ticket generation/escalation paths.
+    \end{itemize}
+    \item Admin observability dashboards for system-level monitoring.
+\end{itemize}
+
+\subsection{Out-of-Scope or Current Constraints}
+
+\begin{itemize}
+    \item Full social-channel unification (all messaging channels are not fully production-integrated).
+    \item Complete enterprise BI/reporting suite beyond current operational dashboards.
+    \item High-throughput asynchronous ingestion for all knowledge workflows (some processing remains request-time).
+\end{itemize}
+
+\section{Modules}
+
+The implemented architecture can be described through five major modules. The modules are logically organized to reflect the overall system workflow, ensuring that each module description is comprehensive but concise.
+
+\subsection{Identity, Access, and Workspace Module}
+
+This module handles user identity, role separation, and active-store context required by other modules.
+
+\begin{enumerate}
+    \item Role-based access for vendor, supplier, and admin flows.
+    \item Store-scoped operations for vendor actions.
+    \item Foundation for role-aware API guards and layout routing.
+\end{enumerate}
+
+\subsection{Vendor-Supplier Collaboration Module}
+
+This is the operational core that formalizes business relationships and product-level collaboration.
+
+\begin{enumerate}
+    \item Vendor-supplier connection and invitation lifecycle.
+    \item Product sync request workflow (\texttt{PENDING}, \texttt{ACCEPTED}, \texttt{REJECTED}).
+    \item Supplier product offers with per-vendor pricing/quantity control.
+    \item Change visibility for vendors through notifications and new-product style views.
+\end{enumerate}
+
+\subsection{Commerce Sync and Operational Data Module}
+
+This module keeps JUNO aligned with Shopify events and provides normalized internal data for workflows and AI features.
+
+\begin{enumerate}
+    \item Shopify webhook verification and event consumption.
+    \item Cached product/order/customer updates for store context.
+    \item Sync metadata tracking and health-oriented operational signals.
+    \item Trigger points for inventory and notification logic.
+\end{enumerate}
+
+\subsection{AI Helpdesk and Automation Module (JUNOCHAT / Juno Engine)}
+
+This module provides AI-assisted communication across storefront and email channels using configurable providers and retrieval workflows.
+
+\begin{enumerate}
+    \item Storefront conversation handling with AI response generation.
+    \item Knowledge base indexing and query-time semantic retrieval using embeddings.
+    \item Gmail inbound processing with classification, safety checks, and auto-reply behavior.
+    \item Ticket and escalation workflow integration for unresolved or sensitive cases.
+    \item Supplier-contact automation from ticket/order context in selected flows.
+\end{enumerate}
+
+\subsection{Admin Observability and Governance Module}
+
+This module offers cross-system visibility for operations monitoring and diagnosis.
+
+\begin{enumerate}
+    \item Overview of stores, connections, sync activity, orders, and email events.
+    \item Event and trend visibility for platform operations.
+    \item Read-oriented governance layer for monitoring and auditing.
+\end{enumerate}
+
+\section{Work Division}
+
+The following work-division model reflects responsibilities typically needed to deliver the currently implemented system.
+
+\begin{table}[H]
+\centering
+\caption{Work Division}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|p{0.25\textwidth}|p{0.75\textwidth}|}
+\hline
+\textbf{Team Member} & \textbf{Responsibilities} \\ \hline
+Syed Saad Mohsin (Frontend + UX + QA) & Build vendor/supplier/admin interfaces, maintain role-based UX flows, and execute UI/functional testing across major user journeys. \\ \hline
+Talat Faheem (Backend + Database) & Implement APIs, business workflows, webhook handlers, and notifications; manage Prisma schema, relations, migrations, and data consistency. \\ \hline
+Muhammad Usman (AI + DevOps + Integration) & Implement AI orchestration/retrieval/safety flows, maintain provider and prompt behavior, and manage deployment, environment, and CI/CD operations. \\ \hline
+\end{tabular}%
+}
+\label{tab:work_division}
+\end{table}
+
+\section{User Class Table}
+
+The following table summarizes the primary user classes that interact with JUNO and how they use the platform.
+
+\begin{table}[H]
+\centering
+\caption{User Classes}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|p{0.15\textwidth}|p{0.40\textwidth}|p{0.45\textwidth}|}
+\hline
+\textbf{User Class} & \textbf{Description} & \textbf{Key Interactions with System} \\ \hline
+Vendor & Shopify store owner or operator using JUNO for day-to-day dropshipping operations. & Onboarding store, viewing products/orders/customers, requesting product sync, coordinating with suppliers, handling AI-assisted support workflows. \\ \hline
+Supplier & Product fulfillment partner connected to one or more vendors. & Managing supplier catalog, responding to sync requests, sending/updating product offers, and coordinating order-related communication with vendors. \\ \hline
+Admin & Internal operations/governance user with platform-wide visibility. & Monitoring stores, events, sync activity, and email/system health through observability-focused admin dashboards. \\ \hline
+End Customer (External) & Customer purchasing from a vendor's Shopify store (indirect user). & Interacts through storefront chat or email channels that are processed by JUNO's support automation and ticketing workflows. \\ \hline
+\end{tabular}%
+}
+\label{tab:user_classes}
+\end{table}

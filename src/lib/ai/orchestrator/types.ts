@@ -55,4 +55,5 @@ export type L1RunMeta = {
     usedTools: string[]
     kbHits?: number
     productHits?: number
+    allowedUpsellCount?: number
 }

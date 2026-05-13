@@ -71,6 +71,7 @@ export async function POST(req: Request) {
                 storeId,
                 isAutomated: false,
                 trigger: "TICKET_CUSTOMER_REPLY",
+                metadata: { ticketId: parsed.data.ticketId, channel: "vendor_reply" },
             },
         )
 

@@ -56,6 +56,7 @@ export async function generateStorefrontReply(params: {
         queryLength: query.length,
         kbHits: result.meta.kbHits,
         productHits: result.meta.productHits,
+        allowedUpsellCount: result.meta.allowedUpsellCount ?? 0,
         latencyMs: Date.now() - startedAt,
         module: result.meta.module,
         pillar: result.meta.pillar,
@@ -68,6 +69,7 @@ export async function generateStorefrontReply(params: {
         meta: {
             kbHits: result.meta.kbHits,
             productHits: result.meta.productHits,
+            allowedUpsellCount: result.meta.allowedUpsellCount,
             fallbackUsed: false,
             module: result.meta.module,
             pillar: result.meta.pillar,

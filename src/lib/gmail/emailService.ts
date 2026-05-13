@@ -6,6 +6,8 @@ type SendGmailReplyOptions = {
     storeId?: string | null
     isAutomated?: boolean
     trigger?: string
+    metadata?: unknown
+    storefrontConversationId?: string | null
     /**
      * Original RFC 2822 Message-ID header of the email we are replying to.
      * Used for proper threading in recipients' inboxes via In-Reply-To/References.
@@ -98,6 +100,8 @@ export async function sendGmailReply(
             to,
             subject,
             bodyPreview,
+            metadata: options.metadata,
+            storefrontConversationId: options.storefrontConversationId ?? null,
             isAutomated: options.isAutomated ?? false,
             trigger: options.trigger,
         }

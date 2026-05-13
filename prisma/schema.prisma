@@ -187,11 +187,13 @@ model Store {
   lowStockAlertStates              LowStockAlertState[]
   lowStockShopifyVendorAlertStates LowStockShopifyVendorAlertState[]
   supplierAutomationLogs           SupplierAutomationLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId]) // Add index for performance
+  upsellProductLinksFrom UpsellProductLink[] @relation("UpsellLinksFromStore")
+  upsellProductLinksTo UpsellProductLink[] @relation("UpsellLinksToStore")
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([userId])  // Add index for performance
 }
 
 /**
@@ -576,6 +578,8 @@ model EmailLog {
   to          String
   subject     String
   bodyPreview String?
+  metadata    Json?
+  storefrontConversationId String?
 
   // Whether this email was triggered automatically by the system
   isAutomated Boolean @default(false)
@@ -590,6 +594,25 @@ model EmailLog {
 
   @@index([storeId, sentAt])
   @@index([userId, sentAt])
+  @@index([storeId, storefrontConversationId, sentAt])
+}
+
+model UpsellProductLink {
+  id String @id @default(cuid())
+  storeId String
+  store Store @relation("UpsellLinksFromStore", fields: [storeId], references: [id], onDelete: Cascade)
+  sourceShopifyProductId String
+  targetShopifyProductId String
+  targetStoreId String?
+  targetStore Store? @relation("UpsellLinksToStore", fields: [targetStoreId], references: [id], onDelete: SetNull)
+  notes String?
+  isActive Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeId, sourceShopifyProductId, targetShopifyProductId])
+  @@index([storeId, sourceShopifyProductId, isActive])
+  @@index([storeId, targetShopifyProductId, isActive])
 }
 
 enum FlaggedEmailPriority {

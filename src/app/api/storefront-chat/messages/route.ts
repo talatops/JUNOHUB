@@ -78,6 +78,20 @@ function buildOrderScopedTicketSubject(moduleName?: string, orderNumber?: string
     return `${base} - Order ${clean}`
 }
 
+const MAX_STOREFRONT_TICKET_TRANSCRIPT_CHARS = 12000
+function formatStorefrontTranscript(
+    rows: Array<{ senderType: "CUSTOMER" | "AI"; content: string; createdAt: Date }>,
+): string {
+    const lines = rows.map((row) => {
+        const role = row.senderType === "CUSTOMER" ? "CUSTOMER" : "ASSISTANT"
+        const when = row.createdAt.toISOString()
+        return `[${when}] ${role}: ${row.content}`
+    })
+    const full = lines.join("\n")
+    if (full.length <= MAX_STOREFRONT_TICKET_TRANSCRIPT_CHARS) return full
+    return full.slice(full.length - MAX_STOREFRONT_TICKET_TRANSCRIPT_CHARS)
+}
+
 function shouldCreateEscalationTicket(ai: { content: string; meta?: { usedTools?: string[]; module?: string } }): boolean {
     if (Array.isArray(ai.meta?.usedTools) && ai.meta.usedTools.includes("ticket_intake")) {
         return true
@@ -759,6 +773,24 @@ export async function POST(req: Request) {
                     where: { id: store.id },
                     select: { userId: true },
                 })
+                const transcriptRows = await prisma.storefrontChatMessage.findMany({
+                    where: { conversationId: conversation.id },
+                    orderBy: { createdAt: "asc" },
+                    take: 240,
+                    select: {
+                        senderType: true,
+                        content: true,
+                        createdAt: true,
+                    },
+                })
+                const transcript = formatStorefrontTranscript(transcriptRows)
+                const escalationMetadata = {
+                    channel: "storefront",
+                    module: ai.meta?.module || null,
+                    usedTools: ai.meta?.usedTools || [],
+                    visitorId,
+                    conversationId: conversation.id,
+                }
                 if (owner?.userId) {
                     await prisma.emailLog.create({
                         data: {
@@ -766,7 +798,9 @@ export async function POST(req: Request) {
                             storeId: store.id,
                             to: ticketTo,
                             subject: ticketSubject,
-                            bodyPreview: customerContent.slice(0, 2000),
+                            bodyPreview: transcript,
+                            metadata: escalationMetadata,
+                            storefrontConversationId: conversation.id,
                             isAutomated: true,
                             trigger: STOREFRONT_TICKET_TRIGGER,
                             status: "SENT",

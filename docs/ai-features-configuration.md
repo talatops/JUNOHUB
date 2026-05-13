@@ -24,13 +24,13 @@ Relevant store fields on this path: `businessName`, `email`, `aiModules`, `modul
 
 Single implementation for **widget** and **email**:
 
-1. **Retrieval** — [`getBlendedStorefrontContext`](../src/lib/storefront-chat/retrieval.ts) blends knowledge chunks / FAQs for the prompt context.
+1. **Retrieval** — [`getBlendedStorefrontContext`](../src/lib/storefront-chat/retrieval.ts) always retrieves KB/FAQ and only includes products when the active module allows it. In strict mode, product retrieval is constrained to linked upsell candidates.
 2. **Intent → module** — [`routeCustomerIntent`](../src/lib/ai/orchestrator/intentRouter.ts) (Groq JSON) maps the customer message to an [`L1Module`](../src/lib/ai/orchestrator/types.ts).
 3. **Module gating** — [`parseAiModulesJson`](../src/lib/ai/orchestrator/aiModules.ts) + [`isModuleEnabled`](../src/lib/ai/orchestrator/aiModules.ts). Disabled modules fall back to **FAQ**. **`FAQ` is always treated as enabled** (cannot be turned off via JSON). **`UNKNOWN`** stays enabled for routing stability.
 4. **Pillar** — Each module has a pillar in [`MODULE_MANIFESTS`](../src/lib/ai/orchestrator/manifests.ts): `K` (knowledge), `T` (transactional / DB), `X` (ticket handoff copy), `CAT` (catalog metafields).
 5. **Verification** — Widget: OTP-verified session on [`StorefrontChatConversation`](../prisma/schema.prisma) (asserted email + expiry). Email: trust `From` as customer email for order lookup (see `runL1` and order tools).
-6. **Tools** — Orders: [`orderTools`](../src/lib/ai/tools/orderTools.ts). Products: [`productTools`](../src/lib/ai/tools/productTools.ts) for search + product metafield summaries in L1 (no separate category-metadetails path in the vendor UI).
-7. **Reply** — Mostly [`composeReply`](../src/lib/ai/orchestrator/runL1.ts) (Groq) over assembled facts. For pillar **`X`**, the customer sees fixed **handoff** copy from `ticketHandoffText` — **no ticket row is created in the database**.
+6. **Tools** — Orders: [`orderTools`](../src/lib/ai/tools/orderTools.ts). Products: [`productTools`](../src/lib/ai/tools/productTools.ts). Linked upsell allowlist: [`upsellLinks`](../src/lib/ai/tools/upsellLinks.ts) backed by `UpsellProductLink` + optional `juno.upsell_links` metafields.
+7. **Reply** — Mostly [`composeReply`](../src/lib/ai/orchestrator/runL1.ts) (Groq) over assembled facts. Strict guardrails prevent recommending products outside linked allowlist and strip generic upsell language when no linked candidates exist.
 
 Vendor UI for `aiModules` and `modulePolicies`: dashboard **JUNO Engine → Modules**; persistence via `GET`/`PATCH` [`/api/stores/[storeId]`](../src/app/api/stores/[storeId]/route.ts).
 
@@ -43,7 +43,7 @@ Module toggles do **not** turn off the knowledge base; they only restrict which 
 
 ## Known gaps (intentional follow-ups)
 
-1. **Ticket-led (`X`) flows** — The orchestrator acknowledges and promises human follow-up but **does not create a ticket entity**. Vendor **Tickets** in the dashboard are derived from [`EmailLog`](../src/app/api/juno-engine/tickets/route.ts), not from L1.
+1. **Ticket-led (`X`) flows** — Vendor **Tickets** are derived from [`EmailLog`](../src/app/api/juno-engine/tickets/route.ts), not a separate ticket table. Storefront escalations now persist the full storefront transcript and conversation linkage metadata on the `EmailLog` row.
 2. **Spec vs router** — Vendor policy text is stored per [`L1Module`](../src/lib/ai/orchestrator/types.ts) in `Store.modulePolicies` (AI modules UI). The [`intentRouter`](../src/lib/ai/orchestrator/intentRouter.ts) only emits declared modules. Extending automation requires adding a module in types, `MODULE_MANIFESTS`, `DEFAULT_ENABLED` in `aiModules.ts`, and orchestrator branches in `runL1.ts`.
 3. **Gmail vs widget parity** — Same L1 core; Gmail adds a pre-L1 classification layer and different skip rules for when L1 runs.
 
@@ -51,3 +51,6 @@ Module toggles do **not** turn off the knowledge base; they only restrict which 
 
 - Groq and related env vars are used by `groqClient`, `gmailGroq`, `intentRouter`, and `composeReply`.
 - Rate limits and leases for Gmail inbound: [`gmailAutoReplyGuards`](../src/lib/gmail/gmailAutoReplyGuards.ts).
+- Upsell safety flags:
+  - `STRICT_UPSELL_LINKS` (default `true`) blocks out-of-policy upsells.
+  - `L1_INCLUDE_PRODUCT_RETRIEVAL` (default `true`) controls whether product snippets can enter retrieval context (still module-gated).

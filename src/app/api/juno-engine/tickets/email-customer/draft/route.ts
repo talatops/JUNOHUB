@@ -5,21 +5,11 @@ import { isVendorPortalRole } from "@/lib/auth-roles"
 import { prisma } from "@/lib/prisma"
 import { logger } from "@/lib/logger"
 import { draftCustomerReply } from "@/lib/automation/draftCustomerReply"
+import { getTicketThreadForStore } from "@/lib/tickets/emailLogTickets"
 
 const bodySchema = z.object({
     ticketId: z.string().trim().min(1).max(600),
 })
-
-function normalizeSubject(subject: string | null): string {
-    if (!subject) return "No subject"
-    let s = subject.trim()
-    while (true) {
-        const match = s.match(/^(re|fw|fwd):\s*/i)
-        if (!match) break
-        s = s.slice(match[0].length).trim()
-    }
-    return s || "No subject"
-}
 
 function stripStorefrontEscalationPrefix(text: string): string {
     return text.replace(/^Storefront escalation from visitor [^:]+:\s*/i, "").trim()
@@ -70,33 +60,12 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: "No active store" }, { status: 400 })
         }
 
-        const splitAt = parsed.data.ticketId.indexOf("::")
-        const customerEmailRaw =
-            splitAt >= 0 ? parsed.data.ticketId.slice(0, splitAt) : parsed.data.ticketId
-        const rootSubjectRaw = splitAt >= 0 ? parsed.data.ticketId.slice(splitAt + 2) : ""
-        const customerEmail = (customerEmailRaw || "").trim().toLowerCase()
-        const rootSubject = (rootSubjectRaw || "").trim()
-        if (!customerEmail || !rootSubject) {
-            return NextResponse.json({ message: "Invalid ticket id" }, { status: 400 })
-        }
-
-        const logs = await prisma.$queryRaw<
-            Array<{ subject: string | null; bodyPreview: string | null; sentAt: Date; trigger: string | null }>
-        >`
-            SELECT subject, "bodyPreview", "sentAt", trigger
-            FROM "EmailLog"
-            WHERE "storeId" = ${store.id}
-              AND LOWER(TRIM("to")) = ${customerEmail}
-            ORDER BY "sentAt" DESC
-            LIMIT 80
-        `
-
-        const matched = logs.filter((l) => normalizeSubject(l.subject) === rootSubject).slice(0, 12)
-        if (matched.length === 0) {
+        const ticket = await getTicketThreadForStore(store.id, parsed.data.ticketId)
+        if (!ticket) {
             return NextResponse.json({ message: "No ticket messages found" }, { status: 404 })
         }
 
-        const conversation = matched
+        const conversation = ticket.messages
             .reverse()
             .map((m, idx) => {
                 const body = stripStorefrontEscalationPrefix((m.bodyPreview || "").trim())
@@ -107,8 +76,8 @@ export async function POST(req: Request) {
 
         const drafted = await draftCustomerReply({
             storeName: store.businessName || "Our store",
-            customerEmail,
-            ticketSubject: rootSubject,
+            customerEmail: ticket.customerEmail,
+            ticketSubject: ticket.rootSubject,
             conversation,
         })
 

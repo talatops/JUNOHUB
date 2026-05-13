@@ -116,7 +116,6 @@ export function productSearchHitToActionProduct(hit: ProductSearchHit): Storefro
         quantity: 1,
     }
 }
-
 /**
  * Keyword search by title / SKU across cached products (MVP; no full-text index).
  */
@@ -133,7 +132,7 @@ export async function searchProductsForStore(
         const products = await prisma.cachedProduct.findMany({
             where: { storeId },
             orderBy: { updatedAt: "desc" },
-            take: 400,
+            take: 2000,
             select: {
                 shopifyProductId: true,
                 title: true,
@@ -217,7 +216,7 @@ export async function getProductMetafieldsForL1(
             where: { storeId, shopifyProductId },
             select: { metafields: true },
         })
-        return { metafieldsSummary: metafieldsToSummary(row?.metafields) }
+        return { metafieldsSummary: metafieldsToSummary(row?.metafields) || null }
     } catch (e) {
         logger.error("getProductMetafieldsForL1 failed", e)
         return { metafieldsSummary: null }

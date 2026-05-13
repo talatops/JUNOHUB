@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
@@ -66,6 +66,7 @@ export default function TicketDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedMessages, setExpandedMessages] = useState<Record<string, boolean>>({})
+  const [chronological, setChronological] = useState(true)
 
   const [orderRefInput, setOrderRefInput] = useState("")
   const [askPreviewLoading, setAskPreviewLoading] = useState(false)
@@ -83,25 +84,45 @@ export default function TicketDetailPage() {
   const [sendingCustomer, setSendingCustomer] = useState(false)
   const [customerError, setCustomerError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const loadTicket = async () => {
+  const loadTicket = useCallback(async () => {
       try {
         setLoading(true)
         setError(null)
-
-        const res = await fetch("/api/juno-engine/tickets", {
-          cache: "no-store",
-        })
-        if (!res.ok) {
-          throw new Error("Failed to load ticket")
-        }
-        const data = (await res.json()) as { tickets: TicketData[] }
         const decodedId = decodeURIComponent(params.ticketId)
-        const found = data.tickets.find((t) => t.id === decodedId) || null
-        if (!found) {
+        let cursor: string | null = null
+        let mergedTicket: TicketData | null = null
+        while (true) {
+          const url = cursor
+            ? `/api/juno-engine/tickets/${encodeURIComponent(decodedId)}?limit=100&before=${encodeURIComponent(cursor)}`
+            : `/api/juno-engine/tickets/${encodeURIComponent(decodedId)}?limit=100`
+          const res = await fetch(url, {
+            cache: "no-store",
+          })
+          if (!res.ok) {
+            throw new Error("Failed to load ticket")
+          }
+          const data = (await res.json()) as { ticket: TicketData; nextCursor?: string | null }
+          if (!data.ticket) break
+          if (!mergedTicket) {
+            mergedTicket = { ...data.ticket, messages: [...(data.ticket.messages || [])] }
+          } else {
+            mergedTicket.messages.push(...(data.ticket.messages || []))
+            mergedTicket.messagesCount = mergedTicket.messages.length
+          }
+          if (!data.nextCursor) break
+          cursor = data.nextCursor
+        }
+        if (!mergedTicket) {
           setError("Ticket not found.")
         } else {
-          setTicket(found)
+          setTicket(mergedTicket)
+          const defaults: Record<string, boolean> = {}
+          for (const m of mergedTicket.messages || []) {
+            if (m.trigger === "STOREFRONT_TICKET") {
+              defaults[m.id] = true
+            }
+          }
+          setExpandedMessages(defaults)
         }
       } catch (err) {
         console.error("Failed to load ticket", err)
@@ -109,10 +130,11 @@ export default function TicketDetailPage() {
       } finally {
         setLoading(false)
       }
-    }
-
-    void loadTicket()
   }, [params.ticketId])
+
+  useEffect(() => {
+    void loadTicket()
+  }, [loadTicket])
 
   useEffect(() => {
     if (!ticket) return
@@ -277,6 +299,7 @@ export default function TicketDetailPage() {
       setCustomerModalOpen(false)
       setCustomerBody("")
       setCustomerError(null)
+      await loadTicket()
     } catch (e) {
       setCustomerError(e instanceof Error ? e.message : "Send failed")
     } finally {
@@ -286,6 +309,14 @@ export default function TicketDetailPage() {
 
   const cleanDisplayText = (text: string): string =>
     text.replace(/^Storefront escalation from visitor [^:]+:\s*/i, "").trim()
+
+  const sourceLabel = (trigger: string | null): string => {
+    if (trigger === "GMAIL_INCOMING") return "Email inbound"
+    if (trigger === "TICKET_CUSTOMER_REPLY") return "Vendor email"
+    if (trigger === "STOREFRONT_TICKET") return "Storefront escalation"
+    if (trigger === "AI_L1_REPLY") return "AI auto-reply"
+    return trigger ? trigger.toLowerCase().replace(/_/g, " ") : "System"
+  }
 
   const getStatusStyles = (status: TicketStatus | string) => {
     switch (status) {
@@ -384,6 +415,34 @@ export default function TicketDetailPage() {
                 isLight ? "bg-white border-slate-200" : "bg-white/5 border-white/10",
               )}
             >
+              <button
+                type="button"
+                onClick={() => setChronological((prev) => !prev)}
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold text-xs inline-flex items-center gap-2 border transition-colors",
+                  isLight
+                    ? "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+                    : "bg-white/10 text-white border-white/10 hover:bg-white/15",
+                )}
+              >
+                {chronological ? "Newest first" : "Oldest first"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setExpandedMessages(
+                    Object.fromEntries((ticket.messages || []).map((m) => [m.id, true])),
+                  )
+                }
+                className={cn(
+                  "h-9 px-3 rounded-lg font-bold text-xs inline-flex items-center gap-2 border transition-colors",
+                  isLight
+                    ? "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+                    : "bg-white/10 text-white border-white/10 hover:bg-white/15",
+                )}
+              >
+                Expand all
+              </button>
               <button
                 type="button"
                 onClick={() => setSupplierModalOpen(true)}
@@ -770,7 +829,7 @@ export default function TicketDetailPage() {
 
             {/* Conversation timeline - Full width corners chat style */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-4 -mr-4 space-y-8 pb-10 custom-scrollbar">
-              {ticket.messages.map((message) => {
+              {(chronological ? [...ticket.messages].reverse() : ticket.messages).map((message) => {
                 const isIncoming =
                   message.trigger === "GMAIL_INCOMING" || message.status === "RECEIVED"
 
@@ -825,6 +884,20 @@ export default function TicketDetailPage() {
                           >
                             {message.status}
                           </span>
+                          <span
+                            className={cn(
+                              "px-2.5 py-0.5 rounded-md text-[9px] font-black tracking-widest uppercase border",
+                              isIncoming
+                                ? isLight
+                                  ? "bg-indigo-50 border-indigo-100 text-indigo-700"
+                                  : "bg-indigo-500/20 text-indigo-200 border-indigo-400/20"
+                                : isLight
+                                  ? "bg-white border-indigo-200 text-indigo-700"
+                                  : "bg-white/10 text-indigo-100 border-white/10",
+                            )}
+                          >
+                            {sourceLabel(message.trigger)}
+                          </span>
                         </div>
                         <span className={cn(
                           "text-[10px] whitespace-nowrap font-bold",
@@ -832,9 +905,9 @@ export default function TicketDetailPage() {
                             ? (isLight ? "text-slate-400" : "text-slate-500")
                             : "text-indigo-200"
                         )}>
-                          {new Date(message.sentAt).toLocaleTimeString(undefined, {
-                            hour: "2-digit",
-                            minute: "2-digit",
+                          {new Date(message.sentAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
                           })}
                         </span>
                       </div>

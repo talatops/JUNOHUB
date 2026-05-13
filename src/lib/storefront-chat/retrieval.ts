@@ -1,4 +1,12 @@
 import { prisma } from "@/lib/prisma"
+import {
+    compactText,
+    isProductStatusSellable,
+    metafieldsToSummary,
+    primarySkuFromVariants,
+    scoreByTerms,
+    tokenizeSearchTerms,
+} from "@/lib/ai/tools/productCatalog"
 
 type RetrievedContextItem = {
     source: "KB" | "FAQ" | "PRODUCT"
@@ -7,56 +15,28 @@ type RetrievedContextItem = {
     score: number
 }
 
-function tokenize(text: string) {
-    return text
-        .toLowerCase()
-        .split(/[^a-z0-9]+/g)
-        .map((t) => t.trim())
-        .filter((t) => t.length >= 2)
+type ProductRow = {
+    shopifyProductId?: string
+    title?: string
+    vendor?: string | null
+    productType?: string | null
+    status?: string | null
+    variants?: unknown
+    metafields?: unknown
 }
 
-function scoreByTerms(text: string, terms: string[]) {
-    if (!text || !terms.length) return 0
-    const hay = text.toLowerCase()
-    let score = 0
-    for (const t of terms) {
-        if (hay.includes(t)) score += 1
-    }
-    return score
-}
-
-function compact(value: string, max = 420) {
-    if (value.length <= max) return value
-    return `${value.slice(0, max - 1)}...`
-}
-
-function metafieldsForText(metafields: unknown): string {
-    if (!Array.isArray(metafields) || metafields.length === 0) return ""
-    const parts: string[] = []
-    for (const row of metafields) {
-        if (!row || typeof row !== "object") continue
-        const r = row as { namespace?: string; key?: string; value?: string | null }
-        const k = r.key
-        const v = r.value
-        if (!k || v === null || v === undefined || String(v).trim() === "") continue
-        const ns = r.namespace ? `${r.namespace}.` : ""
-        parts.push(`${ns}${k}: ${String(v).slice(0, 200)}`)
-    }
-    return parts.join(" | ")
-}
-
-function productPreview(product: any) {
+function productPreview(product: ProductRow) {
     const variants = Array.isArray(product?.variants) ? product.variants : []
     const firstVariant = variants[0] || {}
     const price = firstVariant?.price ?? null
-    const sku = firstVariant?.sku ?? null
+    const sku = primarySkuFromVariants(firstVariant ? [firstVariant] : product?.variants)
     const weight =
         firstVariant?.weight !== undefined && firstVariant?.weight !== null
             ? `${String(firstVariant.weight)}${firstVariant.weight_unit ? ` ${firstVariant.weight_unit}` : ""}`
             : ""
     const inventory = firstVariant?.inventory_quantity ?? null
     const status = product?.status || "unknown"
-    const mfLine = metafieldsForText(product?.metafields)
+    const mfLine = metafieldsToSummary(product?.metafields)
 
     const bits = [
         `Title: ${product?.title || "Unknown"}`,
@@ -78,13 +58,13 @@ export async function getBlendedStorefrontContext(params: {
     query: string
     topKb?: number
     topProducts?: number
+    includeProducts?: boolean
+    allowedProductIds?: string[]
 }) {
-    const { storeId, query, topKb = 6, topProducts = 4 } = params
-    const terms = tokenize(query).slice(0, 10)
+    const { storeId, query, topKb = 6, topProducts = 4, includeProducts = true } = params
+    const terms = tokenizeSearchTerms(query, 10)
 
-    const p = prisma as any
-
-    const kbChunks = await p.knowledgeChunk.findMany({
+    const kbChunks = await prisma.knowledgeChunk.findMany({
         where: { storeId },
         orderBy: { createdAt: "desc" },
         take: 120,
@@ -97,12 +77,12 @@ export async function getBlendedStorefrontContext(params: {
     })
 
     const rankedKb: RetrievedContextItem[] = (kbChunks || [])
-        .map((c: any) => {
+        .map((c) => {
             const score = scoreByTerms(String(c?.content || ""), terms)
             return {
                 source: c?.sourceType === "FAQ" ? "FAQ" : "KB",
                 title: c?.sourceType === "FAQ" ? "FAQ entry" : "Knowledge document",
-                content: compact(String(c?.content || "")),
+                content: compactText(String(c?.content || "")),
                 score,
             } as RetrievedContextItem
         })
@@ -110,35 +90,45 @@ export async function getBlendedStorefrontContext(params: {
         .sort((a: RetrievedContextItem, b: RetrievedContextItem) => b.score - a.score)
         .slice(0, topKb)
 
-    const products = await p.cachedProduct.findMany({
-        where: { storeId },
-        orderBy: { updatedAt: "desc" },
-        take: 200,
-        select: {
-            title: true,
-            vendor: true,
-            productType: true,
-            status: true,
-            variants: true,
-            images: true,
-            metafields: true,
-        },
-    })
+    let rankedProducts: RetrievedContextItem[] = []
+    if (includeProducts) {
+        const allowedIds = Array.isArray(params.allowedProductIds)
+            ? params.allowedProductIds.filter(Boolean)
+            : []
+        if (allowedIds.length > 0) {
+            const products = await prisma.cachedProduct.findMany({
+                where: {
+                    storeId,
+                    shopifyProductId: { in: allowedIds.slice(0, 120) },
+                },
+                select: {
+                    shopifyProductId: true,
+                    title: true,
+                    vendor: true,
+                    productType: true,
+                    status: true,
+                    variants: true,
+                    images: true,
+                    metafields: true,
+                },
+            })
 
-    const rankedProducts: RetrievedContextItem[] = (products || [])
-        .map((prod: any) => {
-            const text = `${prod?.title || ""} ${prod?.vendor || ""} ${prod?.productType || ""} ${metafieldsForText(prod?.metafields)}`
-            const score = scoreByTerms(text, terms)
-            return {
-                source: "PRODUCT",
-                title: prod?.title || "Product",
-                content: compact(productPreview(prod)),
-                score,
-            } as RetrievedContextItem
-        })
-        .filter((x: RetrievedContextItem) => x.score > 0)
-        .sort((a: RetrievedContextItem, b: RetrievedContextItem) => b.score - a.score)
-        .slice(0, topProducts)
+            rankedProducts = (products || [])
+                .filter((prod) => isProductStatusSellable(prod?.status))
+                .map((prod) => {
+                    const text = `${prod?.title || ""} ${prod?.vendor || ""} ${prod?.productType || ""} ${metafieldsToSummary(prod?.metafields)}`
+                    const score = scoreByTerms(text, terms)
+                    return {
+                        source: "PRODUCT",
+                        title: prod?.title || "Product",
+                        content: compactText(productPreview(prod)),
+                        score,
+                    } as RetrievedContextItem
+                })
+                .sort((a: RetrievedContextItem, b: RetrievedContextItem) => b.score - a.score)
+                .slice(0, topProducts)
+        }
+    }
 
     return {
         items: [...rankedKb, ...rankedProducts],
