@@ -316,36 +316,48 @@ export default function TicketDetailPage() {
 
   const timelineMessages = useMemo<TimelineMessage[]>(() => {
     if (!ticket) return []
-    return ticket.messages.flatMap((message) => {
-      if (message.trigger !== "STOREFRONT_TICKET") return [{ ...message }]
+    const expanded: TimelineMessage[] = []
+    for (const message of ticket.messages) {
+      if (message.trigger !== "STOREFRONT_TICKET") {
+        expanded.push({ ...message })
+        continue
+      }
       const raw = cleanDisplayText(message.bodyPreview || "")
-      if (!raw) return [{ ...message }]
+      if (!raw) {
+        expanded.push({ ...message })
+        continue
+      }
       const lines = raw
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean)
-      const parsed = lines
-        .map((line, idx) => {
-          const match = line.match(/^\[(.+?)\]\s+(CUSTOMER|ASSISTANT):\s*(.+)$/i)
-          if (!match) return null
-          const sentAtMaybe = new Date(match[1])
-          const sentAt = Number.isNaN(sentAtMaybe.getTime())
-            ? message.sentAt
-            : sentAtMaybe.toISOString()
-          return {
-            id: `${message.id}-part-${idx}`,
-            subject: message.subject,
-            bodyPreview: match[3],
-            status: message.status,
-            trigger: message.trigger,
-            sentAt,
-            senderOverride:
-              match[2].toUpperCase() === "CUSTOMER" ? ("CUSTOMER" as const) : ("ASSISTANT" as const),
-          } satisfies TimelineMessage
+      const parsed: TimelineMessage[] = []
+      for (let idx = 0; idx < lines.length; idx += 1) {
+        const line = lines[idx]
+        const match = line.match(/^\[(.+?)\]\s+(CUSTOMER|ASSISTANT):\s*(.+)$/i)
+        if (!match) continue
+        const sentAtMaybe = new Date(match[1])
+        const sentAt = Number.isNaN(sentAtMaybe.getTime())
+          ? message.sentAt
+          : sentAtMaybe.toISOString()
+        parsed.push({
+          id: `${message.id}-part-${idx}`,
+          subject: message.subject,
+          bodyPreview: match[3],
+          status: message.status,
+          trigger: message.trigger,
+          sentAt,
+          senderOverride:
+            match[2].toUpperCase() === "CUSTOMER" ? ("CUSTOMER" as const) : ("ASSISTANT" as const),
         })
-        .filter((row): row is TimelineMessage => Boolean(row))
-      return parsed.length >= 2 ? parsed : [{ ...message }]
-    })
+      }
+      if (parsed.length >= 2) {
+        expanded.push(...parsed)
+      } else {
+        expanded.push({ ...message })
+      }
+    }
+    return expanded
   }, [ticket])
 
   const sourceLabel = (trigger: string | null): string => {
