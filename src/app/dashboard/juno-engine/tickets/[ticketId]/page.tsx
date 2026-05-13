@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft,
@@ -35,6 +35,10 @@ interface TicketData {
   messagesCount: number
   lastMessageSnippet: string
   messages: TicketMessage[]
+}
+
+interface TimelineMessage extends TicketMessage {
+  senderOverride?: "CUSTOMER" | "ASSISTANT"
 }
 
 type AskSupplierPreviewGroup = {
@@ -310,6 +314,40 @@ export default function TicketDetailPage() {
   const cleanDisplayText = (text: string): string =>
     text.replace(/^Storefront escalation from visitor [^:]+:\s*/i, "").trim()
 
+  const timelineMessages = useMemo<TimelineMessage[]>(() => {
+    if (!ticket) return []
+    return ticket.messages.flatMap((message) => {
+      if (message.trigger !== "STOREFRONT_TICKET") return [{ ...message }]
+      const raw = cleanDisplayText(message.bodyPreview || "")
+      if (!raw) return [{ ...message }]
+      const lines = raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+      const parsed = lines
+        .map((line, idx) => {
+          const match = line.match(/^\[(.+?)\]\s+(CUSTOMER|ASSISTANT):\s*(.+)$/i)
+          if (!match) return null
+          const sentAtMaybe = new Date(match[1])
+          const sentAt = Number.isNaN(sentAtMaybe.getTime())
+            ? message.sentAt
+            : sentAtMaybe.toISOString()
+          return {
+            id: `${message.id}-part-${idx}`,
+            subject: message.subject,
+            bodyPreview: match[3],
+            status: message.status,
+            trigger: message.trigger,
+            sentAt,
+            senderOverride:
+              match[2].toUpperCase() === "CUSTOMER" ? ("CUSTOMER" as const) : ("ASSISTANT" as const),
+          } satisfies TimelineMessage
+        })
+        .filter((row): row is TimelineMessage => Boolean(row))
+      return parsed.length >= 2 ? parsed : [{ ...message }]
+    })
+  }, [ticket])
+
   const sourceLabel = (trigger: string | null): string => {
     if (trigger === "GMAIL_INCOMING") return "Email inbound"
     if (trigger === "TICKET_CUSTOMER_REPLY") return "Vendor email"
@@ -431,7 +469,7 @@ export default function TicketDetailPage() {
                 type="button"
                 onClick={() =>
                   setExpandedMessages(
-                    Object.fromEntries((ticket.messages || []).map((m) => [m.id, true])),
+                    Object.fromEntries((timelineMessages || []).map((m) => [m.id, true])),
                   )
                 }
                 className={cn(
@@ -829,9 +867,11 @@ export default function TicketDetailPage() {
 
             {/* Conversation timeline - Full width corners chat style */}
             <div className="flex-1 overflow-y-auto min-h-0 pr-4 -mr-4 space-y-8 pb-10 custom-scrollbar">
-              {(chronological ? [...ticket.messages].reverse() : ticket.messages).map((message) => {
+              {(chronological ? [...timelineMessages].reverse() : timelineMessages).map((message) => {
                 const isIncoming =
-                  message.trigger === "GMAIL_INCOMING" || message.status === "RECEIVED"
+                  message.senderOverride === "CUSTOMER" ||
+                  message.trigger === "GMAIL_INCOMING" ||
+                  message.status === "RECEIVED"
 
                 const fullText = cleanDisplayText(message.bodyPreview || "")
                 const lines = fullText.split(/\r?\n/)
@@ -868,7 +908,13 @@ export default function TicketDetailPage() {
                               ? (isLight ? "text-indigo-600" : "text-indigo-400")
                               : "text-indigo-100"
                           )}>
-                            {isIncoming ? "Customer" : "JUNO"}
+                            {message.senderOverride === "ASSISTANT"
+                              ? "JUNO"
+                              : message.senderOverride === "CUSTOMER"
+                                ? "Customer"
+                                : isIncoming
+                                  ? "Customer"
+                                  : "JUNO"}
                           </span>
                           <span
                             className={cn(
@@ -949,7 +995,7 @@ export default function TicketDetailPage() {
                 )
               })}
 
-              {ticket.messages.length === 0 && (
+              {timelineMessages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                   <Ticket className="w-12 h-12 mb-4 opacity-10" />
                   <p className="text-sm font-medium">No messages logged yet for this ticket.</p>
